@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ class DiscoveryStore:
         self.data_dir = data_dir
         self.contexts_dir = data_dir / "contexts"
         self.plans_dir = data_dir / "source_plans"
+        self.coverage_dir = data_dir / "coverage"
 
     # -- contexts --
 
@@ -69,6 +71,64 @@ class DiscoveryStore:
             return None
         raw = json.loads(path.read_text(encoding="utf-8"))
         return SourcePlan.from_dict(raw) if isinstance(raw, dict) else None
+
+    # -- universe coverage --
+
+    def save_coverage_manifest(
+        self,
+        manifest: dict[str, Any],
+    ) -> Path:
+        manifest_sha = str(manifest.get("manifest_sha256") or "")
+        reconstructed = {
+            key: value
+            for key, value in manifest.items()
+            if key != "manifest_sha256"
+        }
+        expected = hashlib.sha256(
+            json.dumps(
+                reconstructed,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        if manifest_sha != expected:
+            raise ValueError("coverage manifest hash is not reconstructable")
+        path = self.coverage_dir / f"{manifest_sha}.json"
+        if path.exists():
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            if existing != manifest:
+                raise ValueError("immutable coverage manifest conflict")
+        else:
+            _atomic_json_write(path, manifest)
+        _atomic_json_write(self.data_dir / "coverage_manifest.json", manifest)
+        return path
+
+    def load_coverage_manifest(self) -> dict[str, Any] | None:
+        path = self.data_dir / "coverage_manifest.json"
+        if not path.exists():
+            return None
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(raw, dict):
+            return None
+        supplied = str(raw.get("manifest_sha256") or "")
+        reconstructed = {
+            key: value
+            for key, value in raw.items()
+            if key != "manifest_sha256"
+        }
+        expected = hashlib.sha256(
+            json.dumps(
+                reconstructed,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        return raw if supplied == expected else None
 
 
 def _now() -> str:

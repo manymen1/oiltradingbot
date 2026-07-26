@@ -104,6 +104,7 @@ export type ValuationLeg = {
   eventSlug: string;
   marketSlug: string;
   question: string;
+  groupItemTitle?: string;
   eventKind: EventKind;
   company: string;
   deadlineIso: string;

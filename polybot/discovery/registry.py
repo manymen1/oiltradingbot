@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from urllib.parse import urlparse
+
+from .types import PlannedSource
+
 # Small curated registry mapping geopolitical actors to official domains and
 # news-discovery hooks. Used by the fixture rule analyzer (party extraction)
 # and the source-plan builder (official feeds per party). Deliberately
@@ -108,6 +113,384 @@ GENERAL_FAST_FEEDS: list[str] = [
     "https://www.timesofisrael.com/feed/",
     "https://www.france24.com/en/middle-east/rss",
 ]
+
+
+_PUBLISHERS: dict[str, dict[str, object]] = {
+    "reuters": {
+        "aliases": ["reuters", "reuters.com"],
+        "domains": ["reuters.com"],
+        "tier": "wire",
+        "timestamp_quality": "exact",
+    },
+    "associated_press": {
+        "aliases": ["associated press", "ap", "ap news", "apnews.com"],
+        "domains": ["apnews.com"],
+        "tier": "wire",
+        "timestamp_quality": "exact",
+    },
+    "afp": {
+        "aliases": ["afp", "agence france-presse", "afp.com"],
+        "domains": ["afp.com"],
+        "tier": "wire",
+        "timestamp_quality": "exact",
+    },
+    "new_york_times": {
+        "aliases": ["new york times", "the new york times", "nytimes.com"],
+        "domains": ["nytimes.com"],
+        "tier": "tier_one_press",
+        "timestamp_quality": "exact",
+    },
+    "washington_post": {
+        "aliases": ["washington post", "the washington post", "washingtonpost.com"],
+        "domains": ["washingtonpost.com"],
+        "tier": "tier_one_press",
+        "timestamp_quality": "exact",
+    },
+    "wall_street_journal": {
+        "aliases": ["wall street journal", "the wall street journal", "wsj.com"],
+        "domains": ["wsj.com"],
+        "tier": "tier_one_press",
+        "timestamp_quality": "exact",
+    },
+    "guardian": {
+        "aliases": ["guardian", "the guardian", "theguardian.com"],
+        "domains": ["theguardian.com"],
+        "tier": "tier_one_press",
+        "timestamp_quality": "exact",
+    },
+    "bbc": {
+        "aliases": ["bbc", "bbc news", "bbc.com"],
+        "domains": ["bbc.com", "bbc.co.uk"],
+        "tier": "tier_one_press",
+        "timestamp_quality": "exact",
+    },
+    "cbs_news": {
+        "aliases": ["cbs", "cbs news", "cbsnews.com"],
+        "domains": ["cbsnews.com"],
+        "tier": "major_press",
+        "timestamp_quality": "exact",
+    },
+    "middle_east_eye": {
+        "aliases": ["middle east eye", "middleeasteye.net"],
+        "domains": ["middleeasteye.net"],
+        "tier": "regional_press",
+        "timestamp_quality": "exact",
+    },
+    "anadolu": {
+        "aliases": ["anadolu", "aa", "aa.com.tr"],
+        "domains": ["aa.com.tr"],
+        "tier": "state_affiliated_press",
+        "timestamp_quality": "exact",
+    },
+    "al_jazeera": {
+        "aliases": ["al jazeera", "aljazeera.com"],
+        "domains": ["aljazeera.com"],
+        "tier": "regional_press",
+        "timestamp_quality": "exact",
+    },
+    "times_of_israel": {
+        "aliases": ["times of israel", "timesofisrael.com"],
+        "domains": ["timesofisrael.com"],
+        "tier": "regional_press",
+        "timestamp_quality": "exact",
+    },
+    "france24": {
+        "aliases": ["france 24", "france24.com"],
+        "domains": ["france24.com"],
+        "tier": "major_press",
+        "timestamp_quality": "exact",
+    },
+}
+
+_FAST_FEEDS_BY_ORG: dict[str, list[str]] = {
+    "guardian": [GENERAL_FAST_FEEDS[0]],
+    "cbs_news": [GENERAL_FAST_FEEDS[1]],
+    "new_york_times": [GENERAL_FAST_FEEDS[2], GENERAL_FAST_FEEDS[3]],
+    "middle_east_eye": [GENERAL_FAST_FEEDS[4]],
+    "anadolu": [GENERAL_FAST_FEEDS[5]],
+    "al_jazeera": [GENERAL_FAST_FEEDS[6]],
+    "times_of_israel": [GENERAL_FAST_FEEDS[7]],
+    "france24": [GENERAL_FAST_FEEDS[8]],
+}
+
+_CURATED_DIRECT_DOMAINS = {
+    str(item).casefold().removeprefix("www.").strip(".")
+    for raw in _PUBLISHERS.values()
+    for item in raw["domains"]
+}
+_CURATED_DIRECT_DOMAINS.update(
+    str(item).casefold().removeprefix("www.").strip(".")
+    for _aliases, domains in ACTORS.values()
+    for item in domains
+)
+
+# Domains frequently hosting republished copy. They are not inherently a
+# second source: evidence extraction must preserve the originating byline.
+SYNDICATION_HOSTS = {
+    "finance.yahoo.com",
+    "news.yahoo.com",
+    "aol.com",
+    "msn.com",
+    "marketscreener.com",
+    "swissinfo.ch",
+}
+
+
+def publisher_sources() -> list[PlannedSource]:
+    sources: list[PlannedSource] = []
+    for organization_id, raw in _PUBLISHERS.items():
+        domains = list(raw["domains"])
+        for index, domain in enumerate(domains):
+            tier = str(raw["tier"])
+            sources.append(
+                PlannedSource(
+                    source_id=(
+                        organization_id
+                        if index == 0
+                        else f"{organization_id}:{domain}"
+                    ),
+                    organization_id=organization_id,
+                    independence_group=organization_id,
+                    domain=domain,
+                    source_tier=tier,
+                    feed_urls=list(_FAST_FEEDS_BY_ORG.get(organization_id, [])),
+                    roles=(
+                        ["CONFIRMATION", "CONTEXT"]
+                        if tier in {"wire", "tier_one_press"}
+                        else ["CONTEXT"]
+                    ),
+                    timestamp_quality=str(raw["timestamp_quality"]),
+                )
+            )
+    return sources
+
+
+def actor_sources(actors: list[str]) -> list[PlannedSource]:
+    sources: list[PlannedSource] = []
+    for actor in actors:
+        entry = ACTORS.get(actor)
+        if entry is None:
+            continue
+        feeds = DIRECT_ACTOR_FEEDS.get(actor, [])
+        for domain in entry[1]:
+            matching_feeds = [
+                url
+                for url in feeds
+                if _domain(url) == domain
+                or _domain(url).endswith(f".{domain}")
+                or domain in {"defense.gov", "war.gov"}
+                and _domain(url) in {"defense.gov", "war.gov"}
+            ]
+            sources.append(
+                PlannedSource(
+                    source_id=f"official:{actor}:{domain}",
+                    organization_id=f"government:{actor}",
+                    independence_group=f"government:{actor}",
+                    domain=domain,
+                    source_tier="official",
+                    feed_urls=matching_feeds,
+                    roles=["CONFIRMATION", "CONTEXT"],
+                    timestamp_quality="exact_or_press_release",
+                )
+            )
+    return sources
+
+
+def resolve_source_reference(
+    source_ref: str,
+    *,
+    roles: list[str],
+    required: bool,
+) -> list[PlannedSource]:
+    """Resolve a named rule source to canonical identities.
+
+    Unknown prose is not guessed. A literal domain/URL is still usable as a
+    named oracle because its identity is deterministic.
+    """
+
+    normalized = " ".join(source_ref.casefold().split())
+    domain = _source_ref_domain(source_ref)
+    matches: list[PlannedSource] = []
+    for item in publisher_sources():
+        raw = _PUBLISHERS[item.organization_id]
+        aliases = [str(alias).casefold() for alias in raw["aliases"]]
+        if normalized in aliases or domain == item.domain:
+            matches.append(item)
+    for actor, (aliases, domains) in ACTORS.items():
+        actor_name_match = (
+            normalized == actor.replace("_", " ")
+            or normalized in {alias.strip().casefold() for alias in aliases}
+        )
+        if actor_name_match or domain in domains:
+            actor_matches = actor_sources([actor])
+            if domain:
+                actor_matches = [
+                    item for item in actor_matches if item.domain == domain
+                ]
+            matches.extend(actor_matches)
+    if not matches and domain:
+        matches.append(
+            PlannedSource(
+                source_id=f"named:{domain}",
+                organization_id=f"named:{domain}",
+                independence_group=f"named:{domain}",
+                domain=domain,
+                source_tier="named_oracle",
+                # Unknown rule-text URLs are semantic identities, not an
+                # outbound-fetch allowlist. They remain discoverable through
+                # aggregators until an operator adds the domain to the
+                # curated publisher/actor registry.
+                poll_urls=[],
+                roles=[],
+                timestamp_quality="unknown",
+            )
+        )
+    resolved: list[PlannedSource] = []
+    for item in _dedupe_sources(matches):
+        poll_urls = (
+            list(item.poll_urls)
+            if _curated_direct_domain(item.domain)
+            else []
+        )
+        if (
+            required
+            and "SETTLEMENT" in roles
+            and _curated_direct_domain(item.domain)
+            and not item.feed_urls
+            and not poll_urls
+        ):
+            literal = source_ref.strip()
+            poll_urls = [
+                (
+                    literal
+                    if literal.startswith(("http://", "https://"))
+                    else f"https://{item.domain}/"
+                )
+            ]
+        resolved.append(
+            replace(
+                item,
+                poll_urls=sorted(set(poll_urls)),
+                roles=sorted(set(item.roles) | set(roles)),
+                required=item.required or required,
+            )
+        )
+    return resolved
+
+
+def _curated_direct_domain(domain: str) -> bool:
+    normalized = domain.casefold().removeprefix("www.").strip(".")
+    return normalized in _CURATED_DIRECT_DOMAINS
+
+
+def source_identity(
+    domain: str,
+    *,
+    origin_organization: str = "",
+    byline: str = "",
+) -> tuple[str, str]:
+    """Return (organization, independence group) for corroboration.
+
+    A Reuters article mirrored by Yahoo remains Reuters. Two mirrors therefore
+    add one independent source, not two.
+    """
+
+    # A mirror may identify its own host as the origin while preserving the
+    # wire credit only in the byline. Resolve both fields independently and
+    # prefer a recognized credited byline; never let "Yahoo" or "MSN" mask a
+    # Reuters/AP/AFP attribution.
+    normalized_byline = _normalize_origin(byline)
+    if normalized_byline:
+        return normalized_byline, normalized_byline
+    normalized_origin = _normalize_origin(origin_organization)
+    if normalized_origin:
+        return normalized_origin, normalized_origin
+    normalized_domain = domain.casefold().removeprefix("www.").strip(".")
+    for item in publisher_sources():
+        if normalized_domain == item.domain or normalized_domain.endswith(
+            f".{item.domain}"
+        ):
+            return item.organization_id, item.independence_group
+    if normalized_domain in SYNDICATION_HOSTS:
+        return (
+            f"syndication_host:{normalized_domain}",
+            f"syndication_host:{normalized_domain}",
+        )
+    for actor_source in actor_sources(list(ACTORS)):
+        if normalized_domain == actor_source.domain or normalized_domain.endswith(
+            f".{actor_source.domain}"
+        ):
+            return (
+                actor_source.organization_id,
+                actor_source.independence_group,
+            )
+    return normalized_domain, normalized_domain
+
+
+def independent_source_count(
+    evidence: list[dict[str, str]],
+) -> int:
+    groups: set[str] = set()
+    for item in evidence:
+        _organization, group = source_identity(
+            item.get("domain", ""),
+            origin_organization=item.get("origin_organization", ""),
+            byline=item.get("byline", ""),
+        )
+        if group:
+            groups.add(group)
+    return len(groups)
+
+
+def _normalize_origin(value: str) -> str:
+    import re
+
+    normalized = " ".join(value.casefold().split())
+    for organization_id, raw in _PUBLISHERS.items():
+        aliases = [str(alias).casefold() for alias in raw["aliases"]]
+        for alias in aliases:
+            if (
+                len(alias) <= 3
+                and re.search(rf"\b{re.escape(alias)}\b", normalized)
+            ) or (len(alias) > 3 and alias in normalized):
+                return organization_id
+    return ""
+
+
+def _source_ref_domain(source_ref: str) -> str:
+    text = source_ref.strip()
+    if "://" in text:
+        return _domain(text)
+    for token in text.replace(",", " ").split():
+        cleaned = token.strip(".,;:()[]\"'").casefold().removeprefix("www.")
+        if "." in cleaned and all(cleaned.split(".")):
+            return cleaned
+    return ""
+
+
+def _domain(url: str) -> str:
+    return urlparse(url).netloc.casefold().removeprefix("www.")
+
+
+def _dedupe_sources(sources: list[PlannedSource]) -> list[PlannedSource]:
+    by_key: dict[tuple[str, str], PlannedSource] = {}
+    for item in sources:
+        key = (item.organization_id, item.domain)
+        existing = by_key.get(key)
+        if existing is None:
+            by_key[key] = item
+            continue
+        by_key[key] = replace(
+            existing,
+            feed_urls=sorted(set(existing.feed_urls) | set(item.feed_urls)),
+            poll_urls=sorted(set(existing.poll_urls) | set(item.poll_urls)),
+            roles=sorted(set(existing.roles) | set(item.roles)),
+            required=existing.required or item.required,
+        )
+    return sorted(
+        by_key.values(),
+        key=lambda item: (item.organization_id, item.domain),
+    )
 
 
 def direct_feeds(actors: list[str]) -> list[str]:

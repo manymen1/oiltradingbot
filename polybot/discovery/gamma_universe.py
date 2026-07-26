@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -9,8 +11,278 @@ import requests
 from polybot.config import SETTINGS
 from polybot.gamma import market_from_gamma
 
-from .config import UniverseConfig
+from .config import EnumerationView, UniverseConfig
 from .types import MarketContext, OutcomeRecord
+
+
+@dataclass(frozen=True)
+class UniverseEnumeration:
+    """One immutable view of a point-in-time Gamma universe scan."""
+
+    events: list[dict[str, Any]]
+    manifest: dict[str, Any]
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
+def _sha256(value: Any) -> str:
+    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def enumerate_active_events(
+    universe: UniverseConfig,
+    *,
+    gamma_host: str = SETTINGS.gamma_host,
+    fetch: Callable[[str, dict[str, Any]], Any] | None = None,
+    scanned_at: str | None = None,
+) -> UniverseEnumeration:
+    """Fully enumerate configured Gamma views using keyset pagination.
+
+    Production uses ``/events/keyset`` and its opaque ``next_cursor``. Injected
+    list-returning fixtures retain the legacy offset contract so historical
+    tests and offline captures remain replayable; production never sends an
+    offset to the keyset endpoint.
+    """
+
+    fetcher = fetch or _http_fetch
+    production_fetch = fetch is None
+    started_at = scanned_at or datetime.now(timezone.utc).isoformat()
+    url = f"{gamma_host.rstrip('/')}/events/keyset"
+    first_payloads: dict[str, dict[str, Any]] = {}
+    first_hashes: dict[str, str] = {}
+    conflicts: dict[str, set[str]] = {}
+    fallback_ids: set[str] = set()
+    view_reports: dict[str, dict[str, Any]] = {}
+    raw_events = 0
+    duplicate_rows = 0
+    truncated = False
+    incomplete = False
+    stop_all = False
+
+    for view_index, view in enumerate(universe.enumeration_views):
+        view_name = f"{view_index}:{view.order}:{'asc' if view.ascending else 'desc'}"
+        pages = 0
+        rows_seen = 0
+        unique_seen: set[str] = set()
+        page_hashes: list[str] = []
+        cursor_history: list[dict[str, Any]] = []
+        seen_page_hashes: set[str] = set()
+        seen_cursors: set[str] = set()
+        cursor = ""
+        offset = 0
+        mode = "keyset"
+        state = "COMPLETE"
+        failure = ""
+
+        while not stop_all:
+            if pages >= universe.pagination_safety_pages:
+                state = "INCOMPLETE"
+                failure = "pagination_safety_limit"
+                incomplete = True
+                break
+            params: dict[str, Any] = {
+                "active": "true",
+                "closed": "false",
+                "archived": "false",
+                "order": view.order,
+                "ascending": str(view.ascending).lower(),
+                "limit": universe.page_size,
+            }
+            if cursor:
+                params["after_cursor"] = cursor
+            elif not production_fetch and mode == "offset" and offset:
+                params["offset"] = offset
+            try:
+                response = fetcher(url, params)
+            except Exception as exc:
+                state = "INCOMPLETE"
+                failure = f"fetch_error:{type(exc).__name__}:{exc}"
+                incomplete = True
+                break
+
+            next_cursor = ""
+            if isinstance(response, dict):
+                rows_raw = response.get("events")
+                if not isinstance(rows_raw, list):
+                    state = "INCOMPLETE"
+                    failure = "malformed_keyset_response"
+                    incomplete = True
+                    break
+                next_raw = response.get("next_cursor")
+                if next_raw is not None and not isinstance(next_raw, str):
+                    state = "INCOMPLETE"
+                    failure = "malformed_next_cursor"
+                    incomplete = True
+                    break
+                next_cursor = str(next_raw or "")
+                mode = "keyset"
+            elif isinstance(response, list):
+                rows_raw = response
+                mode = "offset"
+            else:
+                state = "INCOMPLETE"
+                failure = "malformed_page_response"
+                incomplete = True
+                break
+            if any(not isinstance(item, dict) for item in rows_raw):
+                state = "INCOMPLETE"
+                failure = "malformed_event_row"
+                incomplete = True
+                break
+            rows = [dict(item) for item in rows_raw]
+            page_hash = _sha256(rows)
+            if page_hash in seen_page_hashes and rows:
+                state = "INCOMPLETE"
+                failure = "repeated_page"
+                incomplete = True
+                break
+            seen_page_hashes.add(page_hash)
+            page_hashes.append(page_hash)
+            cursor_history.append(
+                {
+                    "page": pages + 1,
+                    "after_cursor": cursor or None,
+                    "offset": (
+                        offset if mode == "offset" else None
+                    ),
+                    "next_cursor": next_cursor or None,
+                }
+            )
+            pages += 1
+            rows_seen += len(rows)
+            raw_events += len(rows)
+
+            cap_reached = False
+            for event in rows:
+                identity, used_fallback = _event_identity(event)
+                if not identity:
+                    state = "INCOMPLETE"
+                    failure = "event_missing_stable_identity"
+                    incomplete = True
+                    break
+                if used_fallback:
+                    fallback_ids.add(identity)
+                payload_hash = _sha256(event)
+                if identity in first_payloads:
+                    duplicate_rows += 1
+                    if first_hashes[identity] != payload_hash:
+                        conflicts.setdefault(identity, set()).add(payload_hash)
+                else:
+                    first_payloads[identity] = event
+                    first_hashes[identity] = payload_hash
+                unique_seen.add(identity)
+                if (
+                    universe.max_events > 0
+                    and len(first_payloads) >= universe.max_events
+                ):
+                    truncated = True
+                    state = "TRUNCATED"
+                    failure = "configured_event_cap"
+                    stop_all = True
+                    cap_reached = True
+                    break
+            if state == "INCOMPLETE" or stop_all:
+                break
+            if cap_reached:
+                break
+            if not rows:
+                break
+            if mode == "keyset":
+                if not next_cursor:
+                    break
+                if next_cursor == cursor or next_cursor in seen_cursors:
+                    state = "INCOMPLETE"
+                    failure = "repeated_cursor"
+                    incomplete = True
+                    break
+                seen_cursors.add(next_cursor)
+                cursor = next_cursor
+            else:
+                if len(rows) < universe.page_size:
+                    break
+                offset += len(rows)
+
+        view_reports[view_name] = {
+            "query": {
+                "order": view.order,
+                "ascending": view.ascending,
+                "page_size": universe.page_size,
+            },
+            "pagination": mode,
+            "pages_fetched": pages,
+            "raw_rows": rows_seen,
+            "unique_rows": len(unique_seen),
+            "duplicate_rows": rows_seen - len(unique_seen),
+            "page_sha256s": page_hashes,
+            "cursor_history": cursor_history,
+            "state": state,
+            "failure": failure or None,
+        }
+
+    stable_manifest = {
+        "schema_version": 1,
+        "config": {
+            "max_events": universe.max_events,
+            "page_size": universe.page_size,
+            "fail_on_truncation": universe.fail_on_truncation,
+            "pagination_safety_pages": universe.pagination_safety_pages,
+            "enumeration_views": [
+                {"order": view.order, "ascending": view.ascending}
+                for view in universe.enumeration_views
+            ],
+        },
+        "views": view_reports,
+        "raw_events": raw_events,
+        "unique_events": len(first_payloads),
+        "duplicate_rows": duplicate_rows,
+        "event_payload_sha256s": {
+            identity: first_hashes[identity]
+            for identity in sorted(first_hashes)
+        },
+        "payload_conflicts": {
+            identity: sorted({first_hashes[identity], *hashes})
+            for identity, hashes in sorted(conflicts.items())
+        },
+        "slug_fallback_identities": sorted(fallback_ids),
+        "truncated": truncated,
+        "coverage_complete": not truncated and not incomplete,
+    }
+    coverage_sha256 = _sha256(stable_manifest)
+    status = (
+        "TRUNCATED"
+        if truncated
+        else "INCOMPLETE"
+        if incomplete
+        else "COMPLETE"
+    )
+    ended_at = (
+        started_at
+        if scanned_at is not None
+        else datetime.now(timezone.utc).isoformat()
+    )
+    manifest = {
+        **stable_manifest,
+        "coverage_status": status,
+        "coverage_sha256": coverage_sha256,
+        "config_sha256": _sha256(stable_manifest["config"]),
+        "scan_started_at": started_at,
+        "scan_ended_at": ended_at,
+    }
+    manifest["manifest_sha256"] = _sha256(manifest)
+    events = [
+        first_payloads[identity]
+        for identity in sorted(first_payloads)
+    ]
+    if universe.max_events > 0:
+        events = events[: universe.max_events]
+    return UniverseEnumeration(events=events, manifest=manifest)
 
 
 def fetch_active_events(
@@ -20,42 +292,37 @@ def fetch_active_events(
     gamma_host: str = SETTINGS.gamma_host,
     fetch: Callable[[str, dict[str, Any]], list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Enumerate active, open Gamma events ordered by liquidity, paginated.
+    """Backward-compatible list surface over the audited enumerator."""
 
-    `fetch` is injectable for tests/offline use; the default performs the
-    HTTP call. Returns raw Gamma event dicts.
-    """
-    fetch = fetch or _http_fetch
-    events: list[dict[str, Any]] = []
-    offset = 0
-    url = f"{gamma_host.rstrip('/')}/events"
-    while len(events) < limit:
-        page = fetch(
-            url,
-            {
-                "active": "true",
-                "closed": "false",
-                "archived": "false",
-                "order": "liquidity",
-                "ascending": "false",
-                "limit": min(page_size, limit - len(events)),
-                "offset": offset,
-            },
-        )
-        if not page:
-            break
-        events.extend(item for item in page if isinstance(item, dict))
-        if len(page) < page_size:
-            break
-        offset += len(page)
-    return events[:limit]
+    universe = UniverseConfig(
+        max_events=max(0, int(limit)),
+        page_size=page_size,
+        fail_on_truncation=False,
+        enumeration_views=[
+            EnumerationView(order="liquidity", ascending=False)
+        ],
+    )
+    return enumerate_active_events(
+        universe,
+        gamma_host=gamma_host,
+        fetch=fetch,
+    ).events
 
 
-def _http_fetch(url: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+def _http_fetch(url: str, params: dict[str, Any]) -> Any:
     response = requests.get(url, params=params, timeout=20)
     response.raise_for_status()
-    data = response.json()
-    return data if isinstance(data, list) else []
+    return response.json()
+
+
+def _event_identity(event: dict[str, Any]) -> tuple[str, bool]:
+    event_id = str(event.get("id") or "").strip()
+    if event_id:
+        return f"id:{event_id}", False
+    slug = str(event.get("slug") or "").strip()
+    if slug:
+        return f"slug:{slug}", True
+    return "", False
 
 
 def is_geopolitical_candidate(event: dict[str, Any], universe: UniverseConfig) -> tuple[bool, str]:
@@ -103,10 +370,16 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
     markets_raw = [m for m in (event.get("markets") or []) if isinstance(m, dict)]
     if not markets_raw:
         return None
+    now = datetime.now(timezone.utc).isoformat()
     metas = []
     for raw in markets_raw:
         try:
-            metas.append((raw, market_from_gamma(event, raw)))
+            metas.append(
+                (
+                    raw,
+                    market_from_gamma(event, raw, observed_at=now),
+                )
+            )
         except ValueError:
             continue
     if not metas:
@@ -135,6 +408,8 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
                 active=meta.active,
                 closed=meta.closed,
                 accepting_orders=meta.accepting_orders,
+                fee_schedule=meta.fee_schedule,
+                fee_schedule_error=meta.fee_schedule_error,
             )
         )
 
@@ -148,7 +423,6 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
     digest = hashlib.sha256(rule_text.encode("utf-8")).hexdigest() if rule_text else ""
 
     deadline = str(event.get("endDate") or (markets_raw[0].get("endDate") if markets_raw else "") or "")
-    now = datetime.now(timezone.utc).isoformat()
     return MarketContext(
         market_id=market_id,
         kind="grouped" if grouped else "binary",

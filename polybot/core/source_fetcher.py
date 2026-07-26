@@ -9,6 +9,7 @@ import threading
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin, urlparse
 from xml.etree import ElementTree
 
@@ -275,14 +276,17 @@ def _normalize_fetch_url(url: str) -> str:
 def fetch_article(url: str, user_agent: str = "polybot/0.1") -> Article:
     _check_backoff(url)
     url = _normalize_fetch_url(url)
+    fetch_started_at = datetime.now(timezone.utc).isoformat()
     response = requests.get(url, headers={"User-Agent": user_agent}, timeout=20)
     response.raise_for_status()
+    fetched_at = datetime.now(timezone.utc).isoformat()
     markup = response.text
     parser = _TextExtractor()
     parser.feed(markup)
     raw_text = parser.text()
     title = parser.title or _first_line(raw_text) or url
     published_at = _extract_published_at(markup)
+    byline = _extract_byline(markup)
 
     # Prefer the untruncated Apollo-state body over the DOM text whenever it's
     # available and actually more complete; never regress below the DOM parse.
@@ -291,7 +295,7 @@ def fetch_article(url: str, user_agent: str = "polybot/0.1") -> Article:
         apollo_text = _apollo_post_text(state, url)
         if apollo_text and len(apollo_text) > len(raw_text):
             raw_text = apollo_text
-    fetched_at = datetime.now(timezone.utc).isoformat()
+    parsed_at = datetime.now(timezone.utc).isoformat()
     digest = hashlib.sha256(f"{url}\n{title}\n{raw_text}".encode("utf-8")).hexdigest()
     return Article(
         url=url,
@@ -302,6 +306,11 @@ def fetch_article(url: str, user_agent: str = "polybot/0.1") -> Article:
         raw_text=raw_text,
         hash=digest,
         source_kind="article",
+        byline=byline,
+        fetch_started_at=fetch_started_at,
+        parsed_at=parsed_at,
+        source_endpoint=url,
+        source_adapter="publisher_html_v1",
     )
 
 
@@ -430,6 +439,26 @@ def fetch_feed_articles(
         root = ElementTree.fromstring(response.content)
     except ElementTree.ParseError:
         return []
+    discovered_at = datetime.now(timezone.utc).isoformat()
+    return _feed_articles_from_root(
+        root,
+        feed_url=feed_url,
+        discovered_at=discovered_at,
+        include_terms=include_terms,
+        exclude_terms=exclude_terms,
+        limit=limit,
+    )
+
+
+def _feed_articles_from_root(
+    root: ElementTree.Element,
+    *,
+    feed_url: str,
+    discovered_at: str,
+    include_terms: list[str] | None,
+    exclude_terms: list[str] | None,
+    limit: int,
+) -> list[Article]:
     articles: list[Article] = []
     for item in _feed_items(root):
         title = _clean_text(_child_text(item, "title"))
@@ -437,6 +466,7 @@ def fetch_feed_articles(
         link = _feed_link(item) or feed_url
         published_at = _child_text(item, "pubDate") or _child_text(item, "published") or _child_text(item, "updated") or None
         source_url = _source_url(item)
+        source_name = _source_name(item)
         article_url = link
         domain_url = source_url or link
         raw_text = "\n".join(part for part in (title, summary) if part).strip()
@@ -446,7 +476,7 @@ def fetch_feed_articles(
             continue
         if exclude_terms and _matches_any(f"{domain_url}\n{raw_text}", exclude_terms):
             continue
-        fetched_at = datetime.now(timezone.utc).isoformat()
+        fetched_at = discovered_at
         digest = hashlib.sha256(f"feed\n{article_url}\n{title}\n{published_at or ''}".encode("utf-8")).hexdigest()
         articles.append(
             Article(
@@ -458,11 +488,424 @@ def fetch_feed_articles(
                 raw_text=raw_text,
                 hash=digest,
                 source_kind="feed",
+                byline=_child_text(item, "author") or source_name,
+                origin_organization=source_name,
+                discovered_at=discovered_at,
+                parsed_at=discovered_at,
+                source_endpoint=feed_url,
+                source_adapter="rss_atom_v1",
             )
         )
         if len(articles) >= limit:
             break
     return articles
+
+
+def fetch_direct_source_articles(
+    source_url: str,
+    user_agent: str = "polybot/0.1",
+    *,
+    include_terms: list[str] | None = None,
+    exclude_terms: list[str] | None = None,
+    limit: int = 20,
+    _sitemap_depth: int = 0,
+) -> list[Article]:
+    """Discover publisher items directly from XML, JSON, or HTML endpoints.
+
+    This is deliberately a discovery adapter, not a semantic classifier.
+    Except for the explicit ``polybot_claim`` envelope described below, JSON
+    and listing items are promoted through the same publisher-page fetch path
+    as RSS items before evidence extraction.
+
+    ``polybot_claim`` is a strict internal normalization boundary for future
+    source-specific adapters. Generic third-party JSON can never accidentally
+    become a deterministic claim merely because it contains similarly named
+    fields.
+    """
+
+    _check_backoff(source_url)
+    headers = {"User-Agent": user_agent}
+    with _FEED_CONDITIONAL_LOCK:
+        cached = dict(_FEED_CONDITIONAL.get(source_url, {}))
+    if cached.get("etag"):
+        headers["If-None-Match"] = cached["etag"]
+    if cached.get("last_modified"):
+        headers["If-Modified-Since"] = cached["last_modified"]
+    response = requests.get(source_url, headers=headers, timeout=20)
+    status = getattr(response, "status_code", 200)
+    if status == 304:
+        return []
+    if status in (403, 429):
+        _register_throttle(source_url, status)
+    else:
+        _clear_throttle(source_url)
+    response.raise_for_status()
+    response_headers = getattr(response, "headers", {}) or {}
+    validators: dict[str, str] = {}
+    if response_headers.get("ETag"):
+        validators["etag"] = str(response_headers["ETag"])
+    if response_headers.get("Last-Modified"):
+        validators["last_modified"] = str(
+            response_headers["Last-Modified"]
+        )
+    with _FEED_CONDITIONAL_LOCK:
+        if validators:
+            _FEED_CONDITIONAL[source_url] = validators
+        else:
+            _FEED_CONDITIONAL.pop(source_url, None)
+
+    discovered_at = datetime.now(timezone.utc).isoformat()
+    content_type = str(response_headers.get("Content-Type") or "").casefold()
+    content = bytes(response.content)
+    articles: list[Article]
+    if (
+        "json" in content_type
+        or content.lstrip().startswith((b"{", b"["))
+    ):
+        try:
+            payload = json.loads(
+                content.decode(getattr(response, "encoding", None) or "utf-8")
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return []
+        articles = _direct_json_articles(
+            payload,
+            source_url=source_url,
+            discovered_at=discovered_at,
+            limit=limit,
+        )
+    elif (
+        "xml" in content_type
+        or content.lstrip().startswith(b"<?xml")
+        or content.lstrip().startswith(
+            (b"<rss", b"<feed", b"<urlset", b"<sitemapindex")
+        )
+    ):
+        try:
+            root = ElementTree.fromstring(content)
+        except ElementTree.ParseError:
+            return []
+        if _feed_items(root):
+            articles = _feed_articles_from_root(
+                root,
+                feed_url=source_url,
+                discovered_at=discovered_at,
+                include_terms=None,
+                exclude_terms=None,
+                limit=limit,
+            )
+        elif (
+            _local_name(root.tag) == "sitemapindex"
+            and _sitemap_depth < 1
+        ):
+            articles = []
+            child_urls = [
+                str(node.text or "").strip()
+                for node in root.iter()
+                if _local_name(node.tag) == "loc"
+                and str(node.text or "").strip().startswith(
+                    ("http://", "https://")
+                )
+            ]
+            for child_url in child_urls[: min(3, max(1, limit))]:
+                remaining = max(0, limit - len(articles))
+                if remaining <= 0:
+                    break
+                articles.extend(
+                    fetch_direct_source_articles(
+                        child_url,
+                        user_agent,
+                        include_terms=None,
+                        exclude_terms=None,
+                        limit=remaining,
+                        _sitemap_depth=_sitemap_depth + 1,
+                    )
+                )
+        else:
+            articles = _direct_sitemap_articles(
+                root,
+                source_url=source_url,
+                discovered_at=discovered_at,
+                limit=limit,
+            )
+    else:
+        markup = response.text
+        links = extract_listing_article_urls(
+            source_url,
+            markup,
+            limit=limit,
+        )
+        articles = [
+            _discovery_stub(
+                url=item,
+                title=_title_from_url(item),
+                published_at=None,
+                source_url=source_url,
+                discovered_at=discovered_at,
+                source_kind="direct_listing",
+                adapter="html_listing_v1",
+            )
+            for item in links
+        ]
+
+    return [
+        article
+        for article in articles
+        if _article_matches_terms(
+            article,
+            include_terms=include_terms,
+            exclude_terms=exclude_terms,
+        )
+    ][: max(1, int(limit))]
+
+
+def _direct_sitemap_articles(
+    root: ElementTree.Element,
+    *,
+    source_url: str,
+    discovered_at: str,
+    limit: int,
+) -> list[Article]:
+    rows: list[tuple[str, str]] = []
+    for node in root.iter():
+        if _local_name(node.tag) != "url":
+            continue
+        loc = ""
+        lastmod = ""
+        for child in list(node):
+            name = _local_name(child.tag)
+            if name == "loc":
+                loc = str(child.text or "").strip()
+            elif name == "lastmod":
+                lastmod = str(child.text or "").strip()
+        if (
+            loc.startswith(("http://", "https://"))
+            and _same_publisher_host(source_url, loc)
+        ):
+            rows.append((loc, _normalize_datetime(lastmod) or ""))
+    rows.sort(key=lambda item: (item[1], item[0]), reverse=True)
+    return [
+        _discovery_stub(
+            url=url,
+            title=_title_from_url(url),
+            published_at=published_at or None,
+            source_url=source_url,
+            discovered_at=discovered_at,
+            source_kind="direct_sitemap",
+            adapter="sitemap_urlset_v1",
+        )
+        for url, published_at in rows[: max(1, int(limit))]
+    ]
+
+
+def _direct_json_articles(
+    payload: Any,
+    *,
+    source_url: str,
+    discovered_at: str,
+    limit: int,
+) -> list[Article]:
+    out: list[Article] = []
+    seen_urls: set[str] = set()
+    for item in _json_objects(payload):
+        claim = item.get("polybot_claim")
+        if isinstance(claim, dict):
+            url = str(
+                item.get("url")
+                or item.get("link")
+                or claim.get("source_url")
+                or source_url
+            ).strip()
+            if not _same_publisher_host(source_url, url):
+                continue
+            envelope = {
+                "schema_version": 1,
+                "market_id": claim.get("market_id"),
+                "rule_spec_sha256": claim.get("rule_spec_sha256"),
+                "fact": claim.get("fact"),
+            }
+            raw_text = json.dumps(
+                envelope,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            published = _normalize_datetime(
+                str(
+                    item.get("published_at")
+                    or item.get("published")
+                    or item.get("date")
+                    or ""
+                )
+            )
+            digest = hashlib.sha256(
+                (
+                    "official_claim_json_v1\n"
+                    f"{source_url}\n{url}\n"
+                    f"{published or ''}\n"
+                    f"{item.get('title') or ''}\n"
+                    f"{item.get('byline') or ''}\n"
+                    f"{item.get('origin_organization') or ''}\n"
+                    f"{raw_text}"
+                ).encode("utf-8")
+            ).hexdigest()
+            out.append(
+                Article(
+                    url=url,
+                    domain=urlparse(url).netloc.lower().removeprefix("www."),
+                    title=str(item.get("title") or "Structured announcement"),
+                    published_at=published,
+                    fetched_at=discovered_at,
+                    raw_text=raw_text,
+                    hash=digest,
+                    source_kind="official_claim_json",
+                    byline=str(item.get("byline") or ""),
+                    origin_organization=str(
+                        item.get("origin_organization") or ""
+                    ),
+                    discovered_at=discovered_at,
+                    parsed_at=discovered_at,
+                    source_endpoint=source_url,
+                    source_adapter="official_claim_json_v1",
+                )
+            )
+            if len(out) >= limit:
+                break
+            continue
+
+        url = str(
+            item.get("url")
+            or item.get("link")
+            or item.get("permalink")
+            or ""
+        ).strip()
+        if (
+            not url.startswith(("http://", "https://"))
+            or not _same_publisher_host(source_url, url)
+            or url in seen_urls
+        ):
+            continue
+        seen_urls.add(url)
+        title = _clean_text(
+            str(item.get("title") or item.get("headline") or "")
+        ) or _title_from_url(url)
+        body = _clean_text(
+            str(
+                item.get("body")
+                or item.get("content")
+                or item.get("description")
+                or item.get("summary")
+                or ""
+            )
+        )
+        published = _normalize_datetime(
+            str(
+                item.get("published_at")
+                or item.get("published")
+                or item.get("datePublished")
+                or item.get("date")
+                or ""
+            )
+        )
+        article = _discovery_stub(
+            url=url,
+            title=title,
+            published_at=published,
+            source_url=source_url,
+            discovered_at=discovered_at,
+            source_kind="direct_json",
+            adapter="json_discovery_v1",
+            raw_text="\n".join(
+                part for part in (title, body) if part
+            ),
+        )
+        out.append(article)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _json_objects(value: Any):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _json_objects(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _json_objects(child)
+
+
+def _discovery_stub(
+    *,
+    url: str,
+    title: str,
+    published_at: str | None,
+    source_url: str,
+    discovered_at: str,
+    source_kind: str,
+    adapter: str,
+    raw_text: str = "",
+) -> Article:
+    body = raw_text.strip() or title.strip() or url
+    digest = hashlib.sha256(
+        (
+            f"{adapter}\n{source_url}\n{url}\n{title}\n"
+            f"{published_at or ''}\n{body}"
+        ).encode("utf-8")
+    ).hexdigest()
+    return Article(
+        url=url,
+        domain=urlparse(url).netloc.lower().removeprefix("www."),
+        title=title or url,
+        published_at=published_at,
+        fetched_at=discovered_at,
+        raw_text=body,
+        hash=digest,
+        source_kind=source_kind,
+        discovered_at=discovered_at,
+        parsed_at=discovered_at,
+        source_endpoint=source_url,
+        source_adapter=adapter,
+    )
+
+
+def _article_matches_terms(
+    article: Article,
+    *,
+    include_terms: list[str] | None,
+    exclude_terms: list[str] | None,
+) -> bool:
+    text = f"{article.url}\n{article.title}\n{article.raw_text}"
+    if include_terms and not _matches_any(text, include_terms):
+        return False
+    if exclude_terms and _matches_any(text, exclude_terms):
+        return False
+    return True
+
+
+def _title_from_url(url: str) -> str:
+    path = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
+    text = re.sub(r"[-_]+", " ", path)
+    return " ".join(text.split()).strip()[:180] or url
+
+
+def _local_name(tag: str) -> str:
+    return str(tag).rsplit("}", 1)[-1].casefold()
+
+
+def _same_publisher_host(source_url: str, candidate_url: str) -> bool:
+    source = urlparse(source_url).hostname or ""
+    candidate = urlparse(candidate_url).hostname or ""
+    source = source.casefold().removeprefix("www.").strip(".")
+    candidate = candidate.casefold().removeprefix("www.").strip(".")
+    return bool(
+        source
+        and candidate
+        and (
+            source == candidate
+            or source.endswith(f".{candidate}")
+            or candidate.endswith(f".{source}")
+        )
+    )
 
 
 def resolve_google_news_url(url: str, user_agent: str = "polybot/0.1", timeout: float = 20.0) -> str | None:
@@ -508,7 +951,13 @@ def resolve_google_news_url(url: str, user_agent: str = "polybot/0.1", timeout: 
 
 
 def promote_feed_article(article: Article, user_agent: str = "polybot/0.1") -> Article | None:
-    if article.source_kind != "feed":
+    if article.source_kind not in {
+        "feed",
+        "feed_item",
+        "direct_listing",
+        "direct_sitemap",
+        "direct_json",
+    }:
         return None
     if not article.url.startswith(("http://", "https://")):
         return None
@@ -540,6 +989,16 @@ def promote_feed_article(article: Article, user_agent: str = "polybot/0.1") -> A
         raw_text=promoted.raw_text,
         hash=hashlib.sha256(f"promoted\n{promoted.url}\n{promoted.title}\n{promoted.raw_text}".encode("utf-8")).hexdigest(),
         source_kind="article",
+        byline=promoted.byline or article.byline,
+        origin_organization=(
+            promoted.origin_organization
+            or article.origin_organization
+        ),
+        discovered_at=article.discovered_at or article.fetched_at,
+        fetch_started_at=promoted.fetch_started_at,
+        parsed_at=promoted.parsed_at,
+        source_endpoint=article.source_endpoint or article.url,
+        source_adapter=article.source_adapter or "rss_atom_v1",
     )
 
 
@@ -556,6 +1015,13 @@ def _promote_with_feed_text(article: Article, target_url: str) -> Article | None
         raw_text=article.raw_text,
         hash=hashlib.sha256(f"promoted-summary\n{target_url}\n{article.title}\n{article.raw_text}".encode("utf-8")).hexdigest(),
         source_kind=source_kind,
+        byline=article.byline,
+        origin_organization=article.origin_organization,
+        discovered_at=article.discovered_at or article.fetched_at,
+        fetch_started_at="",
+        parsed_at=datetime.now(timezone.utc).isoformat(),
+        source_endpoint=article.source_endpoint or article.url,
+        source_adapter=article.source_adapter or "rss_atom_v1",
     )
 
 
@@ -662,6 +1128,41 @@ def _source_url(item: ElementTree.Element) -> str | None:
     return text if text.startswith(("http://", "https://")) else None
 
 
+def _source_name(item: ElementTree.Element) -> str:
+    source = item.find("source")
+    if source is None:
+        source = item.find("{http://www.w3.org/2005/Atom}source")
+    if source is None:
+        return ""
+    return _clean_text(source.text or "")
+
+
+def _extract_byline(markup: str) -> str:
+    soup = BeautifulSoup(markup, "lxml")
+    for key in (
+        "author",
+        "article:author",
+        "byl",
+        "parsely-author",
+        "dc.creator",
+    ):
+        value = _meta_content(soup, key)
+        if value and value.strip():
+            return _clean_text(value)[:300]
+    for selector in (
+        "[rel='author']",
+        ".byline",
+        "[class*='byline']",
+        "[data-testid*='byline']",
+    ):
+        node = soup.select_one(selector)
+        if node is not None:
+            value = _clean_text(node.get_text(" ", strip=True))
+            if value:
+                return value[:300]
+    return ""
+
+
 def _clean_text(value: str) -> str:
     stripped = re.sub(r"<[^>]+>", " ", html.unescape(value or ""))
     return re.sub(r"\s+", " ", stripped).strip()
@@ -678,7 +1179,15 @@ def _content_fingerprint(article: Article) -> str:
 
 
 def _looks_like_news_article_path(path: str) -> bool:
-    return bool(re.search(r"/(?:news|features|opinions|opinion|program|gallery|video|liveblog)/", path))
+    return bool(
+        re.search(
+            r"/(?:news|features|opinions|opinion|program|gallery|video|"
+            r"liveblog|press-releases?|statements?-releases?|briefing-room|"
+            r"presidential-actions?|speeches?|communiques?|releases?|remarks?|"
+            r"fact-sheets?)/",
+            path,
+        )
+    )
 
 
 def _looks_like_html(content: bytes) -> bool:

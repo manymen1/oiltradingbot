@@ -7,7 +7,15 @@ import pytest
 
 from polybot.binary.config import load_binary_config
 from polybot.discovery.allocator import AllocationRequest, PortfolioAllocator
-from polybot.discovery.config import AllocatorConfig, DiscoveryConfig, OpportunityConfig, ScoringConfig, UniverseConfig
+from polybot.discovery.config import (
+    AllocatorConfig,
+    DiscoveryConfig,
+    OpportunityConfig,
+    ScoringConfig,
+    UniverseConfig,
+    load_discovery_config,
+    opportunity_reachability,
+)
 from polybot.discovery.context import FixtureRuleAnalyzer
 from polybot.discovery.emit import emit_bot_config
 from polybot.discovery.gamma_universe import context_from_event, is_geopolitical_candidate, merge_refresh
@@ -22,6 +30,7 @@ from polybot.discovery.runner import (
 )
 from polybot.discovery.scorer import grade_market
 from polybot.discovery.sources import build_source_plan
+from polybot.discovery.sources import source_plan_sha256
 from polybot.discovery.store import DiscoveryStore
 from polybot.discovery.types import MarketContext
 from polybot.location.config import load_location_config
@@ -52,6 +61,8 @@ def _market(slug: str, question: str, *, group_title: str = "", liquidity: float
         "active": not closed,
         "closed": closed,
         "acceptingOrders": not closed,
+        "feesEnabled": False,
+        "feeSchedule": None,
         "volume": volume,
         "liquidity": liquidity,
         "endDate": "2026-09-30T23:59:00Z",
@@ -125,6 +136,20 @@ def test_context_from_binary_event() -> None:
     assert context.kind == "binary"
     assert context.market_id == "0xiran-ceasefire-m"
     assert len(context.outcomes) == 1
+    assert context.outcomes[0].fee_schedule is not None
+    assert context.outcomes[0].fee_schedule.fees_enabled is False
+    assert context.outcomes[0].fee_schedule_error == ""
+
+
+def test_malformed_fee_metadata_is_preserved_as_entry_blocker() -> None:
+    event = _binary_event()
+    market = event["markets"][0]
+    market["feesEnabled"] = True
+    market["feeSchedule"] = {"rate": 0.04}
+    context = context_from_event(event)
+    assert context is not None
+    assert context.outcomes[0].fee_schedule is None
+    assert "missing fields" in context.outcomes[0].fee_schedule_error
 
 
 def test_rule_change_drops_analysis_and_demotes() -> None:
@@ -228,6 +253,18 @@ def test_scorer_hard_states() -> None:
     assert discretionary.state == "MONITOR_ONLY"
 
 
+def test_grouped_market_requires_verified_mapping_for_every_outcome() -> None:
+    context = _analyzed_context(_grouped_event())
+    raw = context.as_dict()
+    raw["outcomes"][1]["no_token_id"] = ""
+    broken = MarketContext.from_dict(raw)
+
+    graded = grade_market(broken, ScoringConfig(allow_fixture_analysis_live=True))
+
+    assert graded.state == "RULES_REVIEW_REQUIRED"
+    assert graded.state_reasons == ["unverified_token_mapping"]
+
+
 def test_pentagon_rename_domain_is_auto_trade_eligible() -> None:
     # defense.gov 301-redirects to war.gov, and domain_allowed() matches on
     # exact host / suffix -- so a Pentagon announcement (the decisive source
@@ -306,6 +343,25 @@ def test_scorer_correlation_group_limit_downgrades_live() -> None:
     graded = grade_market(context, scoring, group_counts={"iran|united_states": 1})
     assert graded.state == "PAPER_ELIGIBLE"
     assert any(reason.startswith("correlation_group_limit") for reason in graded.state_reasons)
+
+
+def test_grading_keeps_best_markets_up_to_correlation_limit(tmp_path, capsys) -> None:
+    config_path = _pipeline_config(tmp_path)
+    events = [
+        _binary_event(slug=f"same-group-{index}", liquidity=1000.0 + index)
+        for index in range(3)
+    ]
+
+    def fetch(url: str, params: dict) -> list[dict]:
+        return events if params.get("offset", 0) == 0 else []
+
+    assert discover_markets_command(config_path, events_fetch=fetch) == 0
+    capsys.readouterr()
+    assert grade_markets_command(config_path) == 0
+    summary = json.loads(capsys.readouterr().out)
+
+    assert summary["states"]["LIVE_CONFIRMATION_ELIGIBLE"] == 2
+    assert summary["states"]["PAPER_ELIGIBLE"] == 1
 
 
 # ---- source plan ----
@@ -389,6 +445,72 @@ def test_tradable_edge_accounting() -> None:
     assert tradable_edge(0.60, 0.40, config) == pytest.approx(0.14)
 
 
+def test_default_model_pricing_is_explicitly_calibration_only(tmp_path) -> None:
+    context = _graded(_binary_event())
+    config = OpportunityConfig(
+        probability_estimates={context.market_id: {"yes": 0.99}},
+        model_weight=1.0,
+        disagreement_buffer_scale=0.0,
+    )
+    results = scan_opportunities([context], config, _FakeQuotes(), _allocator(tmp_path))
+    yes = next(result for result in results if result.side == "YES")
+    assert "model_pricing_calibration_only" in yes.blockers
+    assert yes.tradable_edge is not None and yes.tradable_edge > config.min_edge
+    assert yes.allocation_usd == 0.0
+
+
+def test_opportunity_reachability_matches_pricing_equation() -> None:
+    status = opportunity_reachability(OpportunityConfig())
+    # 0.35 model lift - 0.25 disagreement penalty - 0.06 fixed buffers.
+    assert status["max_theoretical_edge"] == pytest.approx(0.04)
+    assert status["min_edge"] == pytest.approx(0.05)
+    assert status["minimum_model_weight"] == pytest.approx(0.36)
+    assert status["reachable"] is False
+
+
+def test_allocatable_mode_rejects_unreachable_model_pricing(tmp_path) -> None:
+    path = tmp_path / "discovery.yaml"
+    path.write_text(
+        """
+opportunity:
+  model_pricing_mode: allocatable
+  model_weight: 0.35
+  disagreement_buffer_scale: 0.25
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="max_theoretical_edge=0.0400"):
+        load_discovery_config(path)
+
+
+def test_allocatable_mode_accepts_reachable_model_pricing(tmp_path) -> None:
+    path = tmp_path / "discovery.yaml"
+    path.write_text(
+        """
+opportunity:
+  model_pricing_mode: allocatable
+  model_weight: 0.40
+  disagreement_buffer_scale: 0.25
+""",
+        encoding="utf-8",
+    )
+    config = load_discovery_config(path)
+    assert opportunity_reachability(config.opportunity)["reachable"] is True
+
+
+def test_model_pricing_mode_rejects_unknown_value(tmp_path) -> None:
+    path = tmp_path / "discovery.yaml"
+    path.write_text(
+        """
+opportunity:
+  model_pricing_mode: automatic
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="calibration_only.*allocatable"):
+        load_discovery_config(path)
+
+
 def _graded(event: dict) -> MarketContext:
     return grade_market(_analyzed_context(event), ScoringConfig(allow_fixture_analysis_live=True))
 
@@ -397,7 +519,12 @@ def test_scan_finds_executable_opportunity(tmp_path) -> None:
     context = _graded(_binary_event())
     # model_weight=1.0 opts out of market anchoring to isolate the base
     # edge accounting; anchoring itself is covered in test_calibration.py.
-    config = OpportunityConfig(probability_estimates={context.market_id: {"yes": 0.60}}, model_weight=1.0, disagreement_buffer_scale=0.0)
+    config = OpportunityConfig(
+        model_pricing_mode="allocatable",
+        probability_estimates={context.market_id: {"yes": 0.60}},
+        model_weight=1.0,
+        disagreement_buffer_scale=0.0,
+    )
     results = scan_opportunities([context], config, _FakeQuotes(), _allocator(tmp_path))
     # One YES row and one NO row per estimated outcome; here YES carries the edge.
     assert [r.side for r in sorted(results, key=lambda r: r.side)] == ["NO", "YES"]
@@ -438,7 +565,49 @@ def test_emit_binary_config_loads(tmp_path) -> None:
     assert config.entry.enabled and config.entry.side == "YES"
     assert config.market.expected_rule_text_sha256 == context.rule_text_sha256
     assert config.execution.dry_run is True
+    assert config.execution.paper_slippage_bps == 25.0
+    assert config.execution.paper_max_book_age_seconds == 10.0
     assert config.sources.feed_urls == plan.feed_urls
+    assert config.sources.feed_include_terms == plan.escalate_terms
+    assert config.sources.source_plan_sha256 == source_plan_sha256(plan)
+
+
+def test_emit_fleet_config_routes_feeds_through_central_store(tmp_path) -> None:
+    context = _graded(_binary_event())
+    plan = build_source_plan(context)
+    db_path = tmp_path / "central.sqlite3"
+    out = emit_bot_config(
+        context,
+        plan,
+        entry_usd=50.0,
+        out_path=tmp_path / "binary-central.yaml",
+        central_feed_db=str(db_path),
+        central_feed_stale_after_seconds=45.0,
+    )
+    config = load_binary_config(out)
+    assert config.sources.central_feed_db == str(db_path)
+    assert config.sources.central_feed_stale_after_seconds == 45.0
+
+
+def test_emit_fleet_config_routes_shared_classifier_budget(tmp_path) -> None:
+    context = _graded(_binary_event())
+    plan = build_source_plan(context)
+    db_path = tmp_path / "classifier.sqlite3"
+    out = emit_bot_config(
+        context,
+        plan,
+        entry_usd=50.0,
+        out_path=tmp_path / "binary-budget.yaml",
+        classifier_budget_db=str(db_path),
+        classifier_max_escalations_per_hour=12,
+        classifier_max_escalations_per_day=80,
+        classifier_max_errors_per_hour=5,
+    )
+    config = load_binary_config(out)
+    assert config.classifier.budget_db_path == str(db_path)
+    assert config.classifier.max_escalations_per_hour == 12
+    assert config.classifier.max_escalations_per_day == 80
+    assert config.classifier.max_classifier_errors_per_hour == 5
 
 
 def test_emit_location_config_loads(tmp_path) -> None:
@@ -450,6 +619,31 @@ def test_emit_location_config_loads(tmp_path) -> None:
     assert config.entry_target_names() == {"qatar", "oman"}
     assert config.event.expected_rule_text_sha256 == context.rule_text_sha256
     assert config.execution.dry_run is True
+    assert config.execution.paper_slippage_bps == 25.0
+    assert config.execution.paper_max_book_age_seconds == 10.0
+
+
+@pytest.mark.parametrize(
+    ("event", "loader"),
+    [
+        (_binary_event(), load_binary_config),
+        (_grouped_event(), load_location_config),
+    ],
+)
+def test_emit_live_config_requires_two_agreeing_classifier_passes(tmp_path, event, loader) -> None:
+    context = _graded(event)
+    plan = build_source_plan(context)
+    out = emit_bot_config(
+        context,
+        plan,
+        entry_usd=50.0,
+        out_path=tmp_path / f"{context.kind}.yaml",
+        dry_run=False,
+    )
+    config = loader(out)
+    assert config.execution.dry_run is False
+    assert config.classifier.passes >= 2
+    assert config.classifier.require_pass_agreement is True
 
 
 def test_emit_rejects_stale_source_plan(tmp_path) -> None:
@@ -516,6 +710,7 @@ def test_full_pipeline(tmp_path, capsys) -> None:
         config_path.read_text(encoding="utf-8")
         + f"""
 opportunity:
+  model_pricing_mode: allocatable
   model_weight: 1.0
   disagreement_buffer_scale: 0.0
   probability_estimates:
@@ -531,6 +726,8 @@ opportunity:
     assert len(scan["executable"]) == 1
     assert scan["executable"][0]["market_id"] == binary_id
     assert scan["executable"][0]["side"] == "YES"
+    assert scan["model_pricing"]["mode"] == "allocatable"
+    assert scan["model_pricing"]["reachable"] is True
 
     out_path = tmp_path / "generated" / "binary.yaml"
     assert emit_bot_config_command(config_path, binary_id, out=out_path) == 0
@@ -543,6 +740,7 @@ opportunity:
     assert report["funnel"]["understandable_markets"] == 3
     assert report["funnel"]["live_confirmation_eligible"] == 3
     assert report["funnel"]["executable_opportunities"] == 1
+    assert report["model_pricing"]["mode"] == "allocatable"
 
 
 # ---- portfolio ledger caps + executor link ----
@@ -712,6 +910,7 @@ def test_run_discovery_once_alerts_on_new_eligible(tmp_path) -> None:
         config_path.read_text(encoding="utf-8")
         + f"""
 opportunity:
+  model_pricing_mode: allocatable
   model_weight: 1.0
   disagreement_buffer_scale: 0.0
   probability_estimates:
@@ -749,7 +948,12 @@ opportunity:
 def test_scan_sizes_small_live_market_to_its_book(tmp_path) -> None:
     context = grade_market(_analyzed_context(_binary_event(liquidity=800.0)), ScoringConfig(allow_fixture_analysis_live=True))
     assert context.scores["recommended_max_order_usd"] == 16.0
-    config = OpportunityConfig(probability_estimates={context.market_id: {"yes": 0.60}}, model_weight=1.0, disagreement_buffer_scale=0.0)
+    config = OpportunityConfig(
+        model_pricing_mode="allocatable",
+        probability_estimates={context.market_id: {"yes": 0.60}},
+        model_weight=1.0,
+        disagreement_buffer_scale=0.0,
+    )
     results = scan_opportunities([context], config, _FakeQuotes(), _allocator(tmp_path))
     assert not results[0].blockers
     assert results[0].allocation_usd == 16.0  # book-absorbable size, not the 50 per-order cap
@@ -760,6 +964,7 @@ def test_scan_prices_no_side_of_overpriced_market(tmp_path) -> None:
     # Model says 20%, market asks 80c: the edge is on the NO side
     # (executable NO ask = 1 - yes_bid = 0.22 against a 0.80 NO probability).
     config = OpportunityConfig(
+        model_pricing_mode="allocatable",
         probability_estimates={context.market_id: {"yes": 0.20}},
         model_weight=1.0,
         disagreement_buffer_scale=0.0,

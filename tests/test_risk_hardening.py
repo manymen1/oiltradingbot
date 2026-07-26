@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,6 +19,24 @@ from polybot.binary.config import EntryConfig as BinaryEntryConfig, ExecutionCon
 from polybot.binary.decision import BinaryDecision
 from polybot.location.config import EntryConfig as LocationEntryConfig
 from polybot.location.decision import LocationDecision
+
+
+def _concurrent_allocator_commit(ledger: str, market_id: str, barrier, results) -> None:
+    allocator = PortfolioAllocator.from_ledger(Path(ledger))
+    barrier.wait()
+    request = AllocationRequest(
+        market_id=market_id,
+        event_slug=market_id,
+        correlation_group=market_id,
+        deadline_iso="2026-09-30T00:00:00Z",
+        usd=1.0,
+        region=market_id,
+    )
+    try:
+        allocator.commit(request)
+        results.put(True)
+    except ValueError:
+        results.put(False)
 
 
 # ---- second-source entry gate (P2.14) ----
@@ -82,6 +101,21 @@ def test_second_source_gate_window_expires(tmp_path) -> None:
     assert gate.confirm("yes", "reuters.com") is True
 
 
+def test_second_source_gate_rejects_reuters_syndication_mirror(tmp_path) -> None:
+    gate = SecondSourceGate(tmp_path, window_minutes=60.0)
+    assert gate.confirm(
+        "yes",
+        "reuters.com",
+        origin_organization="Reuters",
+    ) is False
+    assert gate.confirm(
+        "yes",
+        "finance.yahoo.com",
+        origin_organization="Reuters",
+    ) is False
+    assert gate.confirm("yes", "apnews.com") is True
+
+
 # ---- post-entry corroboration (P2.11) ----
 
 
@@ -124,6 +158,21 @@ def test_corroboration_armed_on_entry_and_satisfied_by_second_domain(tmp_path) -
     assert tracker.pending() is None
     raw = json.loads((bot.store.data_dir / "corroboration.json").read_text(encoding="utf-8"))
     assert raw["satisfied"] is True and raw["satisfied_by"] == "apnews.com"
+
+
+def test_corroboration_rejects_same_origin_across_domains(tmp_path) -> None:
+    tracker = CorroborationTracker(tmp_path)
+    tracker.start(
+        entry_domain="reuters.com",
+        minutes=30.0,
+        action="alert",
+        entry_origin_organization="Reuters",
+    )
+    assert tracker.satisfy(
+        "aol.com",
+        byline="Reporting by Reuters",
+    ) is False
+    assert tracker.satisfy("apnews.com") is True
 
 
 def test_corroboration_overdue_alerts_once(tmp_path) -> None:
@@ -235,6 +284,70 @@ def test_allocator_region_cap_blocks_same_theater_pileup(tmp_path) -> None:
     # A different theater is unaffected.
     granted, blockers = allocator.preview(request("m4", "g4", "east_asia"))
     assert granted == pytest.approx(100.0) and not blockers
+
+
+def test_allocator_concurrent_commits_cannot_overspend_or_lose_updates(tmp_path) -> None:
+    ledger = tmp_path / "ledger.json"
+    allocator = PortfolioAllocator(
+        ledger,
+        AllocatorConfig(
+            per_order_usd=1.0,
+            per_market_usd=1.0,
+            per_event_usd=1.0,
+            per_group_usd=100.0,
+            per_region_usd=100.0,
+            daily_usd=100.0,
+            total_usd=10.0,
+            max_open_positions=100,
+            max_per_deadline_week_usd=100.0,
+        ),
+    )
+    allocator.write_caps()
+    context = multiprocessing.get_context("fork")
+    worker_count = 20
+    barrier = context.Barrier(worker_count)
+    results = context.Queue()
+    workers = [
+        context.Process(
+            target=_concurrent_allocator_commit,
+            args=(str(ledger), f"market-{index}", barrier, results),
+        )
+        for index in range(worker_count)
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=10)
+        assert worker.exitcode == 0
+
+    successes = sum(bool(results.get(timeout=1)) for _ in workers)
+    snapshot = allocator.snapshot()
+    assert successes == 10
+    assert snapshot["total"] == pytest.approx(10.0)
+    assert len(snapshot["open_positions"]) == 10
+
+
+def test_allocator_partial_fill_corrects_basis_but_retains_attempt_caps(tmp_path) -> None:
+    allocator = PortfolioAllocator(
+        tmp_path / "ledger.json",
+        AllocatorConfig(per_order_usd=100.0, per_market_usd=100.0),
+    )
+    request = AllocationRequest(
+        market_id="thin-book",
+        event_slug="event",
+        correlation_group="group",
+        deadline_iso="",
+        usd=100.0,
+    )
+    allocator.commit(request)
+
+    allocator.reconcile_entry_basis("thin-book", reserved_usd=100.0, actual_cost_usd=13.0)
+    snapshot = allocator.snapshot()
+
+    assert snapshot["cost_basis"]["thin-book"] == pytest.approx(13.0)
+    assert snapshot["per_market"]["thin-book"] == pytest.approx(100.0)
+    assert snapshot["total"] == pytest.approx(100.0)
+    assert allocator.settle("thin-book", 15.0) == pytest.approx(2.0)
 
 
 def test_region_of_weights_global_actors_last() -> None:

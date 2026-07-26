@@ -1,5 +1,5 @@
 # The ONE config every `make` target uses. Ships paper-safe: the fleet is
-# enabled but every bot is armed alert_only and dry-run -- it discovers,
+# enabled but every bot is armed dry_run -- it discovers,
 # grades, scans, alerts, and paper-trades the whole geopolitical universe
 # without being able to move a cent.
 #
@@ -9,7 +9,20 @@
 # ...then `make live`. Master kill switch at any time: `make halt`.
 
 universe:
-  max_events: 300
+  # 0 is uncapped. Gamma's keyset cursor is followed to exhaustion; every
+  # run emits a content-addressed COMPLETE/INCOMPLETE coverage manifest.
+  max_events: 0
+  page_size: 100
+  fail_on_truncation: true
+  enumeration_views:
+    - order: liquidity
+      ascending: false
+    - order: volume
+      ascending: false
+    - order: startDate
+      ascending: false
+    - order: endDate
+      ascending: true
   # Liquidity/volume floors are OFF: liquidity sizes orders, never
   # disqualifies a market.
   min_liquidity: 0.0
@@ -38,6 +51,11 @@ scoring:
   max_markets_per_correlation_group: 2
 
 opportunity:
+  # Record model probabilities, market mids, and realized outcomes without
+  # allowing model-priced allocation. Promotion to "allocatable" is explicit
+  # and config loading then requires the weight/buffer equation to be reachable.
+  # Confirmation bots and grouped-market consistency arbitrage are separate.
+  model_pricing_mode: calibration_only
   min_edge: 0.05
   slippage_buffer: 0.01
   resolution_risk_buffer: 0.02
@@ -47,6 +65,8 @@ opportunity:
   # Market-anchored pricing: edges are computed from
   # model_weight*model + (1-model_weight)*market_mid. The market's own price
   # is the benchmark estimator until calibration-report proves otherwise.
+  # With the current 0.25 disagreement scale and 0.06 fixed buffers,
+  # allocatable mode needs model_weight >= 0.36 even before per-market risk.
   model_weight: 0.35
   # Edge bar widens by |model - mid| * this: big disagreements with the
   # crowd demand more edge.
@@ -77,14 +97,155 @@ fleet:
   enabled: true
   # <= 0 means UNCAPPED: one bot per eligible market, deep or thin.
   max_bots: 0
-  # alert_only = the paper soak. Change to "live" + auto_ack: true only
+  # dry_run = the paper soak. Change to "live" + auto_ack: true only
   # after the funnel/calibration reports justify it.
-  position_mode: "alert_only"
+  position_mode: "dry_run"
   auto_ack: false
   generated_dir: "configs/geopolitics/generated"
   # Hung-bot detection + crash-loop brake.
   heartbeat_stale_seconds: 300
   max_restarts_per_hour: 3
+
+# One process polls the union of every managed market's RSS/Atom sources and
+# fans matching rows to market bots through durable per-feed cursors. This
+# prevents common feeds from being requested once per bot every 2 seconds.
+central_feed:
+  enabled: true
+  db_path: "data/discovery/central_feed.sqlite3"
+  poll_seconds: 2.0
+  max_workers: 12
+  max_entries_per_feed: 50
+  # Required settlement sources without a working feed use centralized
+  # conditional-GET sitemap/JSON/listing discovery. This never grants a source
+  # authority role; the immutable SourcePlan still controls that.
+  direct_sources_enabled: true
+  direct_poll_seconds: 2.0
+  # Unchanged endpoints back off exponentially, then return to 2s as soon
+  # as a newly inserted item appears.
+  direct_idle_max_seconds: 30.0
+  max_entries_per_direct_source: 20
+  # Aggregator queries are numerous and already have indexing latency; rotate
+  # a bounded slice per domain instead of bursting every query concurrently.
+  aggregator_poll_seconds: 30
+  max_urls_per_domain_per_cycle: 8
+  retention_hours: 72
+  # Market bots stop consuming the shared feed when its producer heartbeat
+  # is stale. They do not fall back to direct feed requests.
+  stale_after_seconds: 60
+
+# One WAL-backed reservation counter is shared by every generated market bot.
+# Counts are actual model calls: one screen + one paper confirm consumes 2;
+# one screen + two agreeing live confirms consumes 3. A confirm group is
+# admitted atomically, so live can never spend only one half of a two-pass
+# decision. The limits are fleet totals, not per-market allowances.
+classifier_budget:
+  enabled: true
+  db_path: "data/discovery/classifier_budget.sqlite3"
+  max_escalations_per_hour: 60
+  max_escalations_per_day: 500
+  max_classifier_errors_per_hour: 20
+  # Atomic global sub-quotas: incumbent evidence, cold-start exploration, and
+  # rule compilation/retries/safety work. No process may borrow by starting
+  # earlier than another.
+  exploitation_fraction: 0.70
+  exploration_fraction: 0.20
+  system_fraction: 0.10
+
+profit_priority:
+  enabled: true
+  policy_version: rules-first-profit-priority-v1
+  min_terminal_observations: 20
+  min_human_labels: 100
+  min_quote_samples: 20
+  min_stressed_fill_samples: 20
+  min_resolved_trades: 5
+  lower_bound_z: 1.96
+  missing_label_error_rate: 0.05
+  # Monetary model billing is not yet metered, so reserve one cent per
+  # recorded model call and expose processing_cost_measured=false.
+  processing_cost_reserve_usd: 0.01
+  # A wrong terminal action can lose the entire current per-order budget.
+  false_terminal_loss_usd: 50.0
+  exploration_fraction: 0.20
+  # The recorder currently samples through 10 seconds. A measured p95 beyond
+  # that horizon blocks exploitation instead of assuming the quote survived.
+  max_supported_latency_ms: 10000
+
+# Compile verbatim market rules into a strict, versioned contract before a
+# source plan or eligibility decision is trusted. Every new rule version uses
+# two agreeing passes. Families remain paper-only until replay and forward
+# evidence explicitly promote them below.
+rule_compiler:
+  enabled: true
+  max_per_cycle: 10
+  db_path: "data/discovery/rules.sqlite3"
+  paper_families:
+    - OCCURRENCE_BEFORE_DEADLINE
+    - CATEGORICAL_EXCLUSIVE
+    - SOURCE_LOCKED_ANNOUNCEMENT
+    - STATUS_AT_DEADLINE
+    - NUMERIC_THRESHOLD
+    - DURATION_REQUIREMENT
+  live_confirmation_families: []
+
+# Generic RuleSpec-driven execution is enabled only for the paper fleet.
+# The command rejects --live and fleet.position_mode=live. The three initial
+# families may act on deterministic terminal evaluations; status/count/duration
+# markets continue collecting claims, evaluations, and proofs without execution.
+rule_runner:
+  enabled: true
+  paper_execution_families:
+    - OCCURRENCE_BEFORE_DEADLINE
+    - CATEGORICAL_EXCLUSIVE
+    - SOURCE_LOCKED_ANNOUNCEMENT
+  extraction_passes: 2
+  deterministic_evidence_enabled: true
+  deterministic_evidence_policy_version: "official-claim-envelope-v1"
+  deterministic_evidence_families:
+    - OCCURRENCE_BEFORE_DEADLINE
+    - CATEGORICAL_EXCLUSIVE
+    - SOURCE_LOCKED_ANNOUNCEMENT
+  poll_seconds: 2.0
+  max_articles_per_feed: 50
+  max_trade_article_age_hours: 24.0
+  # Generic entries require a current per-market Gamma feeSchedule snapshot.
+  # Explicit feesEnabled=false is a verified zero-fee schedule; missing or
+  # stale metadata blocks entry.
+  max_fee_schedule_age_hours: 24.0
+  # Legacy binary/location paper adapters still use a flat fee. The generic
+  # runner rejects any nonzero value and uses the market fee curve instead.
+  paper_fee_bps: 0.0
+  paper_slippage_bps: 25.0
+  paper_max_book_age_seconds: 10.0
+  confirmation_uncertainty_buffer: 0.03
+  exit_price_buffer: 0.01
+
+# Public, credential-free forward recorder attached to the generic paper
+# runner. It seeds every outcome book over REST, then maintains full depth
+# through the market WebSocket with heartbeat/reconnect handling. Articles,
+# extraction latency, decision proofs, resolutions, and quote survival are
+# stored in one WAL database for content-addressed forward replays.
+forward_recorder:
+  enabled: true
+  db_path: "data/discovery/forward_recorder.sqlite3"
+  websocket_url: "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+  heartbeat_seconds: 10.0
+  reconnect_min_seconds: 1.0
+  reconnect_max_seconds: 30.0
+  rest_seed: true
+  shared_book_service: true
+  max_tokens_per_connection: 200
+  rest_seed_workers: 8
+  max_book_levels: 20
+  quote_survival_horizons_ms:
+    - 100
+    - 250
+    - 500
+    - 1000
+    - 2000
+    - 5000
+    - 10000
+  max_sample_lag_ms: 250
 
 allocator:
   per_order_usd: 50.0
@@ -121,7 +282,9 @@ classifier:
 # true, raising opportunity.model_weight is the deliberate, evidence-backed
 # step that lets the bot trade its own view.
 estimator:
-  enabled: true
+  # Probability forecasts are a separate calibration experiment and cannot
+  # compete with terminal evidence for this campaign's model-call budget.
+  enabled: false
   model: claude-sonnet-4-6
   refresh_hours: 24.0
   max_per_cycle: 25

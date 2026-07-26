@@ -11,8 +11,8 @@ from polybot.config import SETTINGS
 from polybot.log import log_event
 
 from polybot.core.article import article_age_hours as _article_age_hours, is_feed_summary as _is_feed_summary
-from polybot.core.budget import ClassifierBudgetStore
-from polybot.core.execution import DryRunTradingAdapter, TradingAdapter, live_adapter_from_env, live_backend_name
+from polybot.core.budget import ClassifierBudgetExceeded, ClassifierBudgetStore
+from polybot.core.execution import DryRunTradingAdapter, PaperTradingAdapter, TradingAdapter, live_adapter_from_env, live_backend_name
 from polybot.core.holdings import HoldingsStore
 from polybot.core.notifier import TelegramNotifier
 from polybot.core.operator import OperatorGate
@@ -27,6 +27,7 @@ from .decision import BinaryDecision, classify_agreement, entry_decision, held_d
 from .executor import TERMINAL_STATES, BinaryExecutor
 from .keyword_gate import should_escalate_binary_article
 from .market_verifier import BinaryMarketVerification, load_and_verify_market
+from polybot.location.quotes import PublicClobQuoteAdapter
 
 
 PROMOTED_FEED_SUMMARY_AUTO_TRADE_DOMAINS = {"reuters.com", "apnews.com", "afp.com"}
@@ -241,7 +242,17 @@ def run_binary_command(config_path: Path, live_flag: bool) -> int:
             raise SystemExit("market is not active/open/accepting orders; refusing live execution")
         adapter = _live_adapter(tick_size=verification.tick_size, neg_risk=verification.neg_risk)
     else:
-        adapter = DryRunTradingAdapter()
+        adapter = PaperTradingAdapter(
+            state_path=config.data_dir / "dry_run" / "paper_broker.json",
+            quote_provider=PublicClobQuoteAdapter(
+                [verification.yes_token_id, verification.no_token_id],
+                refresh_seconds=2.0,
+            ),
+            token_pairs=[(verification.yes_token_id, verification.no_token_id)],
+            fee_bps=config.execution.paper_fee_bps,
+            slippage_bps=config.execution.paper_slippage_bps,
+            max_book_age_seconds=config.execution.paper_max_book_age_seconds,
+        )
     gate = OperatorGate(config_path, config)
     if live_flag:
         preflight = _binary_preflight_result(config_path, config, live_flag=True, adapter=adapter, verification=verification)
@@ -295,7 +306,23 @@ class BinaryRuleBot:
         self.config = config
         self.market = market
         self.store = StateStore(config.data_dir / "dry_run" if config.execution.dry_run else config.data_dir)
-        self.article_store = ArticleStore(config.logs_dir / "binary_articles.jsonl")
+        article_store_path = (
+            config.data_dir / "central_feed_articles.jsonl"
+            if config.sources.central_feed_db
+            else config.logs_dir / "binary_articles.jsonl"
+        )
+        self.article_store = ArticleStore(article_store_path)
+        self.central_feed_reader = None
+        self.promotion_cache = None
+        if config.sources.central_feed_db:
+            from polybot.core.central_feed import CentralFeedPromotionCache, CentralFeedReader
+
+            self.central_feed_reader = CentralFeedReader(
+                Path(config.sources.central_feed_db),
+                config.data_dir / "central_feed_cursor.json",
+                stale_after_seconds=config.sources.central_feed_stale_after_seconds,
+            )
+            self.promotion_cache = CentralFeedPromotionCache(Path(config.sources.central_feed_db))
         self.notifier = TelegramNotifier()
         self.classifier = build_binary_classifier(config)
         # Cheap/fast screen tier (see the location runner for rationale).
@@ -308,12 +335,10 @@ class BinaryRuleBot:
             self.screen_classifier = LLMBinaryClassifier(
                 _replace(config.classifier, model=config.classifier.screen_model), config
             )
-        self.classifier_budget = ClassifierBudgetStore(self.store.data_dir)
-        # Confirm passes run concurrently; the budget store does
-        # read-modify-write on a JSON file and needs serializing.
-        import threading
-
-        self._budget_lock = threading.Lock()
+        self.classifier_budget = ClassifierBudgetStore(
+            self.store.data_dir,
+            Path(config.classifier.budget_db_path) if config.classifier.budget_db_path else None,
+        )
         self.executor = BinaryExecutor(config, market, self.store, self.notifier, adapter)
         self.holdings = self.executor.holdings
         # Event-anchored book capture shares the executor's logger (same
@@ -349,19 +374,20 @@ class BinaryRuleBot:
                 if not self.article_store.store(article):
                     continue
                 decisions.append(self.process_article(article))
-                if kind != "feed":
+                if kind not in {"feed", "central_feed"}:
                     continue
                 promoted = self._promote_feed_article(article)
                 if promoted is None or not self.article_store.store(promoted):
                     continue
                 decisions.append(self.process_article(promoted))
+            if kind == "central_feed" and self.central_feed_reader is not None:
+                self.central_feed_reader.ack_pending()
         return decisions
 
     def _fetch_all_sources(self) -> list[tuple[str, list[Article]]]:
         jobs: list[tuple[str, str]] = [("poll", url) for url in self.config.sources.poll_urls]
-        jobs += [("feed", url) for url in self.config.sources.feed_urls]
-        if not jobs:
-            return []
+        if self.central_feed_reader is None:
+            jobs += [("feed", url) for url in self.config.sources.feed_urls]
 
         def fetch(job: tuple[str, str]) -> tuple[str, list[Article]]:
             kind, url = job
@@ -379,12 +405,29 @@ class BinaryRuleBot:
                 log_event("binary_source_fetch_error", url=url, error=str(exc))
                 return kind, []
 
+        results: list[tuple[str, list[Article]]] = []
         if len(jobs) == 1:
-            return [fetch(jobs[0])]
-        from concurrent.futures import ThreadPoolExecutor
+            results = [fetch(jobs[0])]
+        elif jobs:
+            from concurrent.futures import ThreadPoolExecutor
 
-        with ThreadPoolExecutor(max_workers=min(8, len(jobs))) as pool:
-            return list(pool.map(fetch, jobs))
+            with ThreadPoolExecutor(max_workers=min(8, len(jobs))) as pool:
+                results = list(pool.map(fetch, jobs))
+
+        if self.central_feed_reader is not None:
+            try:
+                batch = self.central_feed_reader.read(
+                    self.config.sources.feed_urls,
+                    include_terms=self.config.sources.feed_include_terms,
+                    exclude_terms=self.config.sources.feed_exclude_terms,
+                    limit_per_feed=self.config.sources.max_feed_entries_per_cycle,
+                )
+                # Shared feed rows are local and should be classified before a
+                # slow per-market poll URL can delay the breaking-news path.
+                results.insert(0, ("central_feed", batch.articles))
+            except Exception as exc:
+                log_event("binary_central_feed_unavailable", error=str(exc))
+        return results
 
     def _decay_still_actionable(self, decay: BinaryDecision) -> bool:
         current = self.store.current()
@@ -439,6 +482,11 @@ class BinaryRuleBot:
                 return screen_decision
         try:
             passes = self._run_confirm_passes(article)
+        except ClassifierBudgetExceeded as exc:
+            decision = BinaryDecision("ALERT_ONLY", "3", exc.reason)
+            self._log_decision(article, decision)
+            self._notify_classifier_budget_block_once(exc.reason)
+            return decision
         except Exception as exc:
             self.classifier_budget.record_error()
             decision = BinaryDecision("ALERT_ONLY", "3", f"classifier_error:{exc}")
@@ -475,7 +523,15 @@ class BinaryRuleBot:
     def _promote_feed_article(self, article: Article) -> Article | None:
         if article.source_kind != "feed" or not self.config.sources.promote_feed_to_article:
             return None
-        promoted = promote_feed_article(article, SETTINGS.user_agent)
+        promoted = (
+            self.promotion_cache.promote(
+                article,
+                SETTINGS.user_agent,
+                promoter=promote_feed_article,
+            )
+            if self.promotion_cache is not None
+            else promote_feed_article(article, SETTINGS.user_agent)
+        )
         if promoted is None:
             log_event("binary_feed_promotion_failed", url=article.url, domain=article.domain)
             return None
@@ -580,6 +636,8 @@ class BinaryRuleBot:
             entry_domain=article.domain,
             minutes=self.config.entry.corroboration_minutes,
             action=self.config.entry.corroboration_action,
+            entry_origin_organization=article.origin_organization,
+            entry_byline=article.byline,
         )
         log_event("binary_corroboration_started", entry_domain=article.domain, minutes=self.config.entry.corroboration_minutes)
 
@@ -590,7 +648,11 @@ class BinaryRuleBot:
             return
         if decision.reason not in {"held_yes_thesis_reinforced", "held_no_thesis_reinforced"}:
             return
-        if self._corroboration_tracker().satisfy(article.domain):
+        if self._corroboration_tracker().satisfy(
+            article.domain,
+            origin_organization=article.origin_organization,
+            byline=article.byline,
+        ):
             log_event("binary_corroboration_satisfied", domain=article.domain)
 
     def _check_corroboration_deadline(self) -> None:
@@ -644,6 +706,11 @@ class BinaryRuleBot:
         save money, never miss a trade."""
         try:
             screen = self._classify_with_budget(article, 0, classifier=self.screen_classifier, stage="screen")
+        except ClassifierBudgetExceeded as exc:
+            decision = BinaryDecision("ALERT_ONLY", "3", exc.reason)
+            self._log_decision(article, decision)
+            self._notify_classifier_budget_block_once(exc.reason)
+            return decision
         except Exception as exc:
             log_event("binary_screen_classifier_error", error=str(exc))
             if not self.live_requested:
@@ -667,15 +734,29 @@ class BinaryRuleBot:
         """Trade-grade passes run CONCURRENTLY: on a confirmation race, N
         sequential strong-model calls would multiply reaction time by N."""
         count = max(1, self.config.classifier.passes)
+        reason = self.classifier_budget.reserve_attempts(self.config.classifier, count)
+        if reason is not None:
+            raise ClassifierBudgetExceeded(reason)
         if count == 1:
-            return [self._classify_with_budget(article, 0)]
+            return [self._classify_with_budget(article, 0, budget_reserved=True)]
         from concurrent.futures import ThreadPoolExecutor
 
         with ThreadPoolExecutor(max_workers=count) as pool:
-            futures = [pool.submit(self._classify_with_budget, article, index) for index in range(count)]
+            futures = [
+                pool.submit(self._classify_with_budget, article, index, budget_reserved=True)
+                for index in range(count)
+            ]
             return [future.result() for future in futures]
 
-    def _classify_with_budget(self, article: Article, pass_index: int, *, classifier: Any = None, stage: str = "confirm") -> Any:
+    def _classify_with_budget(
+        self,
+        article: Article,
+        pass_index: int,
+        *,
+        classifier: Any = None,
+        stage: str = "confirm",
+        budget_reserved: bool = False,
+    ) -> Any:
         active = classifier if classifier is not None else self.classifier
         context = self.config.market.resolution_rules
         input_chars = len(article.title) + len(article.raw_text) + len(context)
@@ -690,8 +771,10 @@ class BinaryRuleBot:
             "input_char_count": input_chars,
             "estimated_input_tokens": max(1, input_chars // 4),
         }
-        with self._budget_lock:
-            self.classifier_budget.record_attempt()
+        if not budget_reserved:
+            reason = self.classifier_budget.reserve_attempts(self.config.classifier, 1)
+            if reason is not None:
+                raise ClassifierBudgetExceeded(reason)
         log_event("binary_classifier_attempt", **telemetry)
         if hasattr(active, "last_usage"):
             setattr(active, "last_usage", None)

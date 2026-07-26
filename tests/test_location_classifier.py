@@ -1198,6 +1198,7 @@ def test_run_location_live_preflight_blocks_before_poll_loop(tmp_path, monkeypat
     config_path = tmp_path / "qatar.yaml"
     config_path.write_text("event:\n  slug: test-slug\nexecution:\n  dry_run: false\n", encoding="utf-8")
     config = _config(
+        classifier=ClassifierConfig(passes=2, require_pass_agreement=True),
         execution=ExecutionConfig(dry_run=False, sell=SellConfig(), buy_rotation=BuyRotationConfig()),
         sources=SourcesConfig(poll_urls=["https://example.com/story"]),
         data_dir=tmp_path / "state",
@@ -1224,6 +1225,7 @@ def test_run_location_live_preflight_allows_acknowledged_alert_only_monitoring(t
     config_path = tmp_path / "qatar.yaml"
     config_path.write_text("event:\n  slug: test-slug\nexecution:\n  dry_run: false\n", encoding="utf-8")
     config = _config(
+        classifier=ClassifierConfig(passes=2, require_pass_agreement=True),
         execution=ExecutionConfig(dry_run=False, sell=SellConfig(), buy_rotation=BuyRotationConfig()),
         sources=SourcesConfig(poll_urls=["https://example.com/story"]),
         data_dir=tmp_path / "state",

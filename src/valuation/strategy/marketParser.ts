@@ -45,6 +45,7 @@ export function parseValuationLegs(event: GammaEvent, config: EventConfig): Valu
       eventSlug: event.slug,
       marketSlug: stringOr(market.slug, sha256(question).slice(0, 12)),
       question,
+      groupItemTitle,
       eventKind: config.kind,
       company: config.companyName ?? groupItemTitle ?? inferCompanyFromQuestion(question),
       deadlineIso: config.deadlineIso,

@@ -16,6 +16,7 @@ def test_live_preflight_defaults_to_blocked_until_mode_and_ack(tmp_path: Path, m
     config_path.write_text("market:\n  slug: iran-event\nexecution:\n  dry_run: false\n", encoding="utf-8")
     cfg = IranBotConfig(
         market=MarketConfig(slug="iran-event", held_side="YES"),
+        classifier=ClassifierConfig(passes=2, require_pass_agreement=True),
         execution=ExecutionConfig(dry_run=False),
         data_dir=tmp_path / "data" / "iran-protection-bot",
         logs_dir=tmp_path / "logs",
@@ -60,7 +61,7 @@ def test_live_preflight_blocks_missing_required_integrations(tmp_path: Path, mon
     config_path.write_text("market:\n  slug: iran-event\n", encoding="utf-8")
     cfg = IranBotConfig(
         market=MarketConfig(slug="iran-event"),
-        classifier=ClassifierConfig(provider="anthropic"),
+        classifier=ClassifierConfig(provider="anthropic", passes=2, require_pass_agreement=True),
         execution=ExecutionConfig(dry_run=False),
         safety=SafetyConfig(degraded_mode_alert=True),
         data_dir=tmp_path / "data" / "iran-protection-bot",
@@ -75,6 +76,27 @@ def test_live_preflight_blocks_missing_required_integrations(tmp_path: Path, mon
     assert "anthropic_not_configured" in status.blockers
     assert "telegram_not_configured" not in status.warnings
     assert "anthropic_not_configured" not in status.warnings
+
+
+def test_live_preflight_blocks_single_classifier_pass(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+    config_path = tmp_path / "iran.yaml"
+    config_path.write_text("execution:\n  dry_run: false\n", encoding="utf-8")
+    cfg = IranBotConfig(
+        market=MarketConfig(slug="iran-event"),
+        classifier=ClassifierConfig(passes=1, require_pass_agreement=False),
+        execution=ExecutionConfig(dry_run=False),
+        data_dir=tmp_path / "data" / "iran-protection-bot",
+    )
+    gate = OperatorGate(config_path, cfg)
+    gate.set_position_mode("live")
+    gate.write_ack(note="test")
+
+    status = gate.status(live_requested=True)
+
+    assert "live_classifier_requires_two_passes" in status.blockers
+    assert "live_classifier_requires_pass_agreement" in status.blockers
 
 
 def test_telegram_id_alias_counts_as_configured(monkeypatch) -> None:

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from polybot.core.config import SourcesConfig
-from polybot.core.execution import DryRunTradingAdapter
+from polybot.core.execution import DryRunTradingAdapter, Fill
 from polybot.core.operator import OperatorGate
 from polybot.core.storage import StateStore
 from polybot.core.types import Article
@@ -288,6 +288,24 @@ def test_executor_enters_no_side(tmp_path) -> None:
     result = executor.execute(decision, article("Talks cancelled, will not happen."))
     assert result == "ENTERED"
     assert executor.holdings.held_location() == "no"
+
+
+def test_executor_records_tiny_positive_fill_as_partial_exposure(tmp_path) -> None:
+    class _TinyFillAdapter(DryRunTradingAdapter):
+        def verify_fill(self, result, token_id):
+            return Fill(filled_shares=1.0, raw=result)
+
+    config = _config(entry=EntryConfig(enabled=True, side="YES", usd_budget=100.0, min_fill_usd=5.0, min_fill_fraction=0.25))
+    executor = _executor(tmp_path, config, _TinyFillAdapter(yes_ask=0.40))
+    decision = BinaryDecision("ENTER_YES", "4B", "qualifying_event_confirmed:scheduled", _signal())
+
+    result = executor.execute(decision, article("The round will be held next week."))
+
+    assert result == "PARTIALLY_ENTERED"
+    assert executor.holdings.held_location() == "yes"
+    current = executor.store.current()
+    assert current is not None and current.state == "PARTIALLY_ENTERED"
+    assert current.payload["fill_fraction"] == pytest.approx(0.004)
 
 
 def test_executor_entry_price_above_cap_stays_flat(tmp_path) -> None:
@@ -680,3 +698,48 @@ def test_bot_fetches_sources_concurrently(tmp_path, monkeypatch) -> None:
     elapsed = _time.monotonic() - start
     assert concurrent["max"] >= 2  # overlapping fetches, not sequential
     assert elapsed < 0.15  # ~one slow-feed latency, not three
+
+
+def test_fleet_bot_uses_central_feed_without_direct_fallback(tmp_path, monkeypatch) -> None:
+    from polybot.core.central_feed import CentralFeedStore
+
+    db_path = tmp_path / "central.sqlite3"
+    feed_url = "https://shared.example/feed"
+    central = CentralFeedStore(db_path)
+    central.record_success(
+        feed_url,
+        [
+            Article(
+                url="https://reuters.com/iran-talks",
+                domain="reuters.com",
+                title="Iran talks scheduled",
+                published_at="2026-07-24T00:00:00+00:00",
+                fetched_at="2026-07-24T00:00:01+00:00",
+                raw_text="Iran and the United States scheduled talks.",
+                hash="central-iran",
+                source_kind="feed",
+            )
+        ],
+    )
+    config = _config(
+        data_dir=tmp_path / "state",
+        logs_dir=tmp_path / "logs",
+        sources=SourcesConfig(
+            max_trade_article_age_hours=0.0,
+            feed_urls=[feed_url],
+            feed_include_terms=["iran"],
+            central_feed_db=str(db_path),
+            central_feed_stale_after_seconds=60.0,
+            promote_feed_to_article=False,
+        ),
+    )
+    bot = _bot(tmp_path, config, DryRunTradingAdapter())
+
+    def forbidden_direct_fetch(*args, **kwargs):
+        raise AssertionError("fleet bot must not fetch RSS directly")
+
+    monkeypatch.setattr("polybot.binary.runner.fetch_feed_articles", forbidden_direct_fetch)
+    batches = bot._fetch_all_sources()
+    assert len(batches) == 1
+    assert batches[0][0] == "central_feed"
+    assert [article.hash for article in batches[0][1]] == ["central-iran"]

@@ -101,7 +101,12 @@ def test_forecast_probability_blocked_until_calibrated(tmp_path) -> None:
     context = _graded(_binary_event())
     root = tmp_path / "geo"
     _write_forecast_state(root, context.market_id, {"yes": 0.70}, datetime.now(timezone.utc).isoformat())
-    config = OpportunityConfig(forecast_data_root=str(root), model_weight=1.0, disagreement_buffer_scale=0.0)
+    config = OpportunityConfig(
+        model_pricing_mode="allocatable",
+        forecast_data_root=str(root),
+        model_weight=1.0,
+        disagreement_buffer_scale=0.0,
+    )
 
     blocked = scan_opportunities([context], config, _FakeQuotes(), _allocator(tmp_path / "a"))
     assert blocked[0].probability_source == "forecast_state"

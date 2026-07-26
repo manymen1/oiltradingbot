@@ -10,7 +10,11 @@ def is_feed_summary(article: Article) -> bool:
     return article.source_kind in {"feed", "feed_item", "promoted_feed_summary"}
 
 
-def article_age_hours(article: Article) -> float | None:
+def article_age_hours(
+    article: Article,
+    *,
+    as_of: datetime | None = None,
+) -> float | None:
     if not article.published_at:
         return None
     try:
@@ -22,5 +26,7 @@ def article_age_hours(article: Article) -> float | None:
             return None
     if published.tzinfo is None:
         published = published.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - published).total_seconds() / 3600.0
-
+    now = as_of or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return (now.astimezone(timezone.utc) - published).total_seconds() / 3600.0

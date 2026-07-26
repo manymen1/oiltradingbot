@@ -3,8 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from polybot.rules.contracts import RuleSpec
+
 from .config import ScoringConfig
-from .types import MarketContext
+from .types import MarketContext, SourcePlan
 
 
 def correlation_group(context: MarketContext) -> str:
@@ -25,6 +27,11 @@ def grade_market(
     now: datetime | None = None,
     group_counts: dict[str, int] | None = None,
     spread: float | None = None,
+    rule_spec: RuleSpec | None = None,
+    source_plan: SourcePlan | None = None,
+    require_rule_spec: bool = False,
+    paper_families: set[str] | None = None,
+    live_confirmation_families: set[str] | None = None,
 ) -> MarketContext:
     """Compute per-dimension scores, apply the hard safety rules, and assign
     the market state. Pure function: returns an updated copy of the context.
@@ -56,10 +63,88 @@ def grade_market(
     if len(context.rule_text.strip()) < scoring.min_rule_text_chars:
         reasons.append("missing_or_short_resolution_rules")
         return _finalize(context, "RULES_REVIEW_REQUIRED", reasons, scores, group)
-    if not any(o.yes_token_id and o.no_token_id and o.condition_id for o in context.outcomes):
+    if not context.outcomes or not all(
+        o.yes_token_id and o.no_token_id and o.condition_id
+        for o in context.outcomes
+    ):
         return _finalize(context, "RULES_REVIEW_REQUIRED", ["unverified_token_mapping"], scores, group)
     if analysis is None:
         return _finalize(context, "RULES_REVIEW_REQUIRED", ["rule_analysis_missing"], scores, group)
+
+    family = ""
+    compiler_is_fixture = False
+    if require_rule_spec:
+        if rule_spec is None:
+            return _finalize(
+                context,
+                "RULES_REVIEW_REQUIRED",
+                ["valid_rule_spec_missing"],
+                scores,
+                group,
+            )
+        try:
+            rule_spec.validate_context_binding(context)
+        except ValueError as exc:
+            return _finalize(
+                context,
+                "RULES_REVIEW_REQUIRED",
+                [f"stale_or_invalid_rule_spec:{exc}"],
+                scores,
+                group,
+            )
+        family = rule_spec.semantics.rule_family
+        scores["rule_spec_valid"] = 1.0
+        scores["rule_spec_family_supported"] = float(
+            family in (paper_families or set())
+        )
+        compiler_is_fixture = rule_spec.compiler_model == "fixture"
+        if family == "SUBJECTIVE_DISCRETIONARY":
+            return _finalize(
+                context,
+                "MONITOR_ONLY",
+                ["subjective_rule_family"],
+                scores,
+                group,
+            )
+        if family not in (paper_families or set()):
+            return _finalize(
+                context,
+                "MONITOR_ONLY",
+                [f"unsupported_rule_family:{family}"],
+                scores,
+                group,
+            )
+        if source_plan is None:
+            return _finalize(
+                context,
+                "RULES_REVIEW_REQUIRED",
+                ["rule_spec_source_plan_missing"],
+                scores,
+                group,
+            )
+        if (
+            source_plan.rule_text_sha256 != context.rule_text_sha256
+            or source_plan.rule_spec_sha256 != rule_spec.spec_sha256
+        ):
+            return _finalize(
+                context,
+                "RULES_REVIEW_REQUIRED",
+                ["stale_rule_spec_source_plan"],
+                scores,
+                group,
+            )
+        if source_plan.missing_required_source_refs:
+            return _finalize(
+                context,
+                "MONITOR_ONLY",
+                [
+                    "required_rule_source_unresolved:"
+                    + ",".join(source_plan.missing_required_source_refs)
+                ],
+                scores,
+                group,
+            )
+        scores["source_plan_valid"] = 1.0
 
     scores.update(
         {
@@ -114,6 +199,12 @@ def grade_market(
         live_blockers.append(f"time_horizon_above_live_threshold:{days_left:.0f}d")
     if group_counts.get(group, 0) >= scoring.max_markets_per_correlation_group:
         live_blockers.append(f"correlation_group_limit:{group}")
+    if require_rule_spec and family not in (
+        live_confirmation_families or set()
+    ):
+        live_blockers.append(f"rule_family_not_live_promoted:{family}")
+    if compiler_is_fixture:
+        live_blockers.append("fixture_rule_spec_not_live_eligible")
 
     if analysis.model == "fixture" and not scoring.allow_fixture_analysis_live:
         # The offline heuristic analyzer is a test fixture, not a rule reader:

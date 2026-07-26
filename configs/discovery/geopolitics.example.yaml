@@ -22,7 +22,9 @@
 # hand-written config.
 
 universe:
-  max_events: 300
+  # 0 is uncapped. Audited keyset pagination follows every configured view to
+  # exhaustion; a positive cap is reported as TRUNCATED, never complete.
+  max_events: 0
   # Liquidity/volume floors are OFF: thin markets are the niche where a
   # confirmation bot out-waits bigger players. Liquidity sizes orders (see
   # scoring.small_live_*), it never disqualifies a market.

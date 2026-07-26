@@ -1,16 +1,28 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from test_discovery import _FakeQuotes, _analyzed_context, _binary_event, _grouped_event, _sports_event
 
-from polybot.discovery.config import DiscoveryConfig, FleetConfig
+from polybot.discovery.config import (
+    CentralFeedConfig,
+    ClassifierBudgetConfig,
+    DiscoveryConfig,
+    FleetConfig,
+)
 from polybot.discovery.fleet import FleetManager, run_fleet_command, set_fleet_mode_command
 from polybot.discovery.scorer import grade_market
 from polybot.discovery.config import ScoringConfig
 from polybot.discovery.sources import build_source_plan
 from polybot.discovery.store import DiscoveryStore
+from polybot.discovery.profit_priority import (
+    PriorityEvidence,
+    _snapshot_hash_payload,
+    score_profit_priority,
+)
+from polybot.rules.contracts import sha256_json
 
 
 class _FakeProcess:
@@ -82,6 +94,75 @@ def _events_fetch(events):
     return fetch
 
 
+def _write_priority_snapshot(config, contexts, *, cold_ids=()):
+    records = []
+    policy = replace(
+        config.profit_priority,
+        min_terminal_observations=1,
+        min_human_labels=1,
+        min_quote_samples=1,
+        min_stressed_fill_samples=1,
+        min_resolved_trades=1,
+    )
+    for index, context in enumerate(contexts):
+        cold = context.market_id in set(cold_ids)
+        evidence = (
+            PriorityEvidence()
+            if cold
+            else PriorityEvidence(
+                monitored_market_hours=10,
+                terminal_opportunities=10 + index,
+                human_labels=10,
+                quote_trials=10,
+                quote_survivals=10,
+                stressed_fill_trials=10,
+                stressed_fills=10,
+                fillable_notionals_usd=(20.0,) * 10,
+                one_cent_shocked_edges=(0.1,) * 10,
+                resolved_trade_pnls_usd=(1.0,),
+                p95_submission_latency_ms=1000,
+                data_cutoff_at="2026-07-25T00:00:00+00:00",
+            )
+        )
+        records.append(
+            score_profit_priority(
+                context=context,
+                rule_family="SOURCE_LOCKED_ANNOUNCEMENT",
+                source_adapter_id="official",
+                policy_partition_sha256=f"partition-{index}",
+                evidence=evidence,
+                policy=policy,
+                computed_at="2026-07-25T01:00:00+00:00",
+                execution_supported=True,
+            )
+        )
+    stable = {
+        "schema_version": 1,
+        "kind": "rules_first_profit_priority",
+        "priority_policy_version": policy.policy_version,
+        "priority_policy_sha256": sha256_json(
+            {
+                key: getattr(policy, key)
+                for key in policy.__dataclass_fields__
+            }
+        ),
+        "records": [record.as_dict() for record in records],
+    }
+    payload = {
+        **stable,
+        "computed_at": "2026-07-25T01:00:00+00:00",
+        "data_cutoff_at": "2026-07-25T00:00:00+00:00",
+    }
+    payload["snapshot_sha256"] = sha256_json(
+        _snapshot_hash_payload(payload)
+    )
+    config.data_dir.mkdir(parents=True, exist_ok=True)
+    (config.data_dir / "profit_priority.json").write_text(
+        json.dumps(payload),
+        encoding="utf-8",
+    )
+
+
 def test_fleet_once_spawns_a_bot_per_eligible_market(tmp_path, monkeypatch) -> None:
     geo = _patch_roots(monkeypatch, tmp_path)
     config_path = _fleet_yaml(tmp_path)
@@ -109,6 +190,45 @@ def test_fleet_once_spawns_a_bot_per_eligible_market(tmp_path, monkeypatch) -> N
     assert [m for m, _f in notifier.messages if "bot started" in m]
 
 
+def test_fleet_once_runs_one_central_feed_cycle_before_spawning(tmp_path, monkeypatch) -> None:
+    _patch_roots(monkeypatch, tmp_path)
+    config_path = _fleet_yaml(tmp_path)
+    with config_path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            f"""
+central_feed:
+  enabled: true
+  db_path: {tmp_path / 'central.sqlite3'}
+"""
+        )
+    called: list[bool] = []
+
+    def fake_poll_once(service, *, force=False):
+        called.append(True)
+        service.store.touch_heartbeat()
+        assert force is True
+        return {"feeds": 0, "polled": 0, "inserted": 0, "errors": 0, "pruned": 0}
+
+    monkeypatch.setattr(
+        "polybot.core.central_feed.CentralFeedService.poll_once",
+        fake_poll_once,
+    )
+    spawner = _Spawner()
+    assert run_fleet_command(
+        config_path,
+        once=True,
+        events_fetch=_events_fetch([_binary_event()]),
+        quotes=_FakeQuotes(),
+        notifier=_Notifier(),
+        spawner=spawner,
+    ) == 0
+    assert called == [True]
+    from polybot.binary.config import load_binary_config
+
+    generated = load_binary_config(next((tmp_path / "generated").glob("*.yaml")))
+    assert generated.sources.central_feed_db == str(tmp_path / "central.sqlite3")
+
+
 def test_fleet_live_auto_ack_arms_and_passes_live_flag(tmp_path, monkeypatch) -> None:
     # The pre-spawn gate check requires the live env (telegram + anthropic)
     # to be configured, same as the bot's own startup preflight.
@@ -125,7 +245,10 @@ def test_fleet_live_auto_ack_arms_and_passes_live_flag(tmp_path, monkeypatch) ->
     (command, _log), = spawner.spawned
     assert command[-1] == "--live"
     generated = next((tmp_path / "generated").glob("*.yaml"))
-    assert "dry_run: false" in generated.read_text(encoding="utf-8")
+    generated_text = generated.read_text(encoding="utf-8")
+    assert "dry_run: false" in generated_text
+    assert "passes: 2" in generated_text
+    assert "require_pass_agreement: true" in generated_text
     acks = list((geo / "operator" / "live_ack").rglob("*.json"))
     assert len(acks) == 1
     mode_files = list((geo / "operator" / "positions").glob("*.mode"))
@@ -163,9 +286,183 @@ def test_fleet_keeps_defender_for_held_market_and_stops_flat_demoted(tmp_path, m
     assert demoted_held.state == "PAPER_ELIGIBLE" and demoted_flat.state == "PAPER_ELIGIBLE"
 
     summary = manager.sync([demoted_held, demoted_flat])
-    # The defender for the held position survives; the flat bot is stopped.
-    assert summary["stopped"] == [flat_market.market_id]
-    assert held_market.market_id in summary["running"]
+    # Paper mode watches every paper-eligible market, whether it already has a
+    # simulated holding or is still flat.
+    assert summary["stopped"] == []
+    assert sorted(summary["running"]) == sorted([held_market.market_id, flat_market.market_id])
+
+
+def test_fleet_live_ignores_paper_markets_and_dry_run_holdings(tmp_path, monkeypatch) -> None:
+    geo = _patch_roots(monkeypatch, tmp_path)
+    config = DiscoveryConfig(
+        fleet=FleetConfig(enabled=True, max_bots=5, generated_dir=str(tmp_path / "generated")),
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+    )
+    store = DiscoveryStore(config.data_dir)
+    market = grade_market(
+        _analyzed_context(_binary_event(slug="paper-only")),
+        ScoringConfig(
+            allow_fixture_analysis_live=True,
+            min_liquidity_live=10**9,
+            small_live_enabled=False,
+        ),
+    )
+    assert market.state == "PAPER_ELIGIBLE"
+    from polybot.discovery.types import market_dir_slug
+
+    dry_holding = geo / market_dir_slug(market.market_id) / "dry_run" / "holdings.json"
+    dry_holding.parent.mkdir(parents=True, exist_ok=True)
+    dry_holding.write_text(json.dumps({"held_location": "yes"}), encoding="utf-8")
+
+    live_manager = FleetManager(
+        config,
+        store,
+        live=True,
+        per_order_usd=50.0,
+        ledger_path=str(config.data_dir / "allocations.json"),
+    )
+    paper_manager = FleetManager(
+        config,
+        store,
+        live=False,
+        per_order_usd=50.0,
+        ledger_path=str(config.data_dir / "allocations.json"),
+    )
+    assert live_manager.is_holding(market.market_id) is False
+    assert live_manager.desired_markets([market]) == []
+    assert paper_manager.is_holding(market.market_id) is True
+    assert [item.market_id for item in paper_manager.desired_markets([market])] == [market.market_id]
+
+
+def test_fleet_reemits_stale_single_pass_live_config(tmp_path, monkeypatch) -> None:
+    _patch_roots(monkeypatch, tmp_path)
+    config = DiscoveryConfig(
+        fleet=FleetConfig(enabled=True, generated_dir=str(tmp_path / "generated")),
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+    )
+    store = DiscoveryStore(config.data_dir)
+    market = grade_market(
+        _analyzed_context(_binary_event(slug="stale-live-config")),
+        ScoringConfig(allow_fixture_analysis_live=True),
+    )
+    plan = build_source_plan(market)
+    store.save_context(market)
+    store.save_source_plan(plan)
+    from polybot.discovery.emit import emit_bot_config
+    from polybot.discovery.types import market_dir_slug
+
+    generated = tmp_path / "generated" / f"{market_dir_slug(market.market_id)}.yaml"
+    emit_bot_config(
+        market,
+        plan,
+        entry_usd=50.0,
+        out_path=generated,
+        dry_run=True,
+        classifier_provider="anthropic",
+    )
+    generated.write_text(
+        generated.read_text(encoding="utf-8").replace("dry_run: true", "dry_run: false"),
+        encoding="utf-8",
+    )
+
+    manager = FleetManager(
+        config,
+        store,
+        live=True,
+        per_order_usd=50.0,
+        ledger_path=str(config.data_dir / "allocations.json"),
+    )
+    manager._ensure_config(market)
+    refreshed = generated.read_text(encoding="utf-8")
+    assert "passes: 2" in refreshed
+    assert "require_pass_agreement: true" in refreshed
+
+
+def test_fleet_routes_generated_bot_through_configured_central_feed(tmp_path, monkeypatch) -> None:
+    _patch_roots(monkeypatch, tmp_path)
+    central_db = tmp_path / "central.sqlite3"
+    config = DiscoveryConfig(
+        fleet=FleetConfig(enabled=True, generated_dir=str(tmp_path / "generated")),
+        central_feed=CentralFeedConfig(
+            enabled=True,
+            db_path=str(central_db),
+            stale_after_seconds=45.0,
+        ),
+        classifier_budget=ClassifierBudgetConfig(
+            db_path=str(tmp_path / "classifier.sqlite3"),
+            max_escalations_per_hour=12,
+            max_escalations_per_day=80,
+            max_classifier_errors_per_hour=5,
+        ),
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+    )
+    store = DiscoveryStore(config.data_dir)
+    market = grade_market(
+        _analyzed_context(_binary_event(slug="central-feed")),
+        ScoringConfig(allow_fixture_analysis_live=True),
+    )
+    store.save_source_plan(build_source_plan(market))
+    manager = FleetManager(
+        config,
+        store,
+        live=False,
+        per_order_usd=50.0,
+        ledger_path=str(config.data_dir / "allocations.json"),
+    )
+
+    from polybot.binary.config import load_binary_config
+
+    generated = manager._ensure_config(market)
+    loaded = load_binary_config(generated)
+    assert loaded.sources.central_feed_db == str(central_db)
+    assert loaded.sources.central_feed_stale_after_seconds == 45.0
+    assert loaded.classifier.budget_db_path == str(tmp_path / "classifier.sqlite3")
+    assert loaded.classifier.max_escalations_per_hour == 12
+    assert loaded.classifier.max_escalations_per_day == 80
+    assert loaded.classifier.max_classifier_errors_per_hour == 5
+
+
+def test_fleet_reemits_when_source_plan_changes_without_rule_change(tmp_path, monkeypatch) -> None:
+    _patch_roots(monkeypatch, tmp_path)
+    config = DiscoveryConfig(
+        fleet=FleetConfig(enabled=True, generated_dir=str(tmp_path / "generated")),
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+    )
+    store = DiscoveryStore(config.data_dir)
+    market = grade_market(
+        _analyzed_context(_binary_event(slug="source-plan-refresh")),
+        ScoringConfig(allow_fixture_analysis_live=True),
+    )
+    original = build_source_plan(market)
+    store.save_source_plan(original)
+    manager = FleetManager(
+        config,
+        store,
+        live=False,
+        per_order_usd=50.0,
+        ledger_path=str(config.data_dir / "allocations.json"),
+    )
+    generated = manager._ensure_config(market)
+
+    changed = original.from_dict(
+        {
+            **original.as_dict(),
+            "feed_urls": [*original.feed_urls, "https://new-source.example/feed"],
+        }
+    )
+    store.save_source_plan(changed)
+    assert manager._ensure_config(market) == generated
+
+    from polybot.binary.config import load_binary_config
+    from polybot.discovery.sources import source_plan_sha256
+
+    loaded = load_binary_config(generated)
+    assert loaded.sources.feed_urls == changed.feed_urls
+    assert loaded.sources.source_plan_sha256 == source_plan_sha256(changed)
 
 
 def test_set_fleet_mode_writes_master_switch(tmp_path, monkeypatch, capsys) -> None:
@@ -175,7 +472,10 @@ def test_set_fleet_mode_writes_master_switch(tmp_path, monkeypatch, capsys) -> N
     assert raw["mode"] == "off"
 
 
-def test_fleet_ranks_by_edge_without_liquidity_bias(tmp_path, monkeypatch) -> None:
+def test_fleet_ranks_by_profit_priority_without_liquidity_bias(
+    tmp_path,
+    monkeypatch,
+) -> None:
     _patch_roots(monkeypatch, tmp_path)
     config = DiscoveryConfig(
         fleet=FleetConfig(enabled=True, max_bots=1, generated_dir=str(tmp_path / "generated")),
@@ -193,14 +493,11 @@ def test_fleet_ranks_by_edge_without_liquidity_bias(tmp_path, monkeypatch) -> No
     desired = manager.desired_markets([deep, thin])
     assert [c.market_id for c in desired] == [min(deep.market_id, thin.market_id)]
 
-    # A scanned executable edge outranks thinness.
-    config.data_dir.mkdir(parents=True, exist_ok=True)
-    (config.data_dir / "opportunities.json").write_text(
-        json.dumps({"opportunities": [{"market_id": deep.market_id, "outcome": "yes", "tradable_edge": 0.12, "blockers": []}]}),
-        encoding="utf-8",
-    )
+    # Compatible point-in-time profit evidence, not liquidity or a forecast
+    # edge, controls the scarce monitoring slot.
+    _write_priority_snapshot(config, [deep, thin])
     desired = manager.desired_markets([deep, thin])
-    assert [c.market_id for c in desired] == [deep.market_id]
+    assert [c.market_id for c in desired] == [thin.market_id]
 
 
 def test_fleet_status_reports_positions_ledger_and_scan(tmp_path, monkeypatch, capsys) -> None:

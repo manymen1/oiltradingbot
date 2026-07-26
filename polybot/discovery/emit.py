@@ -6,6 +6,7 @@ from typing import Any
 import yaml
 
 from .types import MarketContext, SourcePlan, market_dir_slug
+from .sources import source_plan_sha256
 
 # Every fleet-managed executor keeps its state under this root; the shared
 # operator dir (master kill switch) is <GEO_DATA_ROOT>/operator.
@@ -30,6 +31,12 @@ def emit_bot_config(
     dry_run: bool = True,
     entry_side: str = "YES",
     classifier_provider: str = "anthropic",
+    classifier_budget_db: str = "",
+    classifier_max_escalations_per_hour: int = 4,
+    classifier_max_escalations_per_day: int = 20,
+    classifier_max_errors_per_hour: int = 3,
+    central_feed_db: str = "",
+    central_feed_stale_after_seconds: float = 60.0,
 ) -> Path:
     """Render a ready-to-review executor config for this market: the existing
     entry/defense/exit engines are the final execution component, so the
@@ -45,13 +52,41 @@ def emit_bot_config(
     if context.kind == "grouped":
         # Location legs are YES-side instruments; a NO view on a leg is a YES
         # view on its siblings and belongs to the group-arbitrage report.
-        payload = _location_config(context, plan, entry_usd)
+        payload = _location_config(
+            context,
+            plan,
+            entry_usd,
+            central_feed_db=central_feed_db,
+            central_feed_stale_after_seconds=central_feed_stale_after_seconds,
+        )
     else:
-        payload = _binary_config(context, plan, entry_usd, entry_side)
+        payload = _binary_config(
+            context,
+            plan,
+            entry_usd,
+            entry_side,
+            central_feed_db=central_feed_db,
+            central_feed_stale_after_seconds=central_feed_stale_after_seconds,
+        )
     # The executor inherits the pipeline's classification transport:
     # claude_cli = the operator's Claude subscription, anthropic = metered API.
     payload["classifier"]["provider"] = classifier_provider or "anthropic"
+    if classifier_budget_db:
+        payload["classifier"].update(
+            {
+                "budget_db_path": classifier_budget_db,
+                "max_escalations_per_hour": int(classifier_max_escalations_per_hour),
+                "max_escalations_per_day": int(classifier_max_escalations_per_day),
+                "max_classifier_errors_per_hour": int(classifier_max_errors_per_hour),
+            }
+        )
     payload["execution"]["dry_run"] = dry_run
+    if not dry_run:
+        # Live confirmation is never allowed to inherit the cheaper paper
+        # posture. The operator gate independently enforces the same invariant,
+        # so a hand-edited or stale generated config also fails closed.
+        payload["classifier"]["passes"] = max(2, int(payload["classifier"].get("passes", 1)))
+        payload["classifier"]["require_pass_agreement"] = True
     if ledger_path:
         from .registry import region_of
 
@@ -68,7 +103,15 @@ def emit_bot_config(
     return out_path
 
 
-def _binary_config(context: MarketContext, plan: SourcePlan, entry_usd: float, entry_side: str = "YES") -> dict[str, Any]:
+def _binary_config(
+    context: MarketContext,
+    plan: SourcePlan,
+    entry_usd: float,
+    entry_side: str = "YES",
+    *,
+    central_feed_db: str = "",
+    central_feed_stale_after_seconds: float = 60.0,
+) -> dict[str, Any]:
     outcome = context.outcomes[0]
     return {
         "market": {
@@ -99,16 +142,40 @@ def _binary_config(context: MarketContext, plan: SourcePlan, entry_usd: float, e
             "passes": 1,
             "require_pass_agreement": False,
         },
-        "execution": {"dry_run": True, "sell": {"enabled": True, "min_price": 0.03}, "flip_buy": {"enabled": False}},
+        "execution": {
+            "dry_run": True,
+            "paper_fee_bps": 0.0,
+            "paper_slippage_bps": 25.0,
+            "paper_max_book_age_seconds": 10.0,
+            "sell": {"enabled": True, "min_price": 0.03},
+            "flip_buy": {"enabled": False},
+        },
         "keywords": {"escalate_terms": plan.escalate_terms},
         "safety": {"one_shot": True, "max_executions": 2, "poll_seconds": 30.0, "armed_poll_seconds": 2.0},
-        "sources": _sources_section(plan),
+        "sources": {
+            **_sources_section(
+                plan,
+                central_feed_db=central_feed_db,
+                central_feed_stale_after_seconds=central_feed_stale_after_seconds,
+            ),
+            # Binary fleet configs previously inherited Iran-specific default
+            # terms and silently discarded other theaters before the keyword
+            # gate. Source-plan terms are the correct per-market filter.
+            "feed_include_terms": plan.escalate_terms,
+        },
         "data_dir": f"{GEO_DATA_ROOT}/{_slug(context.market_id)}",
         "logs_dir": "logs",
     }
 
 
-def _location_config(context: MarketContext, plan: SourcePlan, entry_usd: float) -> dict[str, Any]:
+def _location_config(
+    context: MarketContext,
+    plan: SourcePlan,
+    entry_usd: float,
+    *,
+    central_feed_db: str = "",
+    central_feed_stale_after_seconds: float = 60.0,
+) -> dict[str, Any]:
     return {
         "event": {
             "slug": context.event_slug,
@@ -152,16 +219,36 @@ def _location_config(context: MarketContext, plan: SourcePlan, entry_usd: float)
             "passes": 1,
             "require_pass_agreement": False,
         },
-        "execution": {"dry_run": True, "sell": {"enabled": True, "min_price": 0.03}, "buy_rotation": {"enabled": False}},
+        "execution": {
+            "dry_run": True,
+            "paper_fee_bps": 0.0,
+            "paper_slippage_bps": 25.0,
+            "paper_max_book_age_seconds": 10.0,
+            "sell": {"enabled": True, "min_price": 0.03},
+            "buy_rotation": {"enabled": False},
+        },
         "safety": {"one_shot": True, "max_executions": 2, "poll_seconds": 30.0, "armed_poll_seconds": 2.0},
-        "sources": {**_sources_section(plan), "feed_include_terms": plan.escalate_terms},
+        "sources": {
+            **_sources_section(
+                plan,
+                central_feed_db=central_feed_db,
+                central_feed_stale_after_seconds=central_feed_stale_after_seconds,
+            ),
+            "feed_include_terms": plan.escalate_terms,
+        },
         "data_dir": f"{GEO_DATA_ROOT}/{_slug(context.market_id)}",
         "logs_dir": "logs",
     }
 
 
-def _sources_section(plan: SourcePlan) -> dict[str, Any]:
-    return {
+def _sources_section(
+    plan: SourcePlan,
+    *,
+    central_feed_db: str = "",
+    central_feed_stale_after_seconds: float = 60.0,
+) -> dict[str, Any]:
+    payload = {
+        "source_plan_sha256": source_plan_sha256(plan),
         "poll_urls": list(plan.poll_urls),
         "feed_urls": list(plan.feed_urls),
         "auto_trade_domains": list(plan.auto_trade_domains),
@@ -172,6 +259,10 @@ def _sources_section(plan: SourcePlan) -> dict[str, Any]:
         # post-fill -> book_snapshots.jsonl (the slippage/repricing dataset).
         "log_book_snapshots": True,
     }
+    if central_feed_db:
+        payload["central_feed_db"] = central_feed_db
+        payload["central_feed_stale_after_seconds"] = central_feed_stale_after_seconds
+    return payload
 
 
 def _date_only(deadline_iso: str) -> str:

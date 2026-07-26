@@ -59,8 +59,44 @@ status: ## the 3am view: positions, heartbeats, ledger, drawdown headroom, scan
 funnel: ## where edge died across the whole universe
 	$(GEO) funnel-report --config $(CONFIG)
 
+priority: ## forward-evidence market priority and quote half-life
+	$(GEO) priority-report --config $(CONFIG)
+
+economics: ## source latency, quote half-life, stressed edge, and bottleneck
+	$(GEO) economics-report --config $(CONFIG)
+
+profit-funnel: ## reconciled rules-first confirmation-to-profit funnel
+	$(GEO) profit-funnel --config $(CONFIG)
+
 calibration: ## are the probability sources beating the market? (Brier report)
 	$(GEO) calibration-report --config $(CONFIG)
+
+compile-rules: ## compile current rule texts into immutable two-pass RuleSpecs
+	$(GEO) compile-rules --config $(CONFIG) $(if $(MARKET),--market "$(MARKET)",)
+
+inspect-rule: ## inspect current RuleSpec and both raw compiler passes (MARKET=id)
+	@test -n "$(MARKET)" || (echo "usage: make inspect-rule MARKET=<market_id>"; exit 1)
+	$(GEO) inspect-rule --config $(CONFIG) --market "$(MARKET)"
+
+validate-rule: ## strictly validate an exported RuleSpec JSON (SPEC=path)
+	@test -n "$(SPEC)" || (echo "usage: make validate-rule SPEC=<file.json>"; exit 1)
+	$(GEO) validate-rule --spec "$(SPEC)"
+
+rule-market-once: ## run one generic rules-first paper cycle (MARKET=id)
+	@test -n "$(MARKET)" || (echo "usage: make rule-market-once MARKET=<market_id>"; exit 1)
+	$(GEO) run-rule-market --config $(CONFIG) --market "$(MARKET)" --once
+
+inspect-rule-market: ## inspect claims/evaluations/proofs for one rules-first market
+	@test -n "$(MARKET)" || (echo "usage: make inspect-rule-market MARKET=<market_id>"; exit 1)
+	$(GEO) inspect-rule-market --config $(CONFIG) --market "$(MARKET)"
+
+forward-completeness: ## audit forward books/articles/extractions/quote survival (MARKET=id)
+	@test -n "$(MARKET)" || (echo "usage: make forward-completeness MARKET=<market_id>"; exit 1)
+	$(GEO) forward-completeness --config $(CONFIG) --market "$(MARKET)"
+
+build-forward-timeline: ## build content-addressed forward replay input (MARKET=id)
+	@test -n "$(MARKET)" || (echo "usage: make build-forward-timeline MARKET=<market_id> [OUT=file.jsonl]"; exit 1)
+	$(GEO) build-forward-timeline --config $(CONFIG) --market "$(MARKET)" $(if $(OUT),--out "$(OUT)",)
 
 reconcile: ## ledger hygiene: free dead position slots, roll stale buckets
 	$(GEO) reconcile-ledger --config $(CONFIG)
@@ -85,6 +121,14 @@ replay: ## rerun archived articles through the full pipeline (isolated, dry-run)
 	@test -n "$(BOT)" -a -n "$(ARTICLES)" || (echo "usage: make replay BOT=<bot.yaml> ARTICLES=<articles.jsonl>"; exit 1)
 	$(GEO) replay --config $(BOT) --articles $(ARTICLES)
 
+replay-rule-market: ## replay timestamped evidence/book/resolution timeline (MARKET=id TIMELINE=file)
+	@test -n "$(MARKET)" -a -n "$(TIMELINE)" || (echo "usage: make replay-rule-market MARKET=<id> TIMELINE=<events.jsonl> [DATASET_ROLE=development|frozen_oos|forward] [LABELS=<labels.json>] [OUT=<summary.json>]"; exit 1)
+	$(GEO) replay-rule-market --config $(CONFIG) --market $(MARKET) --timeline $(TIMELINE) --dataset-role $(or $(DATASET_ROLE),development) $(if $(LABELS),--labels $(LABELS),) $(if $(OUT),--out $(OUT),)
+
+promotion-report: ## strategy-specific rules-first PASS/FAIL report (RUNS=file-or-directory)
+	@test -n "$(RUNS)" || (echo "usage: make promotion-report RUNS=<summary.json-or-directory> [OUT=<report.json>]"; exit 1)
+	$(GEO) rule-promotion-report --config $(CONFIG) --runs $(RUNS) $(if $(OUT),--out $(OUT),)
+
 # usage: make eval BOT=configs/geopolitics/generated/x.yaml
 eval: ## adversarial regression cases; nonzero exit = the change regressed
 	@test -n "$(BOT)" || (echo "usage: make eval BOT=<bot.yaml> [CASES=<cases.jsonl>]"; exit 1)
@@ -95,4 +139,4 @@ eval: ## adversarial regression cases; nonzero exit = the change regressed
 backup: ## snapshot data/ (ledger, journals, calibration, acks)
 	deploy/backup.sh
 
-.PHONY: help setup test paper paper-once live halt watch-only arm status funnel calibration reconcile latency trades replay eval backup
+.PHONY: help setup test paper paper-once live halt watch-only arm status funnel priority economics profit-funnel calibration compile-rules inspect-rule validate-rule rule-market-once inspect-rule-market forward-completeness build-forward-timeline reconcile latency trades replay replay-rule-market promotion-report eval backup

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-import time
+import hashlib
 import json
 import os
 import subprocess
+import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Protocol
+
+from .fees import FeeScheduleSnapshot
+from .holdings import _atomic_json_write
 
 
 @dataclass(frozen=True)
@@ -53,6 +58,20 @@ class TradingAdapter(Protocol):
         ...
 
     def no_best_ask(self, no_token_id: str) -> float | None:
+        ...
+
+    def no_best_bid(self, no_token_id: str) -> float | None:
+        ...
+
+    def yes_best_bid(self, yes_token_id: str) -> float | None:
+        ...
+
+
+class PaperQuoteProvider(Protocol):
+    def quote_snapshot(self, token_id: str) -> dict[str, Any]:
+        ...
+
+    def yes_best_ask(self, yes_token_id: str) -> float | None:
         ...
 
     def yes_best_bid(self, yes_token_id: str) -> float | None:
@@ -108,8 +127,485 @@ class DryRunTradingAdapter:
     def no_best_ask(self, no_token_id: str) -> float | None:
         return self.no_ask_value
 
+    def no_best_bid(self, no_token_id: str) -> float | None:
+        return max(0.0, min(1.0, 1.0 - self.yes_ask_value))
+
     def yes_best_bid(self, yes_token_id: str) -> float | None:
         return self.yes_bid_value
+
+
+class PaperTradingAdapter:
+    """Persistent simulated broker filled from public executable quotes.
+
+    Unlike ``DryRunTradingAdapter`` (a deterministic unit-test fixture), this
+    adapter mutates token balances, survives restarts, honors price limits, and
+    records cash/fee/slippage economics. It deliberately exposes no live order
+    client or credentials.
+    """
+
+    def __init__(
+        self,
+        *,
+        state_path: Path,
+        quote_provider: PaperQuoteProvider,
+        token_pairs: list[tuple[str, str]],
+        fee_bps: float = 0.0,
+        fee_schedules: dict[str, FeeScheduleSnapshot] | None = None,
+        slippage_bps: float = 0.0,
+        max_book_age_seconds: float = 10.0,
+    ) -> None:
+        if fee_bps < 0 or slippage_bps < 0 or max_book_age_seconds <= 0:
+            raise ValueError("paper fee/slippage bps must be non-negative and max book age must be positive")
+        self.state_path = state_path
+        self.quote_provider = quote_provider
+        self.fee_rate = fee_bps / 10_000.0
+        self.fee_schedules = dict(fee_schedules or {})
+        if self.fee_schedules and fee_bps != 0:
+            raise ValueError(
+                "paper adapter cannot combine flat fees with fee schedules"
+            )
+        self.slippage_rate = slippage_bps / 10_000.0
+        self.max_book_age_seconds = max_book_age_seconds
+        self._no_to_yes: dict[str, str] = {}
+        self._yes_to_no: dict[str, str] = {}
+        self._consumed_depth: dict[tuple[str, str, str, int], float] = {}
+        self._active_revision: dict[str, str] = {}
+        for yes_token_id, no_token_id in token_pairs:
+            if not yes_token_id or not no_token_id or yes_token_id == no_token_id:
+                raise ValueError("paper token pairs require distinct non-empty YES/NO token ids")
+            if no_token_id in self._no_to_yes and self._no_to_yes[no_token_id] != yes_token_id:
+                raise ValueError(f"paper NO token {no_token_id} maps to multiple YES tokens")
+            if yes_token_id in self._yes_to_no and self._yes_to_no[yes_token_id] != no_token_id:
+                raise ValueError(f"paper YES token {yes_token_id} maps to multiple NO tokens")
+            self._no_to_yes[no_token_id] = yes_token_id
+            self._yes_to_no[yes_token_id] = no_token_id
+        self._state = self._load()
+
+    def query_live_position(self, yes_token_id: str, no_token_id: str) -> LivePosition:
+        return LivePosition(
+            yes_token_id=yes_token_id,
+            no_token_id=no_token_id,
+            yes_shares=self._balance(yes_token_id),
+            no_shares=self._balance(no_token_id),
+        )
+
+    def cancel_open_orders_for_market(self, condition_id: str) -> dict[str, Any]:
+        return {"paper": True, "condition_id": condition_id, "cancelled": 0}
+
+    def open_orders_for_market(self, condition_id: str) -> list[Any]:
+        return []
+
+    def sell_no_fak(self, no_token_id: str, shares: float, min_price: float) -> dict[str, Any]:
+        return self._sell(no_token_id, shares, min_price)
+
+    def sell_yes_fak(self, yes_token_id: str, shares: float, min_price: float) -> dict[str, Any]:
+        return self._sell(yes_token_id, shares, min_price)
+
+    def buy_yes_fak(self, yes_token_id: str, usd: float, max_price: float) -> dict[str, Any]:
+        return self._buy(yes_token_id, usd, max_price)
+
+    def buy_no_fak(self, no_token_id: str, usd: float, max_price: float) -> dict[str, Any]:
+        return self._buy(no_token_id, usd, max_price)
+
+    def verify_fill(self, result: Any, token_id: str) -> Fill:
+        if isinstance(result, dict) and result.get("token_id") == token_id:
+            return Fill(filled_shares=float(result.get("filled_shares") or 0.0), raw=result)
+        return Fill(filled_shares=0.0, raw=result)
+
+    def yes_best_ask(self, yes_token_id: str) -> float | None:
+        return self._best_price(yes_token_id, "asks")
+
+    def no_best_ask(self, no_token_id: str) -> float | None:
+        return self._best_price(no_token_id, "asks")
+
+    def no_best_bid(self, no_token_id: str) -> float | None:
+        return self._best_price(no_token_id, "bids")
+
+    def yes_best_bid(self, yes_token_id: str) -> float | None:
+        return self._best_price(yes_token_id, "bids")
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "balances": dict(self._state["balances"]),
+            "net_cash_usd": float(self._state["net_cash_usd"]),
+            "fees_usd": float(self._state["fees_usd"]),
+            "updated_at": self._state.get("updated_at"),
+        }
+
+    def _yes_for_no(self, no_token_id: str) -> str:
+        try:
+            return self._no_to_yes[no_token_id]
+        except KeyError as exc:
+            raise ValueError(f"paper NO token {no_token_id} has no YES-token mapping") from exc
+
+    def _buy(self, token_id: str, usd: float, max_price: float) -> dict[str, Any]:
+        requested_usd = max(0.0, float(usd))
+        if requested_usd <= 0:
+            return self._zero_fill(
+                "buy_budget_zero",
+                token_id,
+                requested_usd=requested_usd,
+                limit_price=max_price,
+            )
+        try:
+            revision, levels = self._available_levels(token_id, "asks")
+        except ValueError as exc:
+            return self._zero_fill(
+                str(exc),
+                token_id,
+                requested_usd=requested_usd,
+                limit_price=max_price,
+            )
+
+        remaining_usd = requested_usd
+        gross = 0.0
+        fee = 0.0
+        filled_shares = 0.0
+        fills: list[dict[str, float]] = []
+        for index, raw_price, available_shares in levels:
+            execution_price = self._execution_price(raw_price, side="BUY")
+            if execution_price is None or execution_price > max_price:
+                break
+            cash_per_share = (
+                execution_price
+                + self._fee_per_share(token_id, execution_price)
+            )
+            if cash_per_share <= 0:
+                continue
+            level_fill = min(available_shares, remaining_usd / cash_per_share)
+            if level_fill <= 1e-12:
+                break
+            level_gross = level_fill * execution_price
+            level_fee = self._fee_for_fill(
+                token_id,
+                level_fill,
+                execution_price,
+            )
+            level_cost = level_gross + level_fee
+            if level_cost > remaining_usd:
+                # Exchange fees are rounded per fill.  The continuous
+                # fee-per-share estimate above can therefore overshoot the
+                # cash reservation by a few millionths of a dollar.  Solve
+                # against the rounded fee so a paper fill never spends more
+                # than the reserved budget.
+                low = 0.0
+                high = level_fill
+                for _ in range(64):
+                    candidate = (low + high) / 2.0
+                    candidate_cost = (
+                        candidate * execution_price
+                        + self._fee_for_fill(
+                            token_id,
+                            candidate,
+                            execution_price,
+                        )
+                    )
+                    if candidate_cost <= remaining_usd:
+                        low = candidate
+                    else:
+                        high = candidate
+                level_fill = low
+                if level_fill <= 1e-12:
+                    break
+                level_gross = level_fill * execution_price
+                level_fee = self._fee_for_fill(
+                    token_id,
+                    level_fill,
+                    execution_price,
+                )
+                level_cost = level_gross + level_fee
+            gross += level_gross
+            fee += level_fee
+            filled_shares += level_fill
+            remaining_usd = max(0.0, remaining_usd - level_cost)
+            self._consume_level(token_id, revision, "asks", index, level_fill)
+            fills.append(
+                {
+                    "book_price": raw_price,
+                    "execution_price": execution_price,
+                    "filled_shares": level_fill,
+                }
+            )
+            if remaining_usd <= 1e-9:
+                break
+
+        if filled_shares <= 0:
+            return self._zero_fill(
+                "buy_book_empty_or_above_cap",
+                token_id,
+                requested_usd=requested_usd,
+                limit_price=max_price,
+                book_revision=revision,
+            )
+        total_cost = gross + fee
+        execution_price = gross / filled_shares
+        self._set_balance(token_id, self._balance(token_id) + filled_shares)
+        self._state["net_cash_usd"] = round(float(self._state["net_cash_usd"]) - total_cost, 8)
+        self._state["fees_usd"] = round(float(self._state["fees_usd"]) + fee, 8)
+        self._save()
+        unfilled_usd = max(0.0, requested_usd - total_cost)
+        return {
+            "paper": True,
+            "side": "BUY",
+            "token_id": token_id,
+            "requested_usd": requested_usd,
+            "execution_price": execution_price,
+            "gross_cost_usd": gross,
+            "fee_usd": fee,
+            "total_cost_usd": total_cost,
+            "filled_shares": filled_shares,
+            "unfilled_usd": unfilled_usd,
+            "fill_fraction": min(1.0, total_cost / requested_usd),
+            "partial": unfilled_usd > 1e-6,
+            "book_revision": revision,
+            "level_fills": fills,
+            "balance_after": self._balance(token_id),
+        }
+
+    def _sell(self, token_id: str, shares: float, min_price: float) -> dict[str, Any]:
+        requested_shares = max(0.0, float(shares))
+        available = self._balance(token_id)
+        target_shares = min(requested_shares, available)
+        if target_shares <= 0:
+            return self._zero_fill(
+                "sell_balance_empty",
+                token_id,
+                requested_shares=requested_shares,
+                available_shares=available,
+                limit_price=min_price,
+            )
+        try:
+            revision, levels = self._available_levels(token_id, "bids")
+        except ValueError as exc:
+            return self._zero_fill(
+                str(exc),
+                token_id,
+                requested_shares=requested_shares,
+                available_shares=available,
+                limit_price=min_price,
+            )
+
+        remaining_shares = target_shares
+        gross = 0.0
+        fee = 0.0
+        filled_shares = 0.0
+        fills: list[dict[str, float]] = []
+        for index, raw_price, available_shares in levels:
+            execution_price = self._execution_price(raw_price, side="SELL")
+            if execution_price is None or execution_price < min_price:
+                break
+            level_fill = min(available_shares, remaining_shares)
+            if level_fill <= 1e-12:
+                continue
+            gross += level_fill * execution_price
+            fee += self._fee_for_fill(
+                token_id,
+                level_fill,
+                execution_price,
+            )
+            filled_shares += level_fill
+            remaining_shares = max(0.0, remaining_shares - level_fill)
+            self._consume_level(token_id, revision, "bids", index, level_fill)
+            fills.append(
+                {
+                    "book_price": raw_price,
+                    "execution_price": execution_price,
+                    "filled_shares": level_fill,
+                }
+            )
+            if remaining_shares <= 1e-9:
+                break
+
+        if filled_shares <= 0:
+            return self._zero_fill(
+                "sell_book_empty_or_below_floor",
+                token_id,
+                requested_shares=requested_shares,
+                available_shares=available,
+                limit_price=min_price,
+                book_revision=revision,
+            )
+        proceeds = gross - fee
+        execution_price = gross / filled_shares
+        self._set_balance(token_id, available - filled_shares)
+        self._state["net_cash_usd"] = round(float(self._state["net_cash_usd"]) + proceeds, 8)
+        self._state["fees_usd"] = round(float(self._state["fees_usd"]) + fee, 8)
+        self._save()
+        return {
+            "paper": True,
+            "side": "SELL",
+            "token_id": token_id,
+            "requested_shares": requested_shares,
+            "execution_price": execution_price,
+            "net_execution_price": proceeds / filled_shares,
+            "gross_proceeds_usd": gross,
+            "fee_usd": fee,
+            "proceeds_usd": proceeds,
+            "filled_shares": filled_shares,
+            "unfilled_shares": max(0.0, requested_shares - filled_shares),
+            "fill_fraction": min(1.0, filled_shares / requested_shares) if requested_shares > 0 else 0.0,
+            "partial": filled_shares + 1e-9 < requested_shares,
+            "book_revision": revision,
+            "level_fills": fills,
+            "balance_after": self._balance(token_id),
+        }
+
+    def _best_price(self, token_id: str, side: str) -> float | None:
+        try:
+            _revision, levels = self._available_levels(token_id, side)
+        except ValueError:
+            return None
+        return levels[0][1] if levels else None
+
+    def _available_levels(
+        self,
+        token_id: str,
+        side: str,
+    ) -> tuple[str, list[tuple[int, float, float]]]:
+        snapshot = self._book_snapshot(token_id)
+        staleness = _non_negative_float(snapshot.get("staleness"))
+        if staleness is None:
+            raise ValueError("paper_book_age_unavailable")
+        if staleness > self.max_book_age_seconds:
+            raise ValueError("paper_book_stale")
+        raw_levels = snapshot.get(side)
+        if not isinstance(raw_levels, list):
+            raise ValueError("paper_book_depth_unavailable")
+        parsed_levels: list[tuple[float, float]] = []
+        for level in raw_levels:
+            if isinstance(level, (list, tuple)) and len(level) >= 2:
+                price = _valid_probability(level[0])
+                size = _positive_float(level[1])
+            elif isinstance(level, dict):
+                price = _valid_probability(level.get("price"))
+                size = _positive_float(level.get("size"))
+            else:
+                continue
+            if price is not None and size is not None:
+                parsed_levels.append((price, size))
+        parsed_levels.sort(key=lambda item: item[0], reverse=side == "bids")
+        if not parsed_levels:
+            raise ValueError("paper_book_depth_empty")
+
+        revision = self._snapshot_revision(token_id, snapshot, parsed_levels)
+        previous = self._active_revision.get(token_id)
+        if previous != revision:
+            self._consumed_depth = {key: value for key, value in self._consumed_depth.items() if key[0] != token_id}
+            self._active_revision[token_id] = revision
+        available: list[tuple[int, float, float]] = []
+        for index, (price, size) in enumerate(parsed_levels):
+            consumed = self._consumed_depth.get((token_id, revision, side, index), 0.0)
+            remaining = max(0.0, size - consumed)
+            if remaining > 1e-12:
+                available.append((index, price, remaining))
+        if not available:
+            raise ValueError("paper_book_depth_consumed")
+        return revision, available
+
+    def _book_snapshot(self, token_id: str) -> dict[str, Any]:
+        try:
+            snapshot = self.quote_provider.quote_snapshot(token_id)
+        except (KeyError, ValueError):
+            snapshot = {}
+        if isinstance(snapshot, dict) and (snapshot.get("asks") or snapshot.get("bids")):
+            return snapshot
+        if token_id not in self._no_to_yes:
+            raise ValueError("paper_book_depth_unavailable")
+        yes_token_id = self._yes_for_no(token_id)
+        try:
+            yes_snapshot = self.quote_provider.quote_snapshot(yes_token_id)
+        except (KeyError, ValueError) as exc:
+            raise ValueError("paper_book_depth_unavailable") from exc
+        if not isinstance(yes_snapshot, dict):
+            raise ValueError("paper_book_depth_unavailable")
+        return {
+            "token_id": token_id,
+            "asks": _complement_levels(yes_snapshot.get("bids")),
+            "bids": _complement_levels(yes_snapshot.get("asks")),
+            "staleness": yes_snapshot.get("staleness"),
+            "revision": f"derived:{yes_snapshot.get('revision', '')}",
+        }
+
+    def _snapshot_revision(
+        self,
+        token_id: str,
+        snapshot: dict[str, Any],
+        levels: list[tuple[float, float]],
+    ) -> str:
+        revision = snapshot.get("revision")
+        if revision is not None and str(revision):
+            return str(revision)
+        encoded = json.dumps([token_id, levels], separators=(",", ":"), sort_keys=False).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _consume_level(self, token_id: str, revision: str, side: str, index: int, shares: float) -> None:
+        key = (token_id, revision, side, index)
+        self._consumed_depth[key] = self._consumed_depth.get(key, 0.0) + shares
+
+    def _execution_price(self, quote: float | None, *, side: str) -> float | None:
+        parsed = _valid_probability(quote)
+        if parsed is None:
+            return None
+        multiplier = 1.0 + self.slippage_rate if side == "BUY" else 1.0 - self.slippage_rate
+        return round(min(1.0, max(0.0, parsed * multiplier)), 6)
+
+    def _fee_per_share(self, token_id: str, price: float) -> float:
+        schedule = self.fee_schedules.get(token_id)
+        if schedule is not None:
+            return schedule.fee_per_share(price)
+        return price * self.fee_rate
+
+    def _fee_for_fill(
+        self,
+        token_id: str,
+        shares: float,
+        price: float,
+    ) -> float:
+        schedule = self.fee_schedules.get(token_id)
+        if schedule is not None:
+            return schedule.fee_for_fill(shares, price)
+        return shares * price * self.fee_rate
+
+    def _zero_fill(self, reason: str, token_id: str, **fields: Any) -> dict[str, Any]:
+        return {
+            "paper": True,
+            "token_id": token_id,
+            "filled_shares": 0.0,
+            "reason": reason,
+            **fields,
+        }
+
+    def _balance(self, token_id: str) -> float:
+        return float(self._state["balances"].get(token_id, 0.0))
+
+    def _set_balance(self, token_id: str, shares: float) -> None:
+        self._state["balances"][token_id] = round(max(0.0, shares), 10)
+
+    def _load(self) -> dict[str, Any]:
+        if not self.state_path.exists():
+            return {"balances": {}, "net_cash_usd": 0.0, "fees_usd": 0.0, "updated_at": None}
+        try:
+            raw = json.loads(self.state_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"corrupt paper broker state {self.state_path}") from exc
+        if not isinstance(raw, dict) or not isinstance(raw.get("balances"), dict):
+            raise ValueError(f"invalid paper broker state {self.state_path}")
+        try:
+            balances = {str(token): max(0.0, float(shares)) for token, shares in raw["balances"].items()}
+            net_cash = float(raw.get("net_cash_usd", 0.0))
+            fees = float(raw.get("fees_usd", 0.0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"invalid paper broker balances {self.state_path}") from exc
+        return {
+            "balances": balances,
+            "net_cash_usd": net_cash,
+            "fees_usd": fees,
+            "updated_at": raw.get("updated_at"),
+        }
+
+    def _save(self) -> None:
+        self._state["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _atomic_json_write(self.state_path, self._state)
 
 
 class LiveClobTradingAdapter:
@@ -162,6 +658,9 @@ class LiveClobTradingAdapter:
 
     def no_best_ask(self, no_token_id: str) -> float | None:
         return self._best_ask(no_token_id)
+
+    def no_best_bid(self, no_token_id: str) -> float | None:
+        return self._best_bid(no_token_id)
 
     def yes_best_bid(self, yes_token_id: str) -> float | None:
         return self._best_bid(yes_token_id)
@@ -286,6 +785,9 @@ class TsClobV2TradingAdapter:
 
     def no_best_ask(self, no_token_id: str) -> float | None:
         return self._best(no_token_id, "best_ask")
+
+    def no_best_bid(self, no_token_id: str) -> float | None:
+        return self._best(no_token_id, "best_bid")
 
     def yes_best_bid(self, yes_token_id: str) -> float | None:
         return self._best(yes_token_id, "best_bid")
@@ -415,6 +917,45 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
+def _valid_probability(value: Any) -> float | None:
+    parsed = _as_float(value)
+    if parsed is None or parsed < 0.0 or parsed > 1.0:
+        return None
+    return parsed
+
+
+def _positive_float(value: Any) -> float | None:
+    parsed = _as_float(value)
+    if parsed is None or parsed <= 0.0:
+        return None
+    return parsed
+
+
+def _non_negative_float(value: Any) -> float | None:
+    parsed = _as_float(value)
+    if parsed is None or parsed < 0.0:
+        return None
+    return parsed
+
+
+def _complement_levels(raw: Any) -> list[tuple[float, float]]:
+    if not isinstance(raw, list):
+        return []
+    levels: list[tuple[float, float]] = []
+    for level in raw:
+        if isinstance(level, (list, tuple)) and len(level) >= 2:
+            price = _valid_probability(level[0])
+            size = _positive_float(level[1])
+        elif isinstance(level, dict):
+            price = _valid_probability(level.get("price"))
+            size = _positive_float(level.get("size"))
+        else:
+            continue
+        if price is not None and size is not None:
+            levels.append((round(1.0 - price, 6), size))
+    return levels
+
+
 def _raw_conditional_balance_to_shares(value: Any) -> float:
     if value is None or value == "":
         return 0.0
@@ -430,6 +971,7 @@ __all__ = [
     "Fill",
     "LiveClobTradingAdapter",
     "LivePosition",
+    "PaperTradingAdapter",
     "TradingAdapter",
     "TsClobV2TradingAdapter",
     "TsPolymarketBetaTradingAdapter",

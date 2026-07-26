@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from .allocator import AllocationRequest, PortfolioAllocator
-from .config import OpportunityConfig
+from .config import OpportunityConfig, opportunity_reachability
 from .types import MarketContext, Opportunity, TRADEABLE_STATES, market_dir_slug
 
 
@@ -151,6 +151,7 @@ def scan_opportunities(
     executable price. Every non-opportunity is still returned with blockers so
     the funnel report can explain where edge died."""
     probability_lookup = probability_lookup or combined_probability_lookup(config)
+    reachability = opportunity_reachability(config)
     results: list[Opportunity] = []
     for context in contexts:
         if context.state not in TRADEABLE_STATES:
@@ -199,6 +200,8 @@ def scan_opportunities(
 
             for side, side_probability, ask, bid in sides:
                 blockers: list[str] = []
+                if config.model_pricing_mode == "calibration_only":
+                    blockers.append("model_pricing_calibration_only")
                 if ask is None:
                     blockers.append("quote_unavailable")
                 else:
@@ -280,6 +283,8 @@ def scan_opportunities(
                             "market_mid": mid,
                             "blended_probability": pricing_probability,
                             "disagreement_penalty": disagreement_penalty,
+                            "model_pricing_mode": config.model_pricing_mode,
+                            "max_theoretical_edge": reachability["max_theoretical_edge"],
                         },
                     )
                 )

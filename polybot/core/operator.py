@@ -83,12 +83,20 @@ class OperatorGate:
         blockers: list[str] = []
         warnings: list[str] = []
         if live_requested:
+            try:
+                classifier_passes = int(getattr(self.config.classifier, "passes", 1))
+            except (TypeError, ValueError):
+                classifier_passes = 0
             if effective_mode != "live":
                 blockers.append(f"operator_mode_{effective_mode}")
             if not ack_path.exists():
                 blockers.append("live_config_hash_not_acknowledged")
             if self.config.execution.dry_run:
                 blockers.append("config_execution_dry_run_true")
+            if classifier_passes < 2:
+                blockers.append("live_classifier_requires_two_passes")
+            if getattr(self.config.classifier, "require_pass_agreement", False) is not True:
+                blockers.append("live_classifier_requires_pass_agreement")
         telegram_missing = not _telegram_configured()
         anthropic_missing = not _anthropic_configured() and self.config.classifier.provider == "anthropic"
         if live_requested and self.config.safety.degraded_mode_alert and telegram_missing:

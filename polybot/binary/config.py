@@ -4,11 +4,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 # Reused as-is, same rationale as polybot.location.config: these shapes are
 # provider/market-agnostic and OperatorGate duck-types on them.
 from polybot.core.config import ClassifierConfig, SafetyConfig, SourcesConfig  # noqa: F401
+from polybot.core.config_validation import (
+    load_yaml_object,
+    reject_unknown_dataclass_keys,
+    require_bool,
+    require_integer,
+    require_iso_date,
+    require_number,
+    require_probability,
+    require_string_list,
+    require_text,
+    validate_classifier_config,
+    validate_portfolio_link_config,
+    validate_safety_config,
+    validate_sources_config,
+    validate_time_decay_config,
+)
 from polybot.core.portfolio import PortfolioConfig  # noqa: F401
 
 HELD_SIDES = {"", "YES", "NO"}
@@ -68,6 +82,10 @@ class EntryConfig:
     max_price: float = 0.90
     # Balances at or below this are dust for wallet reconciliation.
     reconcile_min_shares: float = 0.01
+    # Any positive fill creates exposure, but a thin-book fill below either
+    # threshold is recorded as PARTIALLY_ENTERED instead of a complete entry.
+    min_fill_usd: float = 5.0
+    min_fill_fraction: float = 0.25
     # Entries above this notional require a second independent source to have
     # confirmed the same thesis within the window before buying (0 = off).
     second_source_above_usd: float = 0.0
@@ -112,6 +130,9 @@ class FlipBuyConfig:
 @dataclass(frozen=True)
 class ExecutionConfig:
     dry_run: bool = True
+    paper_fee_bps: float = 0.0
+    paper_slippage_bps: float = 25.0
+    paper_max_book_age_seconds: float = 10.0
     sell: SellConfig = field(default_factory=SellConfig)
     flip_buy: FlipBuyConfig = field(default_factory=FlipBuyConfig)
 
@@ -152,10 +173,14 @@ class BinaryBotConfig:
 
 
 def load_binary_config(path: Path) -> BinaryBotConfig:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError(f"{path} must contain a YAML object")
+    raw = load_yaml_object(path)
+    reject_unknown_dataclass_keys(raw, BinaryBotConfig, context=str(path))
     execution_raw = _section(raw, "execution")
+    reject_unknown_dataclass_keys(
+        execution_raw,
+        ExecutionConfig,
+        context="execution",
+    )
     market_raw = dict(_section(raw, "market"))
     market_raw["held_side"] = str(market_raw.get("held_side", "") or "").strip().upper()
     entry_raw = dict(_section(raw, "entry"))
@@ -169,7 +194,10 @@ def load_binary_config(path: Path) -> BinaryBotConfig:
         entry=EntryConfig(**entry_raw),
         portfolio=PortfolioConfig(**_section(raw, "portfolio")),
         execution=ExecutionConfig(
-            dry_run=bool(execution_raw.get("dry_run", True)),
+            dry_run=execution_raw.get("dry_run", True),
+            paper_fee_bps=float(execution_raw.get("paper_fee_bps", 0.0)),
+            paper_slippage_bps=float(execution_raw.get("paper_slippage_bps", 25.0)),
+            paper_max_book_age_seconds=float(execution_raw.get("paper_max_book_age_seconds", 10.0)),
             sell=SellConfig(**_section(execution_raw, "sell")),
             flip_buy=FlipBuyConfig(**_section(execution_raw, "flip_buy")),
         ),
@@ -185,16 +213,141 @@ def load_binary_config(path: Path) -> BinaryBotConfig:
 
 
 def validate_binary_config(config: BinaryBotConfig) -> None:
+    require_text(config.market.resolution_rules, "market.resolution_rules")
     if config.market.held_side not in HELD_SIDES:
         raise ValueError(f"market.held_side must be one of {sorted(HELD_SIDES)!r}, got {config.market.held_side!r}")
     if config.entry.side not in ENTRY_SIDES:
         raise ValueError(f"entry.side must be YES or NO, got {config.entry.side!r}")
     if not config.market.held_side and not config.entry.enabled:
         raise ValueError("market.held_side is empty and entry is disabled: nothing to protect or enter")
-    if not config.market.resolution_rules.strip():
-        raise ValueError("market.resolution_rules is required: the classifier judges articles against it")
-    if not config.market.deadline_date.strip():
-        raise ValueError("market.deadline_date is required")
+    require_text(config.market.slug, "market.slug")
+    require_iso_date(config.market.deadline_date, "market.deadline_date")
+    for field_name in (
+        "question",
+        "expected_question_contains",
+        "resolution_rules",
+        "analyst_context",
+        "expected_rule_text_sha256",
+    ):
+        require_text(
+            getattr(config.market, field_name),
+            f"market.{field_name}",
+            allow_empty=field_name != "resolution_rules",
+        )
+
+    position = config.position
+    for field_name in (
+        "expected_yes_token_id",
+        "expected_no_token_id",
+    ):
+        require_text(getattr(position, field_name), f"position.{field_name}", allow_empty=True)
+    if (
+        position.expected_yes_token_id
+        and position.expected_yes_token_id == position.expected_no_token_id
+    ):
+        raise ValueError("position YES and NO token ids must be distinct")
+    for field_name in (
+        "max_shares_to_sell",
+        "max_flip_usd_to_buy",
+    ):
+        require_number(getattr(position, field_name), f"position.{field_name}", minimum=0)
+    require_probability(position.take_profit_price, "position.take_profit_price")
+
+    require_integer(
+        config.trigger.auto_execute_level,
+        "trigger.auto_execute_level",
+        minimum=1,
+        maximum=4,
+    )
+    require_bool(
+        config.trigger.trusted_single_source_execution,
+        "trigger.trusted_single_source_execution",
+    )
+
+    entry = config.entry
+    require_bool(entry.enabled, "entry.enabled")
+    require_number(
+        entry.usd_budget,
+        "entry.usd_budget",
+        minimum=0,
+        minimum_exclusive=entry.enabled,
+    )
+    require_probability(entry.max_price, "entry.max_price", allow_zero=False)
+    require_number(entry.reconcile_min_shares, "entry.reconcile_min_shares", minimum=0)
+    require_number(entry.min_fill_usd, "entry.min_fill_usd", minimum=0)
+    require_probability(entry.min_fill_fraction, "entry.min_fill_fraction")
+    for field_name in (
+        "second_source_above_usd",
+        "second_source_window_minutes",
+        "corroboration_minutes",
+    ):
+        require_number(getattr(entry, field_name), f"entry.{field_name}", minimum=0)
+    if entry.second_source_above_usd > 0 and entry.second_source_window_minutes <= 0:
+        raise ValueError(
+            "entry.second_source_above_usd requires a positive second_source_window_minutes"
+        )
+    if entry.corroboration_action not in {"alert", "trim"}:
+        raise ValueError("entry.corroboration_action must be alert or trim")
+    require_integer(entry.max_entries, "entry.max_entries", minimum=1)
+
+    execution = config.execution
+    require_bool(execution.dry_run, "execution.dry_run")
+    require_number(execution.paper_fee_bps, "execution.paper_fee_bps", minimum=0)
+    require_number(
+        execution.paper_slippage_bps,
+        "execution.paper_slippage_bps",
+        minimum=0,
+    )
+    require_number(
+        execution.paper_max_book_age_seconds,
+        "execution.paper_max_book_age_seconds",
+        minimum=0,
+        minimum_exclusive=True,
+    )
+    sell = execution.sell
+    require_bool(sell.enabled, "execution.sell.enabled")
+    require_probability(sell.min_price, "execution.sell.min_price")
+    require_bool(sell.retry_partial_once, "execution.sell.retry_partial_once")
+    require_number(
+        sell.retry_delay_seconds,
+        "execution.sell.retry_delay_seconds",
+        minimum=0,
+    )
+    require_probability(sell.trim_fraction, "execution.sell.trim_fraction")
+    require_probability(
+        sell.max_fraction_per_order,
+        "execution.sell.max_fraction_per_order",
+        allow_zero=False,
+    )
+    flip = execution.flip_buy
+    require_bool(flip.enabled, "execution.flip_buy.enabled")
+    require_probability(
+        flip.max_price,
+        "execution.flip_buy.max_price",
+        allow_zero=False,
+    )
+    require_number(
+        flip.usd_budget,
+        "execution.flip_buy.usd_budget",
+        minimum=0,
+        minimum_exclusive=flip.enabled,
+    )
+
+    validate_time_decay_config(config.time_decay)
+    require_string_list(config.keywords.escalate_terms, "keywords.escalate_terms")
+    validate_classifier_config(
+        config.classifier,
+        allowed_providers={
+            "rule_based",
+            "anthropic",
+            "claude_cli",
+            "claude-cli",
+            "claude_code_cli",
+        },
+    )
+    validate_portfolio_link_config(config.portfolio)
+    validate_safety_config(config.safety)
+    validate_sources_config(config.sources)
 
 
 def _section(raw: dict[str, Any], name: str) -> dict[str, Any]:

@@ -1,0 +1,257 @@
+from __future__ import annotations
+
+import json
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from polybot.discovery.config import load_discovery_config, rule_store_db_path
+from polybot.discovery.runner import (
+    compile_rules_command,
+    emit_bot_config_command,
+    grade_markets_command,
+    inspect_rule_command,
+    plan_sources_command,
+    validate_rule_command,
+)
+from polybot.discovery.sources import build_source_plan
+from polybot.discovery.store import DiscoveryStore
+from polybot.discovery.types import MarketContext
+from polybot.rules.compiler import fixture_semantics
+from polybot.rules.contracts import RuleSpec
+from polybot.rules.store import RuleStore
+from test_rule_contracts import _golden_rules, context_for_case
+
+
+def _config(tmp_path: Path, *, max_per_cycle: int = 10) -> Path:
+    path = tmp_path / "discovery.yaml"
+    path.write_text(
+        f"""
+data_dir: {tmp_path / "data"}
+logs_dir: {tmp_path / "logs"}
+classifier:
+  provider: rule_based
+classifier_budget:
+  enabled: false
+rule_compiler:
+  enabled: true
+  max_per_cycle: {max_per_cycle}
+  db_path: {tmp_path / "rules.sqlite3"}
+  paper_families:
+    - OCCURRENCE_BEFORE_DEADLINE
+    - CATEGORICAL_EXCLUSIVE
+    - SOURCE_LOCKED_ANNOUNCEMENT
+    - STATUS_AT_DEADLINE
+    - NUMERIC_THRESHOLD
+    - DURATION_REQUIREMENT
+  live_confirmation_families: []
+scoring:
+  min_rule_text_chars: 1
+  allow_fixture_analysis_live: true
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_compile_cycle_caps_only_new_specs_and_cached_specs_are_free(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path, max_per_cycle=1)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    contexts = [
+        context_for_case(case, strong_analysis=True)
+        for case in _golden_rules()[:2]
+    ]
+    for context in contexts:
+        store.save_context(context)
+
+    assert compile_rules_command(config_path) == 0
+    first = json.loads(capsys.readouterr().out)
+    assert first["compiled"] == 1
+    assert first["deferred"] == 1
+    deferred_id = next(
+        item["market_id"]
+        for item in first["results"]
+        if item["status"] == "DEFERRED"
+    )
+    assert (
+        store.load_context(deferred_id).state
+        == "RULES_REVIEW_REQUIRED"
+    )
+
+    assert compile_rules_command(config_path) == 0
+    second = json.loads(capsys.readouterr().out)
+    assert second["cached"] == 1
+    assert second["compiled"] == 1
+    assert second["deferred"] == 0
+
+
+def test_compile_plan_grade_roundtrip_is_paper_only(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    store.save_context(context)
+
+    compile_rules_command(config_path, market_id=context.market_id)
+    capsys.readouterr()
+    plan_sources_command(config_path, market_id=context.market_id)
+    capsys.readouterr()
+    grade_markets_command(config_path)
+    capsys.readouterr()
+
+    graded = store.load_context(context.market_id)
+    assert graded is not None
+    assert graded.state == "PAPER_ELIGIBLE"
+    assert any(
+        reason.startswith("rule_family_not_live_promoted")
+        for reason in graded.state_reasons
+    )
+    plan = store.load_source_plan(context.market_id)
+    spec = RuleStore(rule_store_db_path(config)).load_spec(
+        context.market_id,
+        context.rule_text_sha256,
+    )
+    assert plan is not None and spec is not None
+    assert plan.rule_spec_sha256 == spec.spec_sha256
+
+
+def test_compile_failure_demotes_previously_tradeable_market(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    context = replace(
+        context_for_case(_golden_rules()[0], strong_analysis=True),
+        state="LIVE_CONFIRMATION_ELIGIBLE",
+    )
+    store.save_context(context)
+
+    class BrokenCompiler:
+        def compile(self, context):
+            raise RuntimeError("compiler database unavailable")
+
+    compile_rules_command(
+        config_path,
+        market_id=context.market_id,
+        compiler=BrokenCompiler(),
+    )
+    capsys.readouterr()
+    saved = store.load_context(context.market_id)
+    assert saved is not None
+    assert saved.state == "RULES_REVIEW_REQUIRED"
+    assert saved.state_reasons == [
+        "rule_compiler_error:compiler database unavailable"
+    ]
+
+
+def test_rule_change_invalidates_current_spec_and_plan(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    store.save_context(context)
+    compile_rules_command(config_path, market_id=context.market_id)
+    capsys.readouterr()
+    plan_sources_command(config_path, market_id=context.market_id)
+    capsys.readouterr()
+
+    changed = replace(
+        context,
+        rule_text=context.rule_text + " Material amendment.",
+        rule_text_sha256="a" * 64,
+        rule_version=2,
+        state="DISCOVERED",
+    )
+    store.save_context(changed)
+    grade_markets_command(config_path)
+    capsys.readouterr()
+    graded = store.load_context(context.market_id)
+    assert graded is not None
+    assert graded.state == "RULES_REVIEW_REQUIRED"
+    assert "valid_rule_spec_missing" in graded.state_reasons
+
+
+def test_emit_refuses_stale_rule_spec_source_plan(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    semantics = fixture_semantics(context)
+    spec = RuleSpec.from_context(
+        context,
+        semantics,
+        compiler_model="anthropic:test",
+        compiled_at="2026-07-25T00:00:00+00:00",
+    )
+    RuleStore(rule_store_db_path(config)).save_spec(spec)
+    stale_plan = replace(
+        build_source_plan(context, spec),
+        rule_spec_sha256="0" * 64,
+    )
+    store.save_source_plan(stale_plan)
+    store.save_context(replace(context, state="PAPER_ELIGIBLE"))
+
+    with pytest.raises(SystemExit, match="stale semantic assets"):
+        emit_bot_config_command(config_path, context.market_id)
+    capsys.readouterr()
+
+
+def test_inspect_and_validate_rule_cli_roundtrip(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    store.save_context(context)
+    compile_rules_command(config_path, market_id=context.market_id)
+    capsys.readouterr()
+
+    assert inspect_rule_command(config_path, context.market_id) == 0
+    inspected = json.loads(capsys.readouterr().out)
+    assert inspected["spec"]["market_id"] == context.market_id
+    assert len(inspected["passes"]) == 2
+
+    spec_path = tmp_path / "spec.json"
+    spec_path.write_text(
+        json.dumps(inspected["spec"]),
+        encoding="utf-8",
+    )
+    assert validate_rule_command(spec_path) == 0
+    validated = json.loads(capsys.readouterr().out)
+    assert validated["valid"] is True
+    assert validated["spec_sha256"] == inspected["spec_sha256"]
+
+
+def test_rule_compiler_config_rejects_unsafe_family_promotions(
+    tmp_path: Path,
+) -> None:
+    path = _config(tmp_path)
+    text = path.read_text(encoding="utf-8")
+    path.write_text(
+        text.replace(
+            "live_confirmation_families: []",
+            "live_confirmation_families:\n"
+            "    - SUBJECTIVE_DISCRETIONARY",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="subset|never"):
+        load_discovery_config(path)

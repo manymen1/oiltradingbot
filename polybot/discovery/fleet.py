@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import sys
 import time
@@ -12,10 +13,17 @@ from polybot.core.holdings import _atomic_json_write
 from polybot.core.operator import OperatorGate
 from polybot.log import log_event
 
-from .config import DiscoveryConfig, load_discovery_config
+from .config import (
+    DiscoveryConfig,
+    central_feed_db_path,
+    classifier_budget_db_path,
+    load_discovery_config,
+    rule_store_db_path,
+)
 from .emit import GEO_DATA_ROOT, emit_bot_config
 from .store import DiscoveryStore
-from .types import MarketContext, market_dir_slug
+from .sources import source_plan_sha256, validate_source_plan_freshness
+from .types import TRADEABLE_STATES, MarketContext, market_dir_slug
 
 
 def fleet_operator_dir() -> Path:
@@ -55,6 +63,7 @@ class FleetManager:
         live: bool,
         per_order_usd: float,
         ledger_path: str,
+        config_path: Path | None = None,
         spawner: Callable[[list[str], Path], Any] | None = None,
         notifier: Any = None,
     ):
@@ -63,6 +72,7 @@ class FleetManager:
         self.live = live
         self.per_order_usd = per_order_usd
         self.ledger_path = ledger_path
+        self.config_path = config_path
         self.spawner = spawner or _default_spawner
         self.processes: dict[str, Any] = {}
         self.notifier = notifier
@@ -72,17 +82,95 @@ class FleetManager:
     # -- planning --
 
     def desired_markets(self, contexts: list[MarketContext]) -> list[MarketContext]:
-        # No liquidity bias in EITHER direction: the fleet covers every
-        # eligible market it has slots for. Scanned executable edge breaks
-        # ties when slots are scarce; market_id keeps the rest deterministic.
-        # max_bots <= 0 means uncapped.
-        edges = self._last_scan_edges()
-        eligible = sorted(
-            (c for c in contexts if c.state == "LIVE_CONFIRMATION_ELIGIBLE"),
-            key=lambda c: (-(edges.get(c.market_id, float("-inf"))), c.market_id),
+        # Monitoring priority controls scarce worker slots; it never changes
+        # execution eligibility. Cold-start markets rotate through an explicit
+        # exploration quota so a self-reinforcing incumbent ranking cannot
+        # starve new objective rules.
+        from .profit_priority import load_priority_snapshot
+
+        priorities = load_priority_snapshot(self.config.data_dir)
+        eligible_states = {"LIVE_CONFIRMATION_ELIGIBLE"} if self.live else TRADEABLE_STATES
+        candidates = [
+            context
+            for context in contexts
+            if context.state in eligible_states
+        ]
+
+        def exploitation_key(context: MarketContext):
+            priority = priorities.get(context.market_id)
+            return (
+                -(
+                    priority.monitor_priority
+                    if priority is not None
+                    else 0.0
+                ),
+                context.market_id,
+            )
+
+        exploitation = sorted(
+            (
+                context
+                for context in candidates
+                if (
+                    priorities.get(context.market_id) is not None
+                    and not priorities[context.market_id].cold_start
+                )
+            ),
+            key=exploitation_key,
         )
-        if self.config.fleet.max_bots > 0:
-            eligible = eligible[: self.config.fleet.max_bots]
+        exploration = sorted(
+            (
+                context
+                for context in candidates
+                if context.market_id
+                not in {item.market_id for item in exploitation}
+                and (
+                    priorities.get(context.market_id) is None
+                    or priorities[context.market_id].exploration_eligible
+                )
+            ),
+            key=lambda context: (
+                context.discovered_at or "",
+                context.market_id,
+            ),
+        )
+        unsupported = sorted(
+            (
+                context
+                for context in candidates
+                if context.market_id
+                not in {
+                    item.market_id
+                    for item in [*exploitation, *exploration]
+                }
+            ),
+            key=exploitation_key,
+        )
+        if self.config.fleet.max_bots <= 0:
+            eligible = [*exploitation, *exploration, *unsupported]
+        else:
+            cap = self.config.fleet.max_bots
+            exploration_slots = min(
+                len(exploration),
+                int(
+                    math.floor(
+                        cap
+                        * self.config.profit_priority.exploration_fraction
+                    )
+                ),
+            )
+            exploitation_slots = max(0, cap - exploration_slots)
+            eligible = exploitation[:exploitation_slots]
+            eligible.extend(exploration[:exploration_slots])
+            remaining = cap - len(eligible)
+            if remaining > 0:
+                eligible.extend(exploitation[exploitation_slots:][:remaining])
+                remaining = cap - len(eligible)
+            if remaining > 0:
+                eligible.extend(exploration[exploration_slots:][:remaining])
+                remaining = cap - len(eligible)
+            if remaining > 0:
+                eligible.extend(unsupported[:remaining])
         desired = {c.market_id: c for c in eligible}
         for context in contexts:
             if context.market_id not in desired and self.is_holding(context.market_id):
@@ -121,17 +209,45 @@ class FleetManager:
         return best
 
     def is_holding(self, market_id: str) -> bool:
+        if self.config.rule_runner.enabled and not self.live:
+            generic = (
+                self.config.data_dir
+                / "rule_runner"
+                / market_dir_slug(market_id)
+                / "paper_broker.json"
+            )
+            if generic.exists():
+                try:
+                    raw = json.loads(generic.read_text(encoding="utf-8"))
+                    balances = (
+                        raw.get("balances")
+                        if isinstance(raw, dict)
+                        else None
+                    )
+                    if isinstance(balances, dict) and any(
+                        float(value) > 0 for value in balances.values()
+                    ):
+                        return True
+                except (
+                    OSError,
+                    json.JSONDecodeError,
+                    TypeError,
+                    ValueError,
+                ):
+                    # Corrupt paper state is not evidence that the position is
+                    # flat. Keep the worker desired so it can fail closed and
+                    # surface the corruption instead of silently freeing its
+                    # portfolio slot.
+                    return True
         base = Path(GEO_DATA_ROOT) / market_dir_slug(market_id)
-        for candidate in (base / "dry_run" / "holdings.json", base / "holdings.json"):
-            if not candidate.exists():
-                continue
-            try:
-                raw = json.loads(candidate.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            if isinstance(raw, dict) and raw.get("held_location"):
-                return True
-        return False
+        candidate = base / "holdings.json" if self.live else base / "dry_run" / "holdings.json"
+        if not candidate.exists():
+            return False
+        try:
+            raw = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        return isinstance(raw, dict) and bool(raw.get("held_location"))
 
     # -- reconciliation --
 
@@ -212,7 +328,19 @@ class FleetManager:
 
     def _heartbeat_age_seconds(self, market_id: str) -> float | None:
         base = Path(GEO_DATA_ROOT) / market_dir_slug(market_id)
-        for candidate in (base / "dry_run" / "heartbeat.json", base / "heartbeat.json"):
+        candidates = [
+            base / "dry_run" / "heartbeat.json",
+            base / "heartbeat.json",
+        ]
+        if self.config.rule_runner.enabled and not self.live:
+            candidates.insert(
+                0,
+                self.config.data_dir
+                / "rule_runner"
+                / market_dir_slug(market_id)
+                / "heartbeat.json",
+            )
+        for candidate in candidates:
             if not candidate.exists():
                 continue
             try:
@@ -254,6 +382,18 @@ class FleetManager:
         plan = self.store.load_source_plan(context.market_id)
         if plan is None:
             raise ValueError("no source plan; plan-sources stage has not covered this market yet")
+        if self.config.rule_compiler.enabled:
+            from polybot.rules.store import RuleStore
+
+            spec = RuleStore(rule_store_db_path(self.config)).load_spec(
+                context.market_id,
+                context.rule_text_sha256,
+            )
+            if spec is None:
+                raise ValueError(
+                    "no current RuleSpec; compile-rules has not covered this market"
+                )
+            validate_source_plan_freshness(context, plan, spec)
         out = Path(self.config.fleet.generated_dir) / f"{market_dir_slug(context.market_id)}.yaml"
         entry_side = self.best_entry_side(context.market_id) if context.kind != "grouped" else "YES"
         # Re-emit only when missing, the pinned rule hash changed, the entry
@@ -266,7 +406,66 @@ class FleetManager:
             # yaml quotes 'NO' (bare NO is a YAML boolean), so match both forms.
             side_ok = context.kind == "grouped" or f"side: {entry_side}" in text or f"side: '{entry_side}'" in text
             provider_ok = f"provider: {provider}" in text
-            if context.rule_text_sha256 in text and expected_mode in text and side_ok and provider_ok:
+            try:
+                existing = self._load_executor_config(out)
+                live_classifier_ok = (
+                    not self.live
+                    or (
+                        int(existing.classifier.passes) >= 2
+                        and existing.classifier.require_pass_agreement is True
+                    )
+                )
+                expected_central_db = (
+                    str(central_feed_db_path(self.config))
+                    if self.config.central_feed.enabled
+                    else ""
+                )
+                central_feed_ok = (
+                    str(existing.sources.central_feed_db) == expected_central_db
+                    and (
+                        not expected_central_db
+                        or float(existing.sources.central_feed_stale_after_seconds)
+                        == float(self.config.central_feed.stale_after_seconds)
+                    )
+                )
+                expected_budget_db = (
+                    str(classifier_budget_db_path(self.config))
+                    if self.config.classifier_budget.enabled
+                    else ""
+                )
+                classifier_budget_ok = (
+                    str(existing.classifier.budget_db_path) == expected_budget_db
+                    and (
+                        not expected_budget_db
+                        or (
+                            int(existing.classifier.max_escalations_per_hour)
+                            == int(self.config.classifier_budget.max_escalations_per_hour)
+                            and int(existing.classifier.max_escalations_per_day)
+                            == int(self.config.classifier_budget.max_escalations_per_day)
+                            and int(existing.classifier.max_classifier_errors_per_hour)
+                            == int(self.config.classifier_budget.max_classifier_errors_per_hour)
+                        )
+                    )
+                )
+                source_plan_ok = (
+                    str(existing.sources.source_plan_sha256)
+                    == source_plan_sha256(plan)
+                )
+            except (OSError, TypeError, ValueError):
+                live_classifier_ok = False
+                central_feed_ok = False
+                classifier_budget_ok = False
+                source_plan_ok = False
+            if (
+                context.rule_text_sha256 in text
+                and expected_mode in text
+                and side_ok
+                and provider_ok
+                and live_classifier_ok
+                and central_feed_ok
+                and classifier_budget_ok
+                and source_plan_ok
+            ):
                 return out
         return emit_bot_config(
             context,
@@ -277,6 +476,20 @@ class FleetManager:
             dry_run=not self.live,
             entry_side=entry_side,
             classifier_provider=self.config.classifier.provider if self.config.classifier.provider != "rule_based" else "anthropic",
+            classifier_budget_db=(
+                str(classifier_budget_db_path(self.config))
+                if self.config.classifier_budget.enabled
+                else ""
+            ),
+            classifier_max_escalations_per_hour=self.config.classifier_budget.max_escalations_per_hour,
+            classifier_max_escalations_per_day=self.config.classifier_budget.max_escalations_per_day,
+            classifier_max_errors_per_hour=self.config.classifier_budget.max_classifier_errors_per_hour,
+            central_feed_db=(
+                str(central_feed_db_path(self.config))
+                if self.config.central_feed.enabled
+                else ""
+            ),
+            central_feed_stale_after_seconds=self.config.central_feed.stale_after_seconds,
         )
 
     def _entry_usd(self, context: MarketContext) -> float:
@@ -313,6 +526,21 @@ class FleetManager:
         return True
 
     def _command(self, context: MarketContext, config_path: Path) -> list[str]:
+        if self.config.rule_runner.enabled and not self.live:
+            if self.config_path is None:
+                raise ValueError(
+                    "generic paper runner requires the discovery config path"
+                )
+            return [
+                sys.executable,
+                "-m",
+                "polybot.geopolitics",
+                "run-rule-market",
+                "--config",
+                str(self.config_path),
+                "--market",
+                context.market_id,
+            ]
         runner = "run-location-protection" if context.kind == "grouped" else "run-binary"
         command = [sys.executable, "-m", "polybot.geopolitics", runner, "--config", str(config_path)]
         if self.live:
@@ -358,7 +586,7 @@ def run_fleet_command(
     """
     from polybot.core.notifier import TelegramNotifier
 
-    from .runner import _load, _run_discovery_cycle
+    from .runner import _classifier_budget_status, _load, _run_discovery_cycle
 
     config, store, allocator = _load(config_path)
     if not config.fleet.enabled:
@@ -370,17 +598,115 @@ def run_fleet_command(
         live=live,
         per_order_usd=allocator.config.per_order_usd,
         ledger_path=str(allocator.state_path),
+        config_path=config_path,
         spawner=spawner,
         notifier=notifier,
     )
+    central_service = None
+    if config.central_feed.enabled:
+        from polybot.core.central_feed import CentralFeedService, CentralFeedStore
+
+        def active_feed_urls() -> list[str]:
+            urls: set[str] = set()
+            for context in manager.desired_markets(store.all_contexts()):
+                plan = store.load_source_plan(context.market_id)
+                if plan is not None:
+                    urls.update(plan.feed_urls)
+            return sorted(urls)
+
+        def active_direct_urls() -> list[str]:
+            if not config.central_feed.direct_sources_enabled:
+                return []
+            urls: set[str] = set()
+            for context in manager.desired_markets(store.all_contexts()):
+                plan = store.load_source_plan(context.market_id)
+                if plan is not None:
+                    urls.update(plan.poll_urls)
+            return sorted(urls)
+
+        def active_direct_priorities() -> dict[str, float]:
+            from .profit_priority import load_priority_snapshot
+
+            priorities = load_priority_snapshot(config.data_dir)
+            by_url: dict[str, float] = {}
+            for context in manager.desired_markets(store.all_contexts()):
+                plan = store.load_source_plan(context.market_id)
+                if plan is None:
+                    continue
+                record = priorities.get(context.market_id)
+                score = (
+                    float(record.monitor_priority)
+                    if record is not None
+                    else 0.0
+                )
+                for url in plan.poll_urls:
+                    by_url[url] = max(by_url.get(url, 0.0), score)
+            return by_url
+
+        central_service = CentralFeedService(
+            store=CentralFeedStore(central_feed_db_path(config)),
+            feed_urls_provider=active_feed_urls,
+            direct_urls_provider=active_direct_urls,
+            direct_priorities_provider=active_direct_priorities,
+            poll_seconds=config.central_feed.poll_seconds,
+            max_workers=config.central_feed.max_workers,
+            max_entries_per_feed=config.central_feed.max_entries_per_feed,
+            direct_poll_seconds=config.central_feed.direct_poll_seconds,
+            direct_idle_max_seconds=(
+                config.central_feed.direct_idle_max_seconds
+            ),
+            max_entries_per_direct_source=(
+                config.central_feed.max_entries_per_direct_source
+            ),
+            retention_hours=config.central_feed.retention_hours,
+            aggregator_poll_seconds=config.central_feed.aggregator_poll_seconds,
+            max_urls_per_domain_per_cycle=config.central_feed.max_urls_per_domain_per_cycle,
+        )
+    forward_book_service = None
+    if (
+        config.forward_recorder.enabled
+        and config.forward_recorder.shared_book_service
+    ):
+        from polybot.rules.forward import ForwardBookService
+
+        forward_book_service = ForwardBookService(config)
     try:
         while True:
             try:
                 _run_discovery_cycle(config_path, config, events_fetch=events_fetch, quotes=quotes, analyzer=analyzer, notifier=notifier, markets_fetch=markets_fetch)
             except Exception as exc:
                 log_event("fleet_discovery_cycle_error", error=str(exc))
+            desired_contexts = manager.desired_markets(
+                store.all_contexts()
+            )
+            if forward_book_service is not None:
+                try:
+                    if once:
+                        forward_book_service.poll_once(desired_contexts)
+                    else:
+                        forward_book_service.sync(desired_contexts)
+                except Exception as exc:
+                    log_event(
+                        "forward_book_service_cycle_error",
+                        error=str(exc),
+                    )
+            if central_service is not None:
+                if once:
+                    try:
+                        central_service.poll_once(force=True)
+                    except Exception as exc:
+                        log_event("central_feed_cycle_error", error=str(exc))
+                else:
+                    central_service.start()
             try:
                 summary = manager.sync(store.all_contexts())
+                if central_service is not None:
+                    summary["central_feed"] = central_service.status()
+                if forward_book_service is not None:
+                    summary["forward_books"] = (
+                        forward_book_service.status()
+                    )
+                summary["classifier_budget"] = _classifier_budget_status(config)
                 _atomic_json_write(config.data_dir / "fleet_state.json", {**summary, "live": live, "updated_at": datetime.now(timezone.utc).isoformat()})
                 print(json.dumps(summary, indent=2, sort_keys=True))
                 for market_id in summary["started"]:
@@ -397,6 +723,10 @@ def run_fleet_command(
                 return 0
             time.sleep(max(60.0, config.schedule.interval_minutes * 60.0))
     finally:
+        if central_service is not None:
+            central_service.stop()
+        if forward_book_service is not None:
+            forward_book_service.stop()
         if once:
             # A one-shot invocation must not leave orphan children behind in
             # tests/CI; the long-running mode keeps bots alive across cycles.

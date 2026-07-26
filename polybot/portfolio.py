@@ -5,9 +5,14 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from polybot.gamma import MarketMeta, select_market
+from polybot.core.config_validation import (
+    load_yaml_object,
+    reject_unknown_dataclass_keys,
+    reject_unknown_keys,
+    require_number,
+    require_text,
+)
 from polybot.core.execution import LiveClobTradingAdapter, TradingAdapter
 from polybot.core.operator import OperatorGate
 from polybot.iran.config import ExecutionConfig, IranBotConfig, MarketConfig, PositionConfig
@@ -37,9 +42,8 @@ class PortfolioConfig:
 
 
 def load_portfolio_config(path: Path) -> PortfolioConfig:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError(f"{path} must contain a YAML object")
+    raw = load_yaml_object(path)
+    reject_unknown_dataclass_keys(raw, PortfolioConfig, context=str(path))
     positions_raw = raw.get("positions", [])
     if not isinstance(positions_raw, list):
         raise ValueError("positions must be a list")
@@ -128,6 +132,11 @@ def print_portfolio_snapshot(config_path: Path, *, position_id: str | None = Non
 def _position_from_raw(raw: Any) -> PortfolioPosition:
     if not isinstance(raw, dict):
         raise ValueError("each position must be an object")
+    reject_unknown_keys(
+        raw,
+        {*PortfolioPosition.__dataclass_fields__, "market_slug"},
+        context="portfolio position",
+    )
     event_slug = raw.get("event_slug") or raw.get("market_slug")
     if not event_slug:
         raise ValueError("position requires event_slug")
@@ -137,7 +146,7 @@ def _position_from_raw(raw: Any) -> PortfolioPosition:
     held_side = _held_side(raw.get("held_side"))
     if held_side not in {"YES", "NO"}:
         raise ValueError(f"position {position_id} held_side must be YES or NO")
-    return PortfolioPosition(
+    position = PortfolioPosition(
         id=str(position_id),
         event_slug=str(event_slug),
         held_side=held_side,
@@ -153,6 +162,47 @@ def _position_from_raw(raw: Any) -> PortfolioPosition:
         max_no_usd_to_buy=float(raw.get("max_no_usd_to_buy") or 0.0),
         data_dir=str(raw.get("data_dir") or ""),
     )
+    _validate_portfolio_position(position)
+    return position
+
+
+def _validate_portfolio_position(position: PortfolioPosition) -> None:
+    require_text(position.id, "position.id")
+    require_text(position.event_slug, f"position {position.id}.event_slug")
+    require_text(position.held_side, f"position {position.id}.held_side")
+    require_text(position.strategy, f"position {position.id}.strategy")
+    if position.mode not in {"off", "alert_only", "dry_run", "live"}:
+        raise ValueError(
+            f"position {position.id}.mode must be off, alert_only, dry_run, or live"
+        )
+    for field_name in (
+        "target_leg",
+        "expected_question_contains",
+        "expected_yes_token_id",
+        "expected_no_token_id",
+        "data_dir",
+    ):
+        require_text(
+            getattr(position, field_name),
+            f"position {position.id}.{field_name}",
+            allow_empty=True,
+        )
+    if (
+        position.expected_yes_token_id
+        and position.expected_yes_token_id == position.expected_no_token_id
+    ):
+        raise ValueError(f"position {position.id} YES and NO token ids must be distinct")
+    for field_name in (
+        "max_yes_shares_to_sell",
+        "max_no_shares_to_sell",
+        "max_yes_usd_to_buy",
+        "max_no_usd_to_buy",
+    ):
+        require_number(
+            getattr(position, field_name),
+            f"position {position.id}.{field_name}",
+            minimum=0,
+        )
 
 
 def _held_side(value: Any) -> str:

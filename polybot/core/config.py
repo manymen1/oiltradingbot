@@ -51,6 +51,9 @@ class ClassifierConfig:
     max_escalations_per_hour: int = 4
     max_escalations_per_day: int = 20
     max_classifier_errors_per_hour: int = 3
+    # Fleet-generated bots point this at one shared WAL SQLite database.
+    # Empty preserves the standalone bot's local JSON counter.
+    budget_db_path: str = ""
     classify_feed_summaries: bool = False
     cli_binary: str = "claude"
     cli_timeout_seconds: int = 180
@@ -80,6 +83,17 @@ class SourcesConfig:
     alert_only_domains: list[str] = field(default_factory=lambda: list(DEFAULT_ALERT_ONLY_DOMAINS))
     poll_urls: list[str] = field(default_factory=list)
     feed_urls: list[str] = field(default_factory=list)
+    # Fingerprint of the generated SourcePlan. Fleet config reuse requires an
+    # exact match so registry/feed changes cannot leave a running bot
+    # subscribed to stale URLs under an unchanged market-rule hash.
+    source_plan_sha256: str = ""
+    # Fleet-generated bots consume RSS/Atom items from one shared SQLite
+    # fan-out service. Empty keeps hand-authored standalone bots on direct
+    # fetching for backwards compatibility. There is deliberately no direct
+    # fallback when this is set: a central outage must not turn N market
+    # processes into a publisher request storm.
+    central_feed_db: str = ""
+    central_feed_stale_after_seconds: float = 60.0
     feed_include_terms: list[str] = field(
         default_factory=lambda: [
             "iran",

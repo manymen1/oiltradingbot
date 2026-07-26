@@ -112,6 +112,10 @@ class BinaryExecutor:
         if self.portfolio is not None:
             self.portfolio.settle(proceeds_usd)
 
+    def _portfolio_reconcile_entry_basis(self, reserved_usd: float, actual_cost_usd: float | None) -> None:
+        if self.portfolio is not None and actual_cost_usd is not None:
+            self.portfolio.reconcile_entry_basis(reserved_usd, actual_cost_usd)
+
     def _portfolio_reduce_basis(self, proceeds_usd: float) -> None:
         if self.portfolio is not None and proceeds_usd > 0:
             self.portfolio.reduce_basis(proceeds_usd)
@@ -356,7 +360,12 @@ class BinaryExecutor:
             from polybot.core.confirmations import SecondSourceGate
 
             gate = SecondSourceGate(self.store.data_dir, entry.second_source_window_minutes)
-            if not gate.confirm(side, article.domain):
+            if not gate.confirm(
+                side,
+                article.domain,
+                origin_organization=article.origin_organization,
+                byline=article.byline,
+            ):
                 self.store.write(
                     "ENTRY_AWAITING_SECOND_SOURCE",
                     side=side,
@@ -417,6 +426,7 @@ class BinaryExecutor:
             [token], moment="post_execution", execution_id=journal.execution_id, action=decision.action, filled_shares=buy_fill.filled_shares
         )
         if buy_fill.filled_shares <= 0:
+            self._portfolio_settle(None)
             self._portfolio_release()
             self.store.write(
                 "ENTRY_UNFILLED",
@@ -430,12 +440,20 @@ class BinaryExecutor:
             self.journal.update(journal, "unfilled", side=side)
             return "ENTRY_UNFILLED"
 
+        actual_cost_usd = _paper_fill_cost(buy_result)
+        self._portfolio_reconcile_entry_basis(usd_budget, actual_cost_usd)
+        estimated_fill_usd = actual_cost_usd if actual_cost_usd is not None else buy_fill.filled_shares * ask
+        fill_fraction = min(1.0, estimated_fill_usd / usd_budget) if usd_budget > 0 else 0.0
+        partial = estimated_fill_usd < entry.min_fill_usd or fill_fraction < entry.min_fill_fraction
+        resulting_state = "PARTIALLY_ENTERED" if partial else "ENTERED"
         total_entries = self._record_entry_execution()
         self.store.write(
-            "ENTERED",
+            resulting_state,
             side=side,
             filled_shares=buy_fill.filled_shares,
             usd_budget=usd_budget,
+            estimated_fill_usd=estimated_fill_usd,
+            fill_fraction=fill_fraction,
             entry_max_price=cap,
             best_ask=ask,
             entry_count=total_entries,
@@ -449,7 +467,7 @@ class BinaryExecutor:
             reason=decision.reason,
         )
         self.notifier.notify(
-            f"Entered {side.upper()}; now defending it",
+            f"{'Partially entered' if partial else 'Entered'} {side.upper()}; now defending it",
             filled_shares=buy_fill.filled_shares,
             usd_budget=usd_budget,
             best_ask=ask,
@@ -457,13 +475,14 @@ class BinaryExecutor:
         self.journal.update(
             journal,
             "completed",
-            result="ENTERED",
+            result=resulting_state,
             held_side=side,
             filled_shares=buy_fill.filled_shares,
-            estimated_fill_usd=round(buy_fill.filled_shares * ask, 4),
+            estimated_fill_usd=round(estimated_fill_usd, 4),
+            fill_fraction=fill_fraction,
             usd_budget=usd_budget,
         )
-        return "ENTERED"
+        return resulting_state
 
     def _flip_buy_leg(
         self,
@@ -643,7 +662,7 @@ class BinaryExecutor:
         and only falls back to the configured min_price floor."""
         raw = sell_fill.raw
         if isinstance(raw, dict):
-            for key in ("avg_price", "average_price", "price", "avgPrice"):
+            for key in ("net_execution_price", "execution_price", "avg_price", "average_price", "price", "avgPrice"):
                 value = raw.get(key)
                 if value is None:
                     continue
@@ -662,6 +681,16 @@ def _effective_store(config: BinaryBotConfig, store: StateStore) -> StateStore:
     if config.execution.dry_run and store.data_dir.name != "dry_run":
         return StateStore(store.data_dir / "dry_run")
     return store
+
+
+def _paper_fill_cost(result: Any) -> float | None:
+    if not isinstance(result, dict) or result.get("paper") is not True:
+        return None
+    try:
+        value = float(result.get("total_cost_usd"))
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, value)
 
 
 def _decision_dict(decision: BinaryDecision) -> dict[str, Any]:

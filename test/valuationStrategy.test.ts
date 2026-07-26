@@ -25,7 +25,7 @@ import { buildLadderEntryPlans, ladderDirection } from "../src/valuation/strateg
 import { STRATEGY_LADDER_PAPER_SIZE_MULTIPLIERS, updateLadderPaperOrders, type LadderPaperOrder } from "../src/valuation/strategy/ladderPaper.ts";
 import { discoverValuationUniverse } from "../src/valuation/strategy/valuationUniverseDiscovery.ts";
 import { buildDailyReport } from "../src/valuation/strategy/dailyReport.ts";
-import { executeCandidate } from "../src/valuation/strategy/betaExecution.ts";
+import { executeCandidate, isZeroFillResponse } from "../src/valuation/strategy/betaExecution.ts";
 import { paperPromotionGateBlockers } from "../src/valuation/strategy/promotionGates.ts";
 
 test("config loader applies safe low-risk defaults", () => {
@@ -180,6 +180,25 @@ test("legacy threshold decision alerts ambiguous downside legs instead of tradin
   assert.equal(candidate.reason, "downside_or_ambiguous_direction_requires_ladder_validation");
 });
 
+test("group item down-arrow controls threshold direction", () => {
+  const config = testConfig();
+  const leg = legFixture({
+    question: "Will Stripe's valuation hit $170B by July 31?",
+    groupItemTitle: "↓$170B",
+    ruleText: "This market resolves Yes if the valuation reaches or exceeds the listed amount.",
+    threshold: 170_000_000_000,
+  });
+  const evidence = parseNpmEvidence({
+    latest_tape_d: { date: "2026-07-01", implied_valuation: 171_000_000_000 },
+  }, { name: "Anthropic", npmCompanyId: "company-a" });
+
+  const candidate = decideThresholdLeg(leg, evidence, quoteFixture(0.01), config);
+
+  assert.equal(candidate.direction, "DOWN");
+  assert.equal(candidate.liveAllowed, false);
+  assert.equal(candidate.reason, "downside_or_ambiguous_direction_requires_ladder_validation");
+});
+
 test("non-crossed threshold no-actions unless drift edge exists", () => {
   const config = testConfig();
   const leg = legFixture({ threshold: 1_100_000_000_000 });
@@ -288,6 +307,12 @@ test("live gate allows only source-confirmed stale YES policy", async () => {
     skipped: true,
     reason: "source_confirmed_stale_yes_only_live_policy",
   });
+});
+
+test("zero-fill responses are not accepted as posted execution", () => {
+  assert.equal(isZeroFillResponse({ rejected: true, zeroFill: true }), true);
+  assert.equal(isZeroFillResponse({ rejected: true, filledShares: 0 }), true);
+  assert.equal(isZeroFillResponse({ success: true, filledShares: 10 }), false);
 });
 
 test("paper promotion gates block forecast and relative-value live modes", () => {

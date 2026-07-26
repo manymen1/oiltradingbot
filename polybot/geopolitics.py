@@ -86,6 +86,31 @@ def main(argv: list[str] | None = None) -> int:
     discover_markets_parser.add_argument("--config", required=True)
     grade_markets_parser = sub.add_parser("grade-markets")
     grade_markets_parser.add_argument("--config", required=True)
+    compile_rules_parser = sub.add_parser("compile-rules")
+    compile_rules_parser.add_argument("--config", required=True)
+    compile_rules_parser.add_argument("--market")
+    inspect_rule_parser = sub.add_parser("inspect-rule")
+    inspect_rule_parser.add_argument("--config", required=True)
+    inspect_rule_parser.add_argument("--market", required=True)
+    validate_rule_parser = sub.add_parser("validate-rule")
+    validate_rule_parser.add_argument("--spec", required=True)
+    run_rule_market_parser = sub.add_parser("run-rule-market")
+    run_rule_market_parser.add_argument("--config", required=True)
+    run_rule_market_parser.add_argument("--market", required=True)
+    run_rule_market_parser.add_argument("--once", action="store_true")
+    run_rule_market_parser.add_argument("--live", action="store_true")
+    inspect_rule_market_parser = sub.add_parser("inspect-rule-market")
+    inspect_rule_market_parser.add_argument("--config", required=True)
+    inspect_rule_market_parser.add_argument("--market", required=True)
+    forward_completeness_parser = sub.add_parser(
+        "forward-completeness"
+    )
+    forward_completeness_parser.add_argument("--config", required=True)
+    forward_completeness_parser.add_argument("--market", required=True)
+    forward_timeline_parser = sub.add_parser("build-forward-timeline")
+    forward_timeline_parser.add_argument("--config", required=True)
+    forward_timeline_parser.add_argument("--market", required=True)
+    forward_timeline_parser.add_argument("--out")
     plan_sources_parser = sub.add_parser("plan-sources")
     plan_sources_parser.add_argument("--config", required=True)
     plan_sources_parser.add_argument("--market")
@@ -97,6 +122,12 @@ def main(argv: list[str] | None = None) -> int:
     emit_bot_config_parser.add_argument("--out")
     funnel_report_parser = sub.add_parser("funnel-report")
     funnel_report_parser.add_argument("--config", required=True)
+    priority_report_parser = sub.add_parser("priority-report")
+    priority_report_parser.add_argument("--config", required=True)
+    economics_report_parser = sub.add_parser("economics-report")
+    economics_report_parser.add_argument("--config", required=True)
+    profit_funnel_parser = sub.add_parser("profit-funnel")
+    profit_funnel_parser.add_argument("--config", required=True)
     run_discovery_parser = sub.add_parser("run-discovery")
     run_discovery_parser.add_argument("--config", required=True)
     run_discovery_parser.add_argument("--once", action="store_true")
@@ -113,6 +144,21 @@ def main(argv: list[str] | None = None) -> int:
     replay_parser.add_argument("--config", required=True)
     replay_parser.add_argument("--articles", required=True)
     replay_parser.add_argument("--limit", type=int, default=0)
+    replay_rule_parser = sub.add_parser("replay-rule-market")
+    replay_rule_parser.add_argument("--config", required=True)
+    replay_rule_parser.add_argument("--market", required=True)
+    replay_rule_parser.add_argument("--timeline", required=True)
+    replay_rule_parser.add_argument("--out")
+    replay_rule_parser.add_argument("--labels")
+    replay_rule_parser.add_argument(
+        "--dataset-role",
+        choices=["development", "frozen_oos", "forward"],
+        default="development",
+    )
+    promotion_report_parser = sub.add_parser("rule-promotion-report")
+    promotion_report_parser.add_argument("--config", required=True)
+    promotion_report_parser.add_argument("--runs", required=True)
+    promotion_report_parser.add_argument("--out")
     fleet_status_parser = sub.add_parser("fleet-status")
     fleet_status_parser.add_argument("--config", required=True)
     eval_classifier_parser = sub.add_parser("eval-classifier")
@@ -228,6 +274,52 @@ def main(argv: list[str] | None = None) -> int:
         from .discovery.runner import grade_markets_command
 
         return grade_markets_command(Path(args.config))
+    if args.command == "compile-rules":
+        from .discovery.runner import compile_rules_command
+
+        return compile_rules_command(
+            Path(args.config),
+            market_id=args.market,
+        )
+    if args.command == "inspect-rule":
+        from .discovery.runner import inspect_rule_command
+
+        return inspect_rule_command(Path(args.config), args.market)
+    if args.command == "validate-rule":
+        from .discovery.runner import validate_rule_command
+
+        return validate_rule_command(Path(args.spec))
+    if args.command == "run-rule-market":
+        from .rules.runner import run_generic_rule_market_command
+
+        return run_generic_rule_market_command(
+            Path(args.config),
+            args.market,
+            once=args.once,
+            live_flag=args.live,
+        )
+    if args.command == "inspect-rule-market":
+        from .rules.runner import inspect_generic_rule_market_command
+
+        return inspect_generic_rule_market_command(
+            Path(args.config),
+            args.market,
+        )
+    if args.command == "forward-completeness":
+        from .rules.forward import forward_completeness_command
+
+        return forward_completeness_command(
+            Path(args.config),
+            args.market,
+        )
+    if args.command == "build-forward-timeline":
+        from .rules.forward import build_forward_timeline_command
+
+        return build_forward_timeline_command(
+            Path(args.config),
+            args.market,
+            out=Path(args.out) if args.out else None,
+        )
     if args.command == "plan-sources":
         from .discovery.runner import plan_sources_command
 
@@ -244,6 +336,18 @@ def main(argv: list[str] | None = None) -> int:
         from .discovery.runner import funnel_report_command
 
         return funnel_report_command(Path(args.config))
+    if args.command == "priority-report":
+        from .discovery.profit_priority import priority_report_command
+
+        return priority_report_command(Path(args.config))
+    if args.command == "economics-report":
+        from .discovery.profit_priority import economics_report_command
+
+        return economics_report_command(Path(args.config))
+    if args.command == "profit-funnel":
+        from .discovery.profit_funnel import profit_funnel_command
+
+        return profit_funnel_command(Path(args.config))
     if args.command == "run-discovery":
         from .discovery.runner import run_discovery_command
 
@@ -264,6 +368,25 @@ def main(argv: list[str] | None = None) -> int:
         from .replay import replay_articles_command
 
         return replay_articles_command(Path(args.config), Path(args.articles), limit=args.limit)
+    if args.command == "replay-rule-market":
+        from .rules.replay import replay_rule_market_command
+
+        return replay_rule_market_command(
+            Path(args.config),
+            args.market,
+            Path(args.timeline),
+            out=Path(args.out) if args.out else None,
+            dataset_role=args.dataset_role,
+            labels_path=Path(args.labels) if args.labels else None,
+        )
+    if args.command == "rule-promotion-report":
+        from .rules.promotion import promotion_report_command
+
+        return promotion_report_command(
+            Path(args.config),
+            Path(args.runs),
+            out=Path(args.out) if args.out else None,
+        )
     if args.command == "fleet-status":
         from .discovery.runner import fleet_status_command
 
@@ -293,4 +416,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

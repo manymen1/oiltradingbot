@@ -605,6 +605,7 @@ def _yaml_config(tmp_path: Path, *, held_location: str, entry_block: str) -> Pat
           question: "Where will the meeting be?"
           deadline_date: "2026-09-30"
           held_location: "{held_location}"
+          resolution_rules: "Resolves to the venue of the qualifying meeting."
         outcomes:
           - name: qatar
             label: "Qatar"

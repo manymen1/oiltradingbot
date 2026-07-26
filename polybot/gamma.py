@@ -3,11 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
 
 from .config import SETTINGS
+from .core.fees import FeeScheduleSnapshot
 
 
 def _decode_json_list(value: Any, field: str) -> list[Any]:
@@ -51,6 +53,8 @@ class MarketMeta:
     accepting_orders: bool
     volume: float
     liquidity: float
+    fee_schedule: FeeScheduleSnapshot | None = None
+    fee_schedule_error: str = ""
     revisable_rule: bool = False
 
     @property
@@ -71,7 +75,12 @@ def fetch_event_by_slug(slug: str, gamma_host: str = SETTINGS.gamma_host) -> dic
     return data
 
 
-def market_from_gamma(event: dict[str, Any], market: dict[str, Any]) -> MarketMeta:
+def market_from_gamma(
+    event: dict[str, Any],
+    market: dict[str, Any],
+    *,
+    observed_at: str | None = None,
+) -> MarketMeta:
     token_ids = [str(item) for item in _decode_json_list(market.get("clobTokenIds"), "clobTokenIds")]
     if len(token_ids) != 2:
         raise ValueError(f"expected two clobTokenIds, got {token_ids!r}")
@@ -80,6 +89,19 @@ def market_from_gamma(event: dict[str, Any], market: dict[str, Any]) -> MarketMe
     tick = str(market.get("orderPriceMinTickSize") or market.get("tickSize") or "0.01")
     description = str(market.get("description") or "")
     source = str(market.get("resolutionSource") or event.get("resolutionSource") or "")
+    fee_schedule: FeeScheduleSnapshot | None = None
+    fee_schedule_error = ""
+    try:
+        fee_schedule = FeeScheduleSnapshot.from_gamma(
+            fees_enabled=market.get("feesEnabled"),
+            fee_schedule=market.get("feeSchedule"),
+            observed_at=(
+                observed_at
+                or datetime.now(timezone.utc).isoformat()
+            ),
+        )
+    except ValueError as exc:
+        fee_schedule_error = str(exc)
     return MarketMeta(
         event_slug=str(event.get("slug") or ""),
         market_slug=str(market.get("slug") or ""),
@@ -98,6 +120,8 @@ def market_from_gamma(event: dict[str, Any], market: dict[str, Any]) -> MarketMe
         accepting_orders=bool(market.get("acceptingOrders", False)),
         volume=_as_float(market.get("volume") or market.get("volumeNum")),
         liquidity=_as_float(market.get("liquidity")),
+        fee_schedule=fee_schedule,
+        fee_schedule_error=fee_schedule_error,
         revisable_rule=("revision" in description.lower() or "revisions" in description.lower()),
     )
 

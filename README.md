@@ -14,15 +14,43 @@ fill in `.env`, `make paper`. `make help` lists every command.
   `data_dir/holdings.json`, and then defends the entered leg with the same
   protection machinery (see `docs/geopolitics/location-bot-spec.md` and
   `configs/geopolitics/location-entry.example.yaml`).
-  The binary rule bot (`polybot/binary/`) generalizes entry+defense to ANY
-  single YES/NO market: paste the market's verbatim resolution rules into
+  The legacy binary rule bot (`polybot/binary/`) handles occurrence-style
+  single YES/NO markets: paste the market's verbatim resolution rules into
   config and the classifier judges every article strictly against them
-  (see `configs/geopolitics/binary-entry.example.yaml`);
+  (see `configs/geopolitics/binary-entry.example.yaml`). It is not the
+  generic executor for every possible geopolitical rule;
 - a market-first discovery pipeline under `polybot/discovery/` that
-  enumerates the live Polymarket universe, builds durable rule/context
-  packages, grades tradeability and ambiguity, derives per-market source
-  plans, prices estimated probability against executable quotes through a
-  portfolio allocator, and emits ready-to-review executor configs
+  enumerates the live Polymarket universe, compiles verbatim rules into
+  immutable two-pass `RuleSpec` contracts, grades tradeability and ambiguity,
+  derives role-aware per-market source plans, extracts rule-bound
+  `EvidenceClaim` facts with two-pass agreement, evaluates those facts with
+  deterministic family code, and records self-contained `DecisionProof`s.
+  Its generic market runner can enter or protect simulated positions for the
+  first three paper-execution families; it has no live execution surface. A
+  point-in-time replay interleaves archived evidence, executable depth, and
+  resolutions, while the family-specific promotion report gates classifier
+  agreement, proof completeness, quote latency, dynamic per-market fees, CLV,
+  human-labelled terminal precision, stressed P&L, and clustered net EV
+  without changing live configuration. Deadline silence never produces a
+  tradeable terminal-NO state, and incompatible model/prompt/evaluator/source/
+  fee/execution policies cannot be pooled for promotion.
+  Its profit-first forward recorder uses sharded persistent public market
+  WebSockets, full-depth delta reconstruction, exact first-seen articles,
+  end-to-end decision latency, 100ms-10s quote-survival sampling, automatic
+  resolution capture, completeness audits, and content-addressed replay
+  timelines. Audited keyset enumeration covers the full active universe;
+  conservative point-in-time profit scores allocate monitoring and classifier
+  resources while retaining a cold-start exploration quota. A reconciled
+  funnel attributes every loss from discovery through stressed resolved P&L.
+  Centralized direct publisher polling, a strict zero-model-call evidence
+  envelope, staged source-to-submission latency, and immutable public trade
+  prints support the next paper-only economics campaign.
+  Ranking grants no execution permission and the path remains paper-only with
+  no authenticated order method (see
+  `docs/geopolitics/profit-priority.md` and
+  `docs/geopolitics/fast-source-lane.md`).
+  The separate probability scanner still prices estimates against executable
+  quotes, and the pipeline can emit legacy executor configs during migration
   (see `docs/geopolitics/market-first-pipeline.md` and
   `configs/discovery/geopolitics.example.yaml`);
 - TypeScript valuation strategy tooling under `src/valuation/strategy/` and
@@ -34,11 +62,11 @@ units under `services/`, and shared Polymarket TypeScript bridges under
 `tools/polymarket-ts/`.
 
 Autonomous entry is confirmation-only: full source text, agreeing structured
-facts, a final qualifying venue, positive execution-adjusted edge, verified
-market mappings, and a reconciled wallet are all required. Live holdings are
-rebuilt from on-chain balances on startup and every cycle. Atomic holding
-records, execution journals, and a process lock cover restart and duplicate-
-process failure modes.
+facts, deterministic rule evaluation, positive execution-adjusted edge,
+verified market mappings, and reconciled holdings are all required. The
+rules-first path currently executes through the persistent depth-aware paper
+broker only. Existing live holdings continue to use the legacy binary/location
+executors, which rebuild balances from chain state on startup and every cycle.
 
 Optional anticipatory forecasting is implemented as a deterministic paper-only
 layer: configured priors plus source/evidence likelihoods produce normalized

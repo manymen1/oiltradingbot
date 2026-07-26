@@ -39,12 +39,22 @@ export async function executeCandidate(
   if (!await claimCandidateLock(config, candidate)) return { posted: false, skipped: true, reason: "duplicate_lock" };
   try {
     const response = await placeFakBuy(requiredToken(candidate), candidate.orderUsd, candidate.maxPrice);
+    if (isZeroFillResponse(response)) {
+      await releaseCandidateLock(config, candidate);
+      return { posted: false, skipped: true, reason: "zero_fill", response };
+    }
     await lockCandidate(config, candidate, response);
     return { posted: true, response };
   } catch (error) {
     await releaseCandidateLock(config, candidate);
     throw error;
   }
+}
+
+export function isZeroFillResponse(response: unknown): boolean {
+  if (!response || typeof response !== "object") return false;
+  const record = response as Record<string, unknown>;
+  return record.zeroFill === true || (record.rejected === true && Number(record.filledShares ?? record.filled_shares ?? 0) <= 0);
 }
 
 export function sourceConfirmedLivePolicyBlockers(candidate: ValuationCandidate, config: StrategyConfig): string[] {

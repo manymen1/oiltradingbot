@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from polybot.config import SETTINGS
-from polybot.core.budget import ClassifierBudgetStore
+from polybot.core.budget import ClassifierBudgetExceeded, ClassifierBudgetStore
 from polybot.core.execution import live_adapter_from_env
 from polybot.gamma import MarketMeta
 from polybot.log import log_event
@@ -304,7 +304,10 @@ class IranProtectionBot:
         self.article_store = ArticleStore(config.logs_dir / "articles.jsonl")
         self.notifier = TelegramNotifier()
         self.classifier = build_classifier(config.classifier, config.sources)
-        self.classifier_budget = ClassifierBudgetStore(self.store.data_dir)
+        self.classifier_budget = ClassifierBudgetStore(
+            self.store.data_dir,
+            Path(config.classifier.budget_db_path) if config.classifier.budget_db_path else None,
+        )
         self.executor = FlipExecutor(config, self.store, self.notifier, adapter)
         self.operator_gate = operator_gate
         self.live_requested = live_requested
@@ -408,11 +411,20 @@ class IranProtectionBot:
             self._notify_classifier_budget_block_once(block_reason)
             return decision
         try:
-            passes = [self._classify_with_budget(article, index) for index in range(max(1, self.config.classifier.passes))]
+            count = max(1, self.config.classifier.passes)
+            block_reason = self.classifier_budget.reserve_attempts(self.config.classifier, count)
+            if block_reason is not None:
+                raise ClassifierBudgetExceeded(block_reason)
+            passes = [self._classify_with_budget(article, index) for index in range(count)]
             if self.config.classifier.require_pass_agreement:
                 decision = classify_agreement(passes, held_side=self.config.market.held_side)
             else:
                 decision = final_decision(passes[0], held_side=self.config.market.held_side)
+        except ClassifierBudgetExceeded as exc:
+            decision = Decision("ALERT_ONLY", "3", exc.reason)
+            self._notify_classifier_budget_block_once(exc.reason)
+            self._log_decision(article, decision, gate=gate.__dict__)
+            return decision
         except Exception as exc:
             self.classifier_budget.record_error()
             decision = Decision("ALERT_ONLY", "3", f"classifier_error:{exc}")
@@ -594,7 +606,6 @@ class IranProtectionBot:
             "input_char_count": input_chars,
             "estimated_input_tokens": max(1, input_chars // 4),
         }
-        self.classifier_budget.record_attempt()
         log_event("iran_classifier_attempt", **telemetry)
         if hasattr(self.classifier, "last_usage"):
             setattr(self.classifier, "last_usage", None)

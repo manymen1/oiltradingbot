@@ -103,7 +103,7 @@ function candidateBase(
 }
 
 function thresholdDirection(leg: ValuationLeg): "UP" | "DOWN" | "UNKNOWN" {
-  const text = `${leg.question}\n${leg.ruleText}`.toLowerCase();
+  const text = `${leg.question}\n${leg.groupItemTitle ?? ""}\n${leg.ruleText}`.toLowerCase();
   // "(LOW)" legs and ↓-labeled strikes are falls-to markets even though the
   // question says "hit" and Polymarket's copy-pasted rule boilerplate says
   // "reaches or exceeds". Observed: the Stripe "hit (LOW) $150B" leg parsed

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from polybot.core.fees import FeeScheduleSnapshot
+
 # Lifecycle of a discovered market. Transitions are computed by the scorer
 # from the durable context record plus live tradeability; nothing downstream
 # (source plans, opportunity scans, config emission) runs for a market whose
@@ -48,6 +50,25 @@ class OutcomeRecord:
     active: bool = True
     closed: bool = False
     accepting_orders: bool = True
+    fee_schedule: FeeScheduleSnapshot | None = None
+    fee_schedule_error: str = ""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "OutcomeRecord":
+        if not isinstance(raw, dict):
+            raise ValueError("outcome record must be an object")
+        known = {
+            name: raw.get(name)
+            for name in cls.__dataclass_fields__  # type: ignore[attr-defined]
+            if name in raw and name != "fee_schedule"
+        }
+        schedule_raw = raw.get("fee_schedule")
+        schedule = (
+            FeeScheduleSnapshot.from_dict(schedule_raw)
+            if isinstance(schedule_raw, dict)
+            else None
+        )
+        return cls(fee_schedule=schedule, **known)  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
@@ -124,7 +145,11 @@ class MarketContext:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "MarketContext":
-        outcomes = [OutcomeRecord(**item) for item in raw.get("outcomes", []) if isinstance(item, dict)]
+        outcomes = [
+            OutcomeRecord.from_dict(item)
+            for item in raw.get("outcomes", [])
+            if isinstance(item, dict)
+        ]
         analysis_raw = raw.get("rule_analysis")
         analysis = RuleAnalysis.from_dict(analysis_raw) if isinstance(analysis_raw, dict) else None
         known = {
@@ -136,18 +161,52 @@ class MarketContext:
 
 
 @dataclass(frozen=True)
+class PlannedSource:
+    """One canonical source identity inside a market-specific source plan."""
+
+    source_id: str
+    organization_id: str
+    independence_group: str
+    domain: str
+    source_tier: str
+    feed_urls: list[str] = field(default_factory=list)
+    poll_urls: list[str] = field(default_factory=list)
+    roles: list[str] = field(default_factory=list)
+    timestamp_quality: str = "unknown"
+    syndication_notes: str = ""
+    required: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "PlannedSource":
+        known = {
+            name: raw.get(name)
+            for name in cls.__dataclass_fields__  # type: ignore[attr-defined]
+            if name in raw
+        }
+        return cls(**known)  # type: ignore[arg-type]
+
+
+@dataclass(frozen=True)
 class SourcePlan:
     """Per-market source plan derived from the context package: the system
     watches these sources because THIS market requires them."""
 
     market_id: str
     rule_text_sha256: str
+    rule_spec_sha256: str = ""
+    source_records: list[PlannedSource] = field(default_factory=list)
     feed_urls: list[str] = field(default_factory=list)
     poll_urls: list[str] = field(default_factory=list)
     auto_trade_domains: list[str] = field(default_factory=list)
     alert_only_domains: list[str] = field(default_factory=list)
     escalate_terms: list[str] = field(default_factory=list)
     rationale: dict[str, list[str]] = field(default_factory=dict)  # source -> why it was chosen
+    required_source_refs: list[str] = field(default_factory=list)
+    missing_required_source_refs: list[str] = field(default_factory=list)
+    minimum_independent_confirmations: int = 1
     created_at: str = ""
 
     def as_dict(self) -> dict[str, Any]:
@@ -155,8 +214,17 @@ class SourcePlan:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "SourcePlan":
-        known = {f: raw.get(f) for f in cls.__dataclass_fields__ if f in raw}  # type: ignore[attr-defined]
-        return cls(**known)  # type: ignore[arg-type]
+        records = [
+            PlannedSource.from_dict(item)
+            for item in raw.get("source_records", [])
+            if isinstance(item, dict)
+        ]
+        known = {
+            name: raw.get(name)
+            for name in cls.__dataclass_fields__  # type: ignore[attr-defined]
+            if name in raw and name != "source_records"
+        }
+        return cls(source_records=records, **known)  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
