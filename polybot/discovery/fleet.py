@@ -46,6 +46,47 @@ def set_fleet_mode_command(mode: str) -> int:
     return 0
 
 
+def recorded_book_contexts(
+    config: DiscoveryConfig,
+    all_contexts: list[MarketContext],
+    desired_contexts: list[MarketContext],
+) -> list[MarketContext]:
+    """Choose which markets the shared book service records.
+
+    Monitoring is a scarce-resource decision; recording is not. An order book
+    cannot be reconstructed after the fact, so a market excluded from
+    recording today is permanently missing from the research record -- and
+    ``desired_markets`` excludes everything outside TRADEABLE_STATES, i.e.
+    exactly the MONITOR_ONLY and ungraded markets whose gradings we most want
+    to test against data later.
+
+    ``desired_contexts`` is always returned in full and first: recording must
+    never regress for a market a paper worker depends on, so the cap can only
+    trim the extra non-monitored contexts, never displace a monitored one.
+    """
+    if not config.forward_recorder.record_all_contexts:
+        return desired_contexts
+    desired_ids = {context.market_id for context in desired_contexts}
+    extra = [
+        context
+        for context in all_contexts
+        if context.market_id not in desired_ids and not context.closed
+    ]
+    # Volume first: attention is where both stale quotes and crowd reaction
+    # live, and it is observable now without any forward data.
+    extra.sort(
+        key=lambda context: (
+            -(context.volume or 0.0),
+            -(context.liquidity or 0.0),
+            context.market_id,
+        )
+    )
+    cap = config.forward_recorder.max_recorded_markets
+    if cap > 0:
+        extra = extra[: max(0, cap - len(desired_contexts))]
+    return [*desired_contexts, *extra]
+
+
 class FleetManager:
     """Supervises one executor subprocess per eligible market.
 
@@ -676,15 +717,19 @@ def run_fleet_command(
                 _run_discovery_cycle(config_path, config, events_fetch=events_fetch, quotes=quotes, analyzer=analyzer, notifier=notifier, markets_fetch=markets_fetch)
             except Exception as exc:
                 log_event("fleet_discovery_cycle_error", error=str(exc))
-            desired_contexts = manager.desired_markets(
-                store.all_contexts()
-            )
+            cycle_contexts = store.all_contexts()
+            desired_contexts = manager.desired_markets(cycle_contexts)
             if forward_book_service is not None:
+                recorded_contexts = recorded_book_contexts(
+                    config,
+                    cycle_contexts,
+                    desired_contexts,
+                )
                 try:
                     if once:
-                        forward_book_service.poll_once(desired_contexts)
+                        forward_book_service.poll_once(recorded_contexts)
                     else:
-                        forward_book_service.sync(desired_contexts)
+                        forward_book_service.sync(recorded_contexts)
                 except Exception as exc:
                     log_event(
                         "forward_book_service_cycle_error",

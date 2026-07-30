@@ -237,6 +237,15 @@ forward_recorder:
   max_tokens_per_connection: 200
   rest_seed_workers: 8
   max_book_levels: 20
+  # Record books for every open market, not just the monitored/tradeable set.
+  # Order books cannot be rebuilt after the fact, so a market left unrecorded
+  # is permanently missing from the research record -- including the
+  # MONITOR_ONLY and ungraded markets whose gradings the data is meant to
+  # test. Recording confers no execution permission and never shrinks the
+  # monitored set. Raise max_recorded_markets off 0 if the open universe
+  # turns out large enough that connection count matters (200 tokens each).
+  record_all_contexts: true
+  max_recorded_markets: 0
   quote_survival_horizons_ms:
     - 100
     - 250

@@ -491,6 +491,19 @@ class ForwardRecorderConfig:
         default_factory=_default_quote_survival_horizons_ms
     )
     max_sample_lag_ms: int = 250
+    # Book recording normally follows the fleet's monitored set, which is
+    # filtered to TRADEABLE_STATES. That couples the recorded universe to
+    # grading thresholds that are themselves untested hypotheses, so a
+    # MONITOR_ONLY or not-yet-graded market is never recorded and its book
+    # history is unrecoverable afterwards. Setting this records every open
+    # context instead. Recording grants no execution permission: the recorded
+    # set is always a superset of the monitored set, never a substitute for it.
+    record_all_contexts: bool = False
+    # Safety valve for record_all_contexts against an unexpectedly large
+    # universe: 0 is uncapped, otherwise the extra (non-monitored) contexts
+    # are taken by descending volume until the cap. Monitored markets are
+    # always recorded and are never displaced by the cap.
+    max_recorded_markets: int = 0
 
 
 @dataclass(frozen=True)
@@ -1157,6 +1170,15 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
         "forward_recorder.max_book_levels",
         minimum=1,
         maximum=500,
+    )
+    require_bool(
+        recorder.record_all_contexts,
+        "forward_recorder.record_all_contexts",
+    )
+    require_integer(
+        recorder.max_recorded_markets,
+        "forward_recorder.max_recorded_markets",
+        minimum=0,
     )
     horizons = recorder.quote_survival_horizons_ms
     if not isinstance(horizons, list) or not horizons:
