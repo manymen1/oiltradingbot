@@ -1329,6 +1329,8 @@ def _run_discovery_cycle(
     # strict pass marks its missing RuleSpec as review-required.
     semantic_candidate_ids: set[str] | None = None
     if config.rule_compiler.enabled:
+        from .scope import market_scope_decision
+
         semantic_candidate_ids = {
             context.market_id
             for context in store.all_contexts()
@@ -1340,6 +1342,11 @@ def _run_discovery_cycle(
                     and context.state not in {"CLOSED", "REJECTED"}
                 )
             )
+            and market_scope_decision(
+                context,
+                config.universe,
+            ).status
+            == "IN_SCOPE"
         }
     # The descriptive pre-pass supplies RuleAnalysis and prioritization, but
     # cannot authorize execution. Only the strict post-plan pass does that.

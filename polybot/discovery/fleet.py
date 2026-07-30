@@ -174,10 +174,17 @@ class FleetManager:
 
         priorities = load_priority_snapshot(self.config.data_dir)
         eligible_states = {"LIVE_CONFIRMATION_ELIGIBLE"} if self.live else TRADEABLE_STATES
+        from .scope import market_scope_decision
+
         candidates = [
             context
             for context in contexts
             if context.state in eligible_states
+            and market_scope_decision(
+                context,
+                self.config.universe,
+            ).status
+            == "IN_SCOPE"
         ]
 
         def exploitation_key(context: MarketContext):

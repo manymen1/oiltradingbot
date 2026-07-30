@@ -525,6 +525,43 @@ def test_fleet_ranks_by_profit_priority_without_liquidity_bias(
     assert [c.market_id for c in desired] == [thin.market_id]
 
 
+def test_fleet_excludes_out_of_scope_tradeable_context(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _patch_roots(monkeypatch, tmp_path)
+    config = DiscoveryConfig(
+        fleet=FleetConfig(enabled=True),
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+    )
+    store = DiscoveryStore(config.data_dir)
+    geopolitical = grade_market(
+        _analyzed_context(_binary_event()),
+        ScoringConfig(allow_fixture_analysis_live=True),
+    )
+    sports = replace(
+        geopolitical,
+        market_id="world-cup",
+        event_title="World Cup winner",
+        question="Which team will win the World Cup?",
+        tags=["sports"],
+    )
+    manager = FleetManager(
+        config,
+        store,
+        live=False,
+        per_order_usd=50.0,
+        ledger_path=str(config.data_dir / "allocations.json"),
+    )
+
+    desired = manager.desired_markets([geopolitical, sports])
+
+    assert [context.market_id for context in desired] == [
+        geopolitical.market_id
+    ]
+
+
 def test_fleet_status_reports_positions_ledger_and_scan(tmp_path, monkeypatch, capsys) -> None:
     from datetime import datetime, timezone
 
