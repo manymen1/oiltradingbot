@@ -39,7 +39,7 @@ the universe.
 Five selected events were present in the complete Gamma enumeration but were
 discarded before context persistence:
 
-- four because the excluded term `nfl` matched the substring in `conflict`;
+- five because the excluded term `nfl` matched the substring in `conflict`;
 - one because `stock` matched the substring in `stockpile`.
 
 Exclusion matching now uses alphanumeric term boundaries. Exact sports/finance
