@@ -603,9 +603,14 @@ def _select_correlation_group_live_markets(
     return selected
 
 
-def plan_sources_command(config_path: Path, market_id: str | None = None) -> int:
+def plan_sources_command(
+    config_path: Path,
+    market_id: str | None = None,
+    *,
+    market_ids: set[str] | None = None,
+) -> int:
     """Stage 4: derive a per-market source plan from the context package for
-    every tradeable market (or one named market)."""
+    every tradeable market, one named market, or an explicitly scoped set."""
     config, store, _ = _load(config_path)
     rule_store = None
     if config.rule_compiler.enabled:
@@ -618,10 +623,18 @@ def plan_sources_command(config_path: Path, market_id: str | None = None) -> int
         else 0
     )
     contexts = store.all_contexts()
+    if market_id and market_ids is not None:
+        raise ValueError("market_id and market_ids are mutually exclusive")
     if market_id:
         contexts = [c for c in contexts if c.market_id == market_id]
         if not contexts:
             raise SystemExit(f"unknown market_id {market_id!r}")
+    elif market_ids is not None:
+        contexts = [
+            context
+            for context in contexts
+            if context.market_id in market_ids
+        ]
     planned, skipped = [], []
     for context in contexts:
         if (
@@ -1361,7 +1374,10 @@ def _run_discovery_cycle(
             config_path,
             market_ids=semantic_candidate_ids or set(),
         )
-        plan_sources_command(config_path)
+        plan_sources_command(
+            config_path,
+            market_ids=semantic_candidate_ids or set(),
+        )
         # Eligibility is computed only after both semantic assets exist.
         grade_markets_command(
             config_path,

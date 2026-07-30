@@ -133,6 +133,40 @@ def test_semantic_pregrade_is_scoped_and_does_not_authorize_without_assets(
     assert strict.state_reasons == ["valid_rule_spec_missing"]
 
 
+def test_semantic_source_planning_is_scoped(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    selected = replace(
+        context_for_case(_golden_rules()[0], strong_analysis=True),
+        state="DISCOVERED",
+    )
+    untouched = replace(
+        context_for_case(_golden_rules()[1], strong_analysis=True),
+        state="MONITOR_ONLY",
+        state_reasons=["manual_review"],
+    )
+    store.save_context(selected)
+    store.save_context(untouched)
+
+    plan_sources_command(
+        config_path,
+        market_ids={selected.market_id},
+    )
+    capsys.readouterr()
+
+    assert store.load_context(selected.market_id).state == (
+        "RULES_REVIEW_REQUIRED"
+    )
+    assert store.load_context(untouched.market_id).state == "MONITOR_ONLY"
+    assert store.load_context(untouched.market_id).state_reasons == [
+        "manual_review"
+    ]
+
+
 def test_compile_plan_grade_roundtrip_is_paper_only(
     tmp_path: Path,
     capsys,
