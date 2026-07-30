@@ -67,11 +67,34 @@ def recorded_book_contexts(
     if not config.forward_recorder.record_all_contexts:
         return desired_contexts
     desired_ids = {context.market_id for context in desired_contexts}
+    contexts_by_id = {
+        context.market_id: context
+        for context in all_contexts
+    }
+    priority_contexts = [
+        context
+        for market_id in config.rule_compiler.priority_market_ids
+        if (
+            (context := contexts_by_id.get(market_id)) is not None
+            and context.market_id not in desired_ids
+            and not context.closed
+            and context.state != "REJECTED"
+        )
+    ]
+    cap = config.forward_recorder.max_recorded_markets
+    if cap > 0:
+        priority_contexts = priority_contexts[
+            : max(0, cap - len(desired_contexts))
+        ]
+    reserved_ids = {
+        *desired_ids,
+        *(context.market_id for context in priority_contexts),
+    }
     from .scope import market_scope_decision
 
     extra = []
     for context in all_contexts:
-        if context.market_id in desired_ids:
+        if context.market_id in reserved_ids:
             continue
         decision = market_scope_decision(context, config.universe)
         if decision.status != "IN_SCOPE":
@@ -86,10 +109,14 @@ def recorded_book_contexts(
             context.market_id,
         )
     )
-    cap = config.forward_recorder.max_recorded_markets
     if cap > 0:
-        extra = extra[: max(0, cap - len(desired_contexts))]
-    return [*desired_contexts, *extra]
+        extra = extra[
+            : max(
+                0,
+                cap - len(desired_contexts) - len(priority_contexts),
+            )
+        ]
+    return [*desired_contexts, *priority_contexts, *extra]
 
 
 def _forward_books_disabled_status(

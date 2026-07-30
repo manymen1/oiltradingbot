@@ -10,9 +10,11 @@ paper/live, or execution gate. Raw book capture remains independent of semantic
 readiness.
 
 The maintained configuration lists the stable parent event slugs under
-`rule_compiler.priority_market_ids`. A pin grants one early bounded compiler
-attempt only. After an attempt, ordinary fair/profit-priority scheduling
-resumes so a difficult market cannot starve the universe.
+`rule_compiler.priority_market_ids`. After monitored contexts, open pins
+reserve recorder capacity before volume-filled extras. A pin also grants one
+early bounded compiler attempt only. After an attempt, ordinary
+fair/profit-priority scheduling resumes so a difficult market cannot starve
+the universe.
 
 ## Live Mapping
 
@@ -53,7 +55,10 @@ terms remain excluded, while words containing those character sequences do not.
 3. Put never-attempted pins ahead of ordinary compiler work.
 4. Remove the special advantage after the first attempt so failures cannot
    monopolize the per-cycle budget.
-5. Keep every existing scope, agreement, source, paper/live, and execution
+5. Reserve book-capture capacity for open pins after monitored contexts and
+   before volume-fill extras, without exceeding the configured cap unless the
+   monitored superset itself already exceeds it.
+6. Keep every existing scope, agreement, source, paper/live, and execution
    check unchanged.
 
 ### Phase 1 — Preserve per-leg truth

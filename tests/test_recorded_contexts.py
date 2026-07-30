@@ -15,6 +15,7 @@ from pathlib import Path
 from polybot.discovery.config import (
     DiscoveryConfig,
     ForwardRecorderConfig,
+    RuleCompilerConfig,
     RuleRunnerConfig,
     _validate_discovery_config,
     load_discovery_config,
@@ -50,10 +51,17 @@ def _context(
     )
 
 
-def _config(**recorder: object) -> DiscoveryConfig:
+def _config(
+    *,
+    priority_market_ids: list[str] | None = None,
+    **recorder: object,
+) -> DiscoveryConfig:
     # The recorder refuses to validate without the rules-first runner, so a
     # config used for validation has to enable both.
     return DiscoveryConfig(
+        rule_compiler=RuleCompilerConfig(
+            priority_market_ids=priority_market_ids or [],
+        ),
         rule_runner=RuleRunnerConfig(enabled=True),
         forward_recorder=ForwardRecorderConfig(enabled=True, **recorder),
     )
@@ -155,6 +163,41 @@ def test_cap_trims_extras_but_never_displaces_monitored_markets() -> None:
     # Cap of 3 leaves room for exactly one extra, and it is the higher-volume
     # one; both monitored markets survive.
     assert [c.market_id for c in recorded] == ["m1", "m2", "y"]
+
+
+def test_priority_context_reserves_capacity_before_volume_fill() -> None:
+    everything = [
+        _context("high", volume=900.0),
+        _context("selected", volume=1.0),
+        _context("mid", volume=100.0),
+    ]
+
+    recorded = recorded_book_contexts(
+        _config(
+            record_all_contexts=True,
+            max_recorded_markets=2,
+            priority_market_ids=["selected"],
+        ),
+        everything,
+        [],
+    )
+
+    assert [c.market_id for c in recorded] == ["selected", "high"]
+
+
+def test_priority_terminal_state_is_recorded_until_closed_flag_is_true() -> None:
+    selected = _context("selected", state="CLOSED", closed=False)
+
+    recorded = recorded_book_contexts(
+        _config(
+            record_all_contexts=True,
+            priority_market_ids=["selected"],
+        ),
+        [selected],
+        [],
+    )
+
+    assert [c.market_id for c in recorded] == ["selected"]
 
 
 def test_cap_below_monitored_count_still_keeps_every_monitored_market() -> None:
