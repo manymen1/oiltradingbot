@@ -659,6 +659,31 @@ def test_new_capture_session_retires_stale_active_session(
     assert store.capture_status()["active_capture_sessions"] == 1
 
 
+def test_capture_binding_ignores_operational_health_policy(
+    tmp_path: Path,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    store = ForwardRecorderStore(forward_recorder_db_path(config))
+
+    baseline = store.ensure_book_binding(
+        context,
+        config.forward_recorder,
+    )
+    changed_health = store.ensure_book_binding(
+        context,
+        replace(
+            config.forward_recorder,
+            health_startup_grace_seconds=5,
+            health_stale_after_seconds=15,
+            health_growth_window_seconds=20,
+            health_alert_cooldown_seconds=30,
+        ),
+    )
+
+    assert changed_health == baseline
+
+
 def test_service_startup_closes_orphaned_capture_sessions(
     tmp_path: Path,
 ) -> None:

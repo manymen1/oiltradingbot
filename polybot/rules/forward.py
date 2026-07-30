@@ -3294,7 +3294,14 @@ def _recorder_policy_payload(
     recorder_config: ForwardRecorderConfig,
 ) -> dict[str, Any]:
     payload = asdict(recorder_config)
-    payload.pop("db_path", None)
+    for operational_field in (
+        "db_path",
+        "health_startup_grace_seconds",
+        "health_stale_after_seconds",
+        "health_growth_window_seconds",
+        "health_alert_cooldown_seconds",
+    ):
+        payload.pop(operational_field, None)
     return payload
 
 
