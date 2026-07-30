@@ -412,6 +412,11 @@ class RuleCompilerConfig:
     # discovery config enables it explicitly.
     enabled: bool = False
     max_per_cycle: int = 10
+    # Markets explicitly selected by the operator receive one compilation
+    # attempt before ordinary profit-priority ordering. This is scheduling
+    # only: it does not bypass scope, semantic agreement, source, paper/live,
+    # or execution gates.
+    priority_market_ids: list[str] = field(default_factory=list)
     # Empty resolves to <data_dir>/rules.sqlite3.
     db_path: str = ""
     paper_families: list[str] = field(default_factory=_default_rule_families)
@@ -973,6 +978,17 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
         "rule_compiler.max_per_cycle",
         minimum=1,
     )
+    require_string_list(
+        config.rule_compiler.priority_market_ids,
+        "rule_compiler.priority_market_ids",
+    )
+    priority_market_ids = [
+        item.strip() for item in config.rule_compiler.priority_market_ids
+    ]
+    if len(priority_market_ids) != len(set(priority_market_ids)):
+        raise ValueError(
+            "rule_compiler.priority_market_ids must not contain duplicates"
+        )
     require_text(
         config.rule_compiler.db_path,
         "rule_compiler.db_path",

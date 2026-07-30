@@ -353,14 +353,33 @@ def compile_rules_command(
 
     priorities = load_priority_snapshot(config.data_dir)
     compilation_pass_counts = rule_store.compilation_pass_counts()
+    configured_priority = {
+        market_id: index
+        for index, market_id in enumerate(
+            config.rule_compiler.priority_market_ids
+        )
+    }
 
     def compiler_selection_key(item: MarketContext) -> tuple[Any, ...]:
         priority_key = priority_sort_key(item, priorities)
+        pass_count = compilation_pass_counts.get(
+            (item.market_id, item.rule_text_sha256),
+            0,
+        )
+        configured_index = configured_priority.get(item.market_id)
         return (
+            # An explicit pin guarantees the first attempt happens before
+            # ordinary markets, but an already-attempted failing pin cannot
+            # starve the rest of the universe forever.
+            0
+            if configured_index is not None and pass_count == 0
+            else 1,
             priority_key[0],
-            compilation_pass_counts.get(
-                (item.market_id, item.rule_text_sha256),
-                0,
+            pass_count,
+            (
+                configured_index
+                if configured_index is not None
+                else len(configured_priority)
             ),
             *priority_key[1:],
         )

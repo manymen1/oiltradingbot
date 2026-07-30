@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -336,7 +337,10 @@ def is_geopolitical_candidate(event: dict[str, Any], universe: UniverseConfig) -
     tags = _event_tags(event)
 
     for term in universe.exclude_keywords:
-        if term.lower() in text:
+        # Exclusions are category words, not arbitrary substrings. Raw
+        # substring matching made "nfl" reject "conflict" and "stock" reject
+        # "stockpile", silently dropping real geopolitical markets.
+        if _contains_excluded_term(text, term):
             return False, f"excluded_keyword:{term}"
     if any(tag in universe.include_tags for tag in tags):
         return True, f"tag_match:{','.join(sorted(set(tags) & set(universe.include_tags)))}"
@@ -344,6 +348,16 @@ def is_geopolitical_candidate(event: dict[str, Any], universe: UniverseConfig) -
         if term.lower() in text:
             return True, f"keyword_match:{term}"
     return False, "no_geopolitical_signal"
+
+
+def _contains_excluded_term(text: str, term: str) -> bool:
+    normalized = term.strip().casefold()
+    if not normalized:
+        return False
+    return re.search(
+        rf"(?<![a-z0-9]){re.escape(normalized)}(?![a-z0-9])",
+        text,
+    ) is not None
 
 
 def _event_tags(event: dict[str, Any]) -> list[str]:

@@ -120,6 +120,16 @@ def test_geopolitical_filter_accepts_tags_and_keywords() -> None:
     assert reason == "excluded_keyword:nba"
 
 
+def test_geopolitical_filter_does_not_match_exclusions_inside_words() -> None:
+    event = _grouped_event()
+    event["description"] = (
+        "The conflict concerns a nuclear stockpile and diplomatic talks."
+    )
+    ok, reason = is_geopolitical_candidate(event, _universe())
+    assert ok
+    assert reason.startswith("tag_match")
+
+
 def test_context_from_grouped_event() -> None:
     context = context_from_event(_grouped_event())
     assert context is not None

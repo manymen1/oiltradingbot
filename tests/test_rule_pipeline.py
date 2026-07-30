@@ -29,8 +29,21 @@ from polybot.rules.store import RuleStore
 from test_rule_contracts import _golden_rules, context_for_case
 
 
-def _config(tmp_path: Path, *, max_per_cycle: int = 10) -> Path:
+def _config(
+    tmp_path: Path,
+    *,
+    max_per_cycle: int = 10,
+    priority_market_ids: list[str] | None = None,
+) -> Path:
     path = tmp_path / "discovery.yaml"
+    priority_yaml = (
+        "\n" + "\n".join(
+            f"    - {market_id}"
+            for market_id in priority_market_ids
+        )
+        if priority_market_ids
+        else " []"
+    )
     path.write_text(
         f"""
 data_dir: {tmp_path / "data"}
@@ -42,6 +55,7 @@ classifier_budget:
 rule_compiler:
   enabled: true
   max_per_cycle: {max_per_cycle}
+  priority_market_ids:{priority_yaml}
   db_path: {tmp_path / "rules.sqlite3"}
   paper_families:
     - OCCURRENCE_BEFORE_DEADLINE
@@ -58,6 +72,44 @@ scoring:
         encoding="utf-8",
     )
     return path
+
+
+def test_explicit_priority_gets_first_attempt_without_starving_unattempted(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    contexts = [
+        context_for_case(case, strong_analysis=True)
+        for case in _golden_rules()[:3]
+    ]
+    priority_id = contexts[2].market_id
+    config_path = _config(
+        tmp_path,
+        max_per_cycle=1,
+        priority_market_ids=[priority_id],
+    )
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    for context in contexts:
+        store.save_context(context)
+
+    assert compile_rules_command(config_path) == 0
+    first = json.loads(capsys.readouterr().out)
+    compiled = [
+        item["market_id"]
+        for item in first["results"]
+        if item["status"] in {"COMPILED", "CACHED"}
+    ]
+    assert compiled == [priority_id]
+
+    # Once attempted, the pin no longer outranks never-attempted work.
+    assert compile_rules_command(config_path) == 0
+    second = json.loads(capsys.readouterr().out)
+    assert any(
+        item["market_id"] != priority_id
+        and item["status"] == "COMPILED"
+        for item in second["results"]
+    )
 
 
 def test_compile_cycle_caps_only_new_specs_and_cached_specs_are_free(
