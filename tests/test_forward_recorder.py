@@ -1001,6 +1001,107 @@ def test_live_status_snapshot_contains_connection_and_seed_metrics(
     service.stop()
 
 
+def test_live_health_alerts_once_and_reports_recovery(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    config = replace(
+        config,
+        forward_recorder=replace(
+            config.forward_recorder,
+            rest_seed=False,
+            health_startup_grace_seconds=0,
+            health_stale_after_seconds=1,
+            health_growth_window_seconds=1,
+            health_alert_cooldown_seconds=300,
+        ),
+    )
+    connection = {"connected": False}
+
+    class HealthBookCache:
+        def __init__(self, token_ids, **_kwargs):
+            self.token_ids = list(token_ids)
+
+        def add_listener(self, _listener):
+            return None
+
+        def start_ws(self):
+            return None
+
+        def stop_ws(self):
+            return None
+
+        def connection_state(self):
+            return {
+                "connected": connection["connected"],
+                "reconnects": 0,
+            }
+
+    class Notifier:
+        def __init__(self):
+            self.messages = []
+
+        def notify(self, message, **fields):
+            self.messages.append((message, fields))
+
+    monkeypatch.setattr(
+        "polybot.rules.forward.BookCache",
+        HealthBookCache,
+    )
+    monkeypatch.setattr(
+        ForwardBookService,
+        "_start_status_publisher",
+        lambda self: None,
+    )
+    notifier = Notifier()
+    service = ForwardBookService(config, notifier=notifier)
+    service.sync([context])
+    service._sync_started_monotonic -= 2
+
+    unhealthy = service.status()
+    assert unhealthy["healthy"] is False
+    assert "disconnected_shards:0/1" in unhealthy["health_blockers"]
+    assert "no_book_events" in unhealthy["health_blockers"]
+    assert "book_event_growth_stalled" in unhealthy["health_blockers"]
+    service._maybe_alert_health(unhealthy)
+    service._maybe_alert_health(unhealthy)
+    assert [item[0] for item in notifier.messages] == [
+        "Forward recorder unhealthy"
+    ]
+
+    connection["connected"] = True
+    token_id = context.outcomes[0].yes_token_id
+    now = datetime.now(timezone.utc).isoformat()
+    service._on_stream_event(
+        {
+            "event_type": "book",
+            "token_id": token_id,
+            "received_at": now,
+            "source_at": now,
+            "snapshot": _snapshot(
+                token_id,
+                now,
+                bid=0.40,
+                ask=0.60,
+            ),
+        },
+        generation=service._generation,
+    )
+    recovered = service.status()
+    assert recovered["healthy"] is True
+    assert recovered["book_events_since_sync"] == 1
+    assert recovered["book_event_rate_per_minute"] > 0
+    assert recovered["latest_book_age_seconds"] is not None
+    service._maybe_alert_health(recovered)
+    assert [item[0] for item in notifier.messages] == [
+        "Forward recorder unhealthy",
+        "Forward recorder recovered",
+    ]
+    service.stop()
+
+
 def test_gamma_resolution_sync_is_immutable_and_automatic(
     tmp_path: Path,
 ) -> None:
@@ -1117,7 +1218,27 @@ forward_recorder:
     with pytest.raises(ValueError, match="requires rule_runner"):
         load_discovery_config(no_runner)
 
+    bad_health = tmp_path / "bad-health.yaml"
+    bad_health.write_text(
+        """
+rule_compiler:
+  enabled: true
+rule_runner:
+  enabled: true
+forward_recorder:
+  enabled: true
+  health_stale_after_seconds: 0
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValueError,
+        match="health_stale_after_seconds",
+    ):
+        load_discovery_config(bad_health)
+
     assert (
         ForwardRecorderConfig().quote_survival_horizons_ms
         == [100, 250, 500, 1000, 2000, 5000, 10000]
     )
+    assert ForwardRecorderConfig().health_stale_after_seconds == 60.0

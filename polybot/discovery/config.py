@@ -491,6 +491,13 @@ class ForwardRecorderConfig:
         default_factory=_default_quote_survival_horizons_ms
     )
     max_sample_lag_ms: int = 250
+    # Live soak-health policy. The service reports these checks in every
+    # status snapshot and emits transition/cooldown alerts without granting
+    # any execution permission.
+    health_startup_grace_seconds: float = 30.0
+    health_stale_after_seconds: float = 60.0
+    health_growth_window_seconds: float = 60.0
+    health_alert_cooldown_seconds: float = 300.0
     # Book recording normally follows the fleet's monitored set, which is
     # filtered to TRADEABLE_STATES. That couples the recorded universe to
     # grading thresholds that are themselves untested hypotheses, so a
@@ -1202,6 +1209,22 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
         minimum=1,
         maximum=60_000,
     )
+    require_number(
+        recorder.health_startup_grace_seconds,
+        "forward_recorder.health_startup_grace_seconds",
+        minimum=0,
+    )
+    for field_name in (
+        "health_stale_after_seconds",
+        "health_growth_window_seconds",
+        "health_alert_cooldown_seconds",
+    ):
+        require_number(
+            getattr(recorder, field_name),
+            f"forward_recorder.{field_name}",
+            minimum=0,
+            minimum_exclusive=True,
+        )
     if recorder.enabled and not config.rule_runner.enabled:
         raise ValueError(
             "forward_recorder.enabled requires rule_runner.enabled"

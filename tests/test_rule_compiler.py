@@ -3,9 +3,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from polybot.core.budget import ClassifierBudgetStore
 from polybot.core.config import ClassifierConfig
-from polybot.rules.compiler import RuleCompiler, fixture_semantics
+from polybot.rules.compiler import (
+    RuleCompiler,
+    _critical_consensus_payload,
+    _repair_semantic_payload,
+    compilation_prompt,
+    fixture_semantics,
+)
+from polybot.rules.contracts import RuleSemantics
 from polybot.rules.store import RuleStore
 from test_rule_contracts import _golden_rules, context_for_case
 
@@ -138,6 +147,38 @@ def test_compiler_reserves_both_passes_atomically(tmp_path: Path) -> None:
     assert budget.status(limits)["attempts_this_hour"] == 0
 
 
+def test_transport_failure_is_unavailable_not_semantic_invalid(
+    tmp_path: Path,
+) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    limits = ClassifierConfig(
+        provider="codex_cli",
+        max_escalations_per_hour=2,
+        max_escalations_per_day=2,
+    )
+    budget = ClassifierBudgetStore(
+        tmp_path,
+        tmp_path / "budget.sqlite3",
+    )
+
+    def unavailable(_prompt: str) -> str:
+        raise RuntimeError(
+            "codex CLI exited 1: 401 Unauthorized: session has ended"
+        )
+
+    result = RuleCompiler(
+        limits,
+        RuleStore(tmp_path / "rules.sqlite3"),
+        budget_store=budget,
+        budget_limits=limits,
+        cli_runner=unavailable,
+    ).compile(context)
+
+    assert result.status == "UNAVAILABLE"
+    assert result.spec is None
+    assert budget.status(limits)["errors_this_hour"] == 0
+
+
 def test_model_cannot_inject_market_or_trade_fields(tmp_path: Path) -> None:
     context = context_for_case(_golden_rules()[0], strong_analysis=True)
     payload = fixture_semantics(context).as_dict()
@@ -168,3 +209,159 @@ def test_fixture_compiler_is_two_pass_but_cost_free(tmp_path: Path) -> None:
             context.rule_text_sha256,
         )
     ) == 2
+
+
+@pytest.mark.parametrize(
+    ("market_id", "comparator", "start_iso", "timezone_name"),
+    [
+        (
+            "democratic-presidential-nominee-2028",
+            "OCCURRED",
+            "unspecified",
+            "UTC",
+        ),
+        (
+            "republican-presidential-nominee-2028",
+            "OCCURRED",
+            "",
+            "UTC",
+        ),
+        (
+            "next-french-presidential-election",
+            "EQUALS",
+            "unbounded",
+            "America/New_York",
+        ),
+        (
+            "next-uk-prime-minister-in-2026-122",
+            "EQUALS",
+            "",
+            "ET",
+        ),
+        (
+            "who-will-be-the-next-prime-minister-of-israel-after-the-next-election",
+            "EQUALS",
+            "unknown",
+            "UTC",
+        ),
+    ],
+)
+def test_observed_real_market_payload_repairs_are_bounded(
+    market_id: str,
+    comparator: str,
+    start_iso: str,
+    timezone_name: str,
+) -> None:
+    context = context_for_case(_golden_rules()[1], strong_analysis=True)
+    payload = fixture_semantics(context).as_dict()
+    payload["rule_family"] = "CATEGORICAL_EXCLUSIVE"
+    payload["predicate"]["comparator"] = comparator
+    payload["window"]["start_iso"] = start_iso
+    payload["window"]["timezone"] = timezone_name
+
+    repaired, notes = _repair_semantic_payload(payload)
+    semantics = RuleSemantics.from_dict(repaired)
+
+    assert semantics.rule_family == "CATEGORICAL_EXCLUSIVE", market_id
+    assert semantics.predicate.comparator == "EQUALS"
+    assert semantics.window.start_iso == ""
+    if timezone_name == "ET":
+        assert semantics.window.timezone == "America/New_York"
+    assert notes
+
+
+def test_observed_venezuela_inverted_window_is_not_repaired() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    payload = fixture_semantics(context).as_dict()
+    payload["window"]["start_iso"] = "2029-01-01T00:00:00+00:00"
+    payload["window"]["end_iso"] = "2026-12-31T23:59:59+00:00"
+
+    repaired, notes = _repair_semantic_payload(payload)
+
+    assert notes == []
+    with pytest.raises(ValueError, match="end_iso must be after"):
+        RuleSemantics.from_dict(repaired)
+
+
+@pytest.mark.parametrize(
+    ("market_id", "field"),
+    [
+        ("presidential-election-winner-2028", "qualifying_conditions"),
+        ("brazil-presidential-election", "exclusions"),
+        (
+            "california-governor-election-2026",
+            "terminal_yes",
+        ),
+        ("nobel-peace-prize-winner-2026-139", "source_roles"),
+    ],
+)
+def test_observed_real_market_critical_disagreements_remain_blocking(
+    market_id: str,
+    field: str,
+) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    left = fixture_semantics(context).normalized_dict()
+    right = json.loads(json.dumps(left))
+    if field == "qualifying_conditions":
+        right[field] = ["different qualifying condition"]
+    elif field == "exclusions":
+        right[field] = ["different exclusion"]
+    elif field == "terminal_yes":
+        right["resolution_policy"][field] = ["different terminal state"]
+    else:
+        right["source_requirements"] = [
+            {
+                "source_ref": "example authority",
+                "roles": ["SETTLEMENT"],
+                "required": True,
+                "rationale": "pass two wording",
+            }
+        ]
+
+    assert (
+        _critical_consensus_payload(left)
+        != _critical_consensus_payload(right)
+    ), market_id
+
+
+def test_source_rationale_wording_is_noncritical_consensus(
+    tmp_path: Path,
+) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    base = fixture_semantics(context).as_dict()
+    base["source_requirements"] = [
+        {
+            "source_ref": "example authority",
+            "roles": ["SETTLEMENT"],
+            "required": True,
+            "rationale": "first explanatory wording",
+        }
+    ]
+
+    def runner(prompt: str) -> str:
+        payload = json.loads(json.dumps(base))
+        if "pass: 2 of 2" in prompt:
+            payload["source_requirements"][0]["rationale"] = (
+                "second explanatory wording"
+            )
+        return _envelope(payload)
+
+    result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=runner,
+    ).compile(context)
+
+    assert result.status == "COMPILED"
+    assert result.spec is not None
+
+
+def test_compilation_prompt_names_closed_validation_constraints() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+
+    prompt = compilation_prompt(context, pass_index=1)
+
+    assert "CATEGORICAL_EXCLUSIVE=EQUALS" in prompt
+    assert "empty string" in prompt
+    assert "IANA" in prompt
+    assert "never ET/EST/EDT" in prompt

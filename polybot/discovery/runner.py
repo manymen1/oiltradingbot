@@ -352,13 +352,27 @@ def compile_rules_command(
     from .profit_priority import load_priority_snapshot, priority_sort_key
 
     priorities = load_priority_snapshot(config.data_dir)
+    compilation_pass_counts = rule_store.compilation_pass_counts()
+
+    def compiler_selection_key(item: MarketContext) -> tuple[Any, ...]:
+        priority_key = priority_sort_key(item, priorities)
+        return (
+            priority_key[0],
+            compilation_pass_counts.get(
+                (item.market_id, item.rule_text_sha256),
+                0,
+            ),
+            *priority_key[1:],
+        )
+
     contexts = sorted(
         contexts,
-        key=lambda item: priority_sort_key(item, priorities),
+        key=compiler_selection_key,
     )
 
     results: list[dict[str, Any]] = []
     new_compilations = 0
+    compiler_unavailable_reason = ""
     for context in contexts:
         if len(context.rule_text.strip()) < config.scoring.min_rule_text_chars:
             _mark_rule_review_required(
@@ -390,6 +404,18 @@ def compile_rules_command(
                     "market_id": context.market_id,
                     "status": "ERROR",
                     "reason": str(exc),
+                }
+            )
+            continue
+        if cached is None and compiler_unavailable_reason:
+            results.append(
+                {
+                    "market_id": context.market_id,
+                    "status": "DEFERRED",
+                    "reason": (
+                        "rule_compiler_unavailable_cycle:"
+                        f"{compiler_unavailable_reason}"
+                    ),
                 }
             )
             continue
@@ -429,7 +455,15 @@ def compile_rules_command(
             else:
                 result = compile_method(context)
             results.append(result.as_dict())
-            if result.spec is None:
+            if result.status in {"UNAVAILABLE", "BUDGET_BLOCKED"}:
+                compiler_unavailable_reason = result.reason
+                log_event(
+                    "rule_compiler_unavailable_cycle",
+                    market_id=context.market_id,
+                    status=result.status,
+                    error=result.reason,
+                )
+            elif result.spec is None:
                 _mark_rule_review_required(
                     store,
                     context,
@@ -456,13 +490,39 @@ def compile_rules_command(
     for item in results:
         selected_market_id = str(item.get("market_id") or "")
         priority = priorities.get(selected_market_id)
+        selected_context = next(
+            (
+                context
+                for context in contexts
+                if context.market_id == selected_market_id
+            ),
+            None,
+        )
+        prior_passes = (
+            compilation_pass_counts.get(
+                (
+                    selected_context.market_id,
+                    selected_context.rule_text_sha256,
+                ),
+                0,
+            )
+            if selected_context is not None
+            else 0
+        )
         item["selection_reason"] = (
             "cached_validation"
             if item.get("status") == "CACHED"
+            else "compiler_unavailable_circuit_breaker"
+            if str(item.get("reason") or "").startswith(
+                "rule_compiler_unavailable_cycle:"
+            )
             else "profit_priority"
             if priority is not None
+            else "least_attempted_rotation"
+            if prior_passes
             else "deterministic_age_market_fallback"
         )
+        item["prior_compilation_passes"] = prior_passes
         item["monitor_priority"] = (
             priority.monitor_priority if priority is not None else None
         )
@@ -485,7 +545,13 @@ def compile_rules_command(
             1
             for item in results
             if item.get("status")
-            in {"INVALID", "DISAGREEMENT", "BUDGET_BLOCKED", "ERROR"}
+            in {
+                "INVALID",
+                "DISAGREEMENT",
+                "BUDGET_BLOCKED",
+                "UNAVAILABLE",
+                "ERROR",
+            }
         ),
         "results": results,
     }

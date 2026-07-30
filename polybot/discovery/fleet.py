@@ -774,7 +774,10 @@ def run_fleet_command(
     ):
         from polybot.rules.forward import ForwardBookService
 
-        forward_book_service = ForwardBookService(config)
+        forward_book_service = ForwardBookService(
+            config,
+            notifier=notifier,
+        )
     try:
         if forward_book_service is None:
             forward_books_status = _forward_books_disabled_status(config)

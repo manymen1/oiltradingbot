@@ -258,6 +258,10 @@ forward_recorder:
     - 5000
     - 10000
   max_sample_lag_ms: 250
+  health_startup_grace_seconds: 30.0
+  health_stale_after_seconds: 60.0
+  health_growth_window_seconds: 60.0
+  health_alert_cooldown_seconds: 300.0
 
 allocator:
   per_order_usd: 50.0

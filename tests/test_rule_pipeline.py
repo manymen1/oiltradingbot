@@ -18,7 +18,12 @@ from polybot.discovery.runner import (
 from polybot.discovery.sources import build_source_plan
 from polybot.discovery.store import DiscoveryStore
 from polybot.discovery.types import MarketContext
-from polybot.rules.compiler import fixture_semantics
+from polybot.core.config import ClassifierConfig
+from polybot.rules.compiler import (
+    CompilationResult,
+    RuleCompiler,
+    fixture_semantics,
+)
 from polybot.rules.contracts import RuleSpec
 from polybot.rules.store import RuleStore
 from test_rule_contracts import _golden_rules, context_for_case
@@ -89,6 +94,111 @@ def test_compile_cycle_caps_only_new_specs_and_cached_specs_are_free(
     assert second["cached"] == 1
     assert second["compiled"] == 1
     assert second["deferred"] == 0
+
+
+def test_compile_cycle_rotates_failed_markets_behind_unattempted_markets(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path, max_per_cycle=1)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    contexts = [
+        context_for_case(case, strong_analysis=True)
+        for case in _golden_rules()[:3]
+    ]
+    for context in contexts:
+        store.save_context(context)
+    invalid = fixture_semantics(contexts[0]).as_dict()
+    invalid["window"]["end_iso"] = "not-an-iso-date"
+    compiler = RuleCompiler(
+        ClassifierConfig(provider="codex_cli"),
+        RuleStore(rule_store_db_path(config)),
+        cli_runner=lambda _prompt: json.dumps(invalid),
+    )
+    market_ids = {context.market_id for context in contexts}
+
+    compile_rules_command(
+        config_path,
+        compiler=compiler,
+        market_ids=market_ids,
+    )
+    first = json.loads(capsys.readouterr().out)
+    first_attempted = next(
+        item["market_id"]
+        for item in first["results"]
+        if item["status"] != "DEFERRED"
+    )
+
+    compile_rules_command(
+        config_path,
+        compiler=compiler,
+        market_ids=market_ids,
+    )
+    second = json.loads(capsys.readouterr().out)
+    second_attempted = next(
+        item["market_id"]
+        for item in second["results"]
+        if item["status"] != "DEFERRED"
+    )
+
+    assert second_attempted != first_attempted
+    assert next(
+        item
+        for item in second["results"]
+        if item["market_id"] == second_attempted
+    )["prior_compilation_passes"] == 0
+
+
+def test_compile_cycle_stops_after_transport_unavailable(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    contexts = [
+        replace(
+            context_for_case(case, strong_analysis=True),
+            state="DISCOVERED",
+        )
+        for case in _golden_rules()[:3]
+    ]
+    for context in contexts:
+        store.save_context(context)
+
+    class UnavailableCompiler:
+        def __init__(self):
+            self.calls = 0
+
+        def compile(self, context, **_kwargs):
+            self.calls += 1
+            return CompilationResult(
+                market_id=context.market_id,
+                status="UNAVAILABLE",
+                reason="codex CLI exited 1: 401 Unauthorized",
+            )
+
+    compiler = UnavailableCompiler()
+    compile_rules_command(
+        config_path,
+        compiler=compiler,
+        market_ids={context.market_id for context in contexts},
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert compiler.calls == 1
+    assert result["failed"] == 1
+    assert result["deferred"] == 2
+    assert {
+        item["selection_reason"]
+        for item in result["results"]
+        if item["status"] == "DEFERRED"
+    } == {"compiler_unavailable_circuit_breaker"}
+    assert all(
+        store.load_context(context.market_id).state == "DISCOVERED"
+        for context in contexts
+    )
 
 
 def test_semantic_pregrade_is_scoped_and_does_not_authorize_without_assets(

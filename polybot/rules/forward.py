@@ -1868,7 +1868,12 @@ class ForwardRecorderStore:
 class ForwardBookService:
     """Fleet-wide sharded market stream feeding every paper worker."""
 
-    def __init__(self, config: DiscoveryConfig) -> None:
+    def __init__(
+        self,
+        config: DiscoveryConfig,
+        *,
+        notifier: Any | None = None,
+    ) -> None:
         if not config.forward_recorder.enabled:
             raise ValueError("forward book service requires recorder.enabled")
         if not config.forward_recorder.shared_book_service:
@@ -1877,6 +1882,7 @@ class ForwardBookService:
             )
         self.config = config
         self.recorder_config = config.forward_recorder
+        self._notifier = notifier
         self.store = ForwardRecorderStore(forward_recorder_db_path(config))
         self.store.close_active_capture_sessions(
             ended_at=_now(),
@@ -1905,6 +1911,11 @@ class ForwardBookService:
         )
         self._status_stop = threading.Event()
         self._status_thread: threading.Thread | None = None
+        self._service_started_monotonic = time.monotonic()
+        self._sync_started_monotonic = self._service_started_monotonic
+        self._book_events_at_sync = 0
+        self._last_health_signature: tuple[str, ...] = ()
+        self._last_health_alert_monotonic = 0.0
 
     def sync(
         self,
@@ -1930,12 +1941,19 @@ class ForwardBookService:
                 return self.status()
         self._shutdown_streams(reason="universe_refresh")
         if not bindings_by_token:
+            capture = self.store.capture_status()
             with self._lock:
                 self._fingerprint = fingerprint
                 self._last_sync_at = _now()
+                self._sync_started_monotonic = time.monotonic()
+                self._book_events_at_sync = int(
+                    capture.get("book_events", 0)
+                )
+            self._start_status_publisher()
             return self.status()
 
         started_at = _now()
+        capture = self.store.capture_status()
         sessions: dict[str, str] = {}
         for binding in contexts_by_binding:
             session_id = f"shared-books-{uuid.uuid4().hex}"
@@ -1979,6 +1997,10 @@ class ForwardBookService:
             self._streaming = start_websocket
             self._fingerprint = fingerprint
             self._last_sync_at = started_at
+            self._sync_started_monotonic = time.monotonic()
+            self._book_events_at_sync = int(
+                capture.get("book_events", 0)
+            )
 
         if start_websocket:
             for cache in caches:
@@ -2015,6 +2037,8 @@ class ForwardBookService:
         self._publish_status_file()
 
     def status(self) -> dict[str, Any]:
+        capture = self.store.capture_status()
+        now_monotonic = time.monotonic()
         with self._lock:
             connections = [
                 cache.connection_state() for cache in self._caches
@@ -2048,7 +2072,80 @@ class ForwardBookService:
                 "streaming": self._streaming,
                 "last_sync_at": self._last_sync_at,
             }
-        return {**status, **self.store.capture_status()}
+            sync_started = self._sync_started_monotonic
+            service_started = self._service_started_monotonic
+            book_events_at_sync = self._book_events_at_sync
+        elapsed = max(0.0, now_monotonic - sync_started)
+        events_since_sync = max(
+            0,
+            int(capture.get("book_events", 0)) - book_events_at_sync,
+        )
+        latest_age = _timestamp_age_seconds(
+            str(capture.get("latest_book_received_at") or "")
+        )
+        health_blockers: list[str] = []
+        selected = int(status["selected_contexts"])
+        in_grace = (
+            elapsed
+            < self.recorder_config.health_startup_grace_seconds
+        )
+        if not selected:
+            health_blockers.append("no_recordable_contexts")
+        else:
+            if not status["streaming"]:
+                health_blockers.append("streaming_disabled")
+            if not in_grace:
+                if int(status["connected"]) != int(status["connections"]):
+                    health_blockers.append(
+                        "disconnected_shards:"
+                        f"{status['connected']}/{status['connections']}"
+                    )
+                if int(capture["active_capture_sessions"]) != selected:
+                    health_blockers.append(
+                        "active_session_mismatch:"
+                        f"{capture['active_capture_sessions']}/{selected}"
+                    )
+                if latest_age is None:
+                    health_blockers.append("no_book_events")
+                elif (
+                    latest_age
+                    > self.recorder_config.health_stale_after_seconds
+                ):
+                    health_blockers.append(
+                        f"latest_book_stale:{latest_age:.1f}s"
+                    )
+                if (
+                    elapsed
+                    >= self.recorder_config.health_growth_window_seconds
+                    and events_since_sync == 0
+                ):
+                    health_blockers.append("book_event_growth_stalled")
+            if int(status["storage_errors"]) > 0:
+                health_blockers.append(
+                    f"storage_errors:{status['storage_errors']}"
+                )
+        soak = {
+            "healthy": not health_blockers,
+            "health_blockers": health_blockers,
+            "health_in_startup_grace": in_grace,
+            "uptime_seconds": round(
+                max(0.0, now_monotonic - service_started),
+                3,
+            ),
+            "sync_uptime_seconds": round(elapsed, 3),
+            "latest_book_age_seconds": (
+                round(latest_age, 3) if latest_age is not None else None
+            ),
+            "book_events_at_sync": book_events_at_sync,
+            "book_events_since_sync": events_since_sync,
+            "book_event_rate_per_minute": round(
+                events_since_sync * 60.0 / elapsed,
+                3,
+            )
+            if elapsed > 0
+            else 0.0,
+        }
+        return {**status, **capture, **soak}
 
     def _resolve_bindings(
         self,
@@ -2111,16 +2208,75 @@ class ForwardBookService:
         try:
             from polybot.core.holdings import _atomic_json_write
 
+            status = self.status()
             _atomic_json_write(
                 self._status_path,
                 {
-                    **self.status(),
+                    **status,
                     "published_at": _now(),
                 },
             )
+            self._maybe_alert_health(status)
         except Exception as exc:
             log_event(
                 "forward_book_status_publish_failed",
+                error=str(exc),
+            )
+
+    def _maybe_alert_health(self, status: dict[str, Any]) -> None:
+        if int(status.get("selected_contexts", 0)) <= 0:
+            return
+        signature = tuple(
+            str(item) for item in status.get("health_blockers", [])
+        )
+        now_monotonic = time.monotonic()
+        with self._lock:
+            previous = self._last_health_signature
+            changed = signature != previous
+            cooldown_elapsed = (
+                now_monotonic - self._last_health_alert_monotonic
+                >= self.recorder_config.health_alert_cooldown_seconds
+            )
+            if not changed and (not signature or not cooldown_elapsed):
+                return
+            self._last_health_signature = signature
+            if signature:
+                self._last_health_alert_monotonic = now_monotonic
+        fields = {
+            "blockers": list(signature),
+            "selected_contexts": status.get("selected_contexts"),
+            "tokens": status.get("tokens"),
+            "connections": status.get("connections"),
+            "connected": status.get("connected"),
+            "active_capture_sessions": status.get(
+                "active_capture_sessions"
+            ),
+            "book_events": status.get("book_events"),
+            "latest_book_age_seconds": status.get(
+                "latest_book_age_seconds"
+            ),
+            "storage_errors": status.get("storage_errors"),
+        }
+        event = (
+            "forward_book_health_alert"
+            if signature
+            else "forward_book_health_recovered"
+        )
+        log_event(event, **fields)
+        if self._notifier is None:
+            return
+        try:
+            self._notifier.notify(
+                (
+                    "Forward recorder unhealthy"
+                    if signature
+                    else "Forward recorder recovered"
+                ),
+                **fields,
+            )
+        except Exception as exc:
+            log_event(
+                "forward_book_health_notify_failed",
                 error=str(exc),
             )
 
@@ -3300,6 +3456,18 @@ def _parse_at(value: str) -> datetime:
     if parsed.tzinfo is None:
         raise ValueError("forward timestamps must include a timezone")
     return parsed.astimezone(timezone.utc)
+
+
+def _timestamp_age_seconds(value: str) -> float | None:
+    if not value:
+        return None
+    try:
+        return max(
+            0.0,
+            (datetime.now(timezone.utc) - _parse_at(value)).total_seconds(),
+        )
+    except (TypeError, ValueError):
+        return None
 
 
 def _iso(value: Any, name: str) -> str:

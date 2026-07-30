@@ -360,6 +360,25 @@ class RuleStore:
             for row in rows
         ]
 
+    def compilation_pass_counts(self) -> dict[tuple[str, str], int]:
+        """Return attempt history for fair bounded compiler rotation."""
+
+        with self._connect(read_only=True) as connection:
+            rows = connection.execute(
+                """
+                SELECT market_id, rule_text_sha256, COUNT(*) AS n
+                FROM compilation_passes
+                GROUP BY market_id, rule_text_sha256
+                """
+            ).fetchall()
+        return {
+            (
+                str(row["market_id"]),
+                str(row["rule_text_sha256"]),
+            ): int(row["n"] or 0)
+            for row in rows
+        }
+
     def save_claim(self, claim: EvidenceClaim) -> EvidenceClaim:
         validated = EvidenceClaim.from_dict(claim.as_dict())
         payload = canonical_json(validated.as_dict())

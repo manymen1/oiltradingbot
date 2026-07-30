@@ -635,7 +635,7 @@ forward_recorder:
     calls: list[str] = []
 
     class FakeForwardBooks:
-        def __init__(self, _config):
+        def __init__(self, _config, **_kwargs):
             self._status = {
                 "enabled": True,
                 "paper_only": True,
