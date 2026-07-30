@@ -993,7 +993,41 @@ def fleet_status_command(config_path: Path) -> int:
                 )
             }
         )
-    raw_forward_status = fleet_state.get("forward_books")
+    live_forward_state = _read_json_dict(
+        config.data_dir / "forward_books_status.json"
+    )
+    live_forward_fresh = False
+    if (
+        config.forward_recorder.enabled
+        and config.forward_recorder.shared_book_service
+        and live_forward_state.get("published_at")
+    ):
+        try:
+            published = datetime.fromisoformat(
+                str(live_forward_state["published_at"]).replace(
+                    "Z",
+                    "+00:00",
+                )
+            )
+            if published.tzinfo is None:
+                published = published.replace(tzinfo=timezone.utc)
+            live_forward_fresh = (
+                datetime.now(timezone.utc) - published
+            ).total_seconds() <= max(
+                30.0,
+                config.forward_recorder.heartbeat_seconds * 3.0,
+            )
+        except ValueError:
+            live_forward_fresh = False
+    if (
+        config.forward_recorder.enabled
+        and config.forward_recorder.shared_book_service
+    ):
+        raw_forward_status = (
+            live_forward_state if live_forward_fresh else None
+        )
+    else:
+        raw_forward_status = fleet_state.get("forward_books")
     forward_books_status = (
         dict(raw_forward_status)
         if isinstance(raw_forward_status, dict)
@@ -1420,6 +1454,16 @@ def _pipeline_state(config: DiscoveryConfig) -> dict[str, Any]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _read_json_dict(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
         return {}
     return raw if isinstance(raw, dict) else {}
 

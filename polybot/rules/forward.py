@@ -504,6 +504,32 @@ class ForwardRecorderStore:
             "latest_book_received_at": str(books["latest"] or ""),
         }
 
+    def close_active_capture_sessions(
+        self,
+        *,
+        ended_at: str,
+        reason: str,
+    ) -> int:
+        """Recover sessions left open by a terminated singleton service."""
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE sessions
+                SET ended_at=?, close_reason=?
+                WHERE ended_at IS NULL
+                  AND binding_sha256 IN (
+                    SELECT binding_sha256 FROM bindings
+                    WHERE binding_kind=?
+                  )
+                """,
+                (
+                    ended_at,
+                    reason[:200],
+                    BOOK_CAPTURE_BINDING,
+                ),
+            )
+            return max(0, int(cursor.rowcount))
+
     @staticmethod
     def _related_book_bindings(
         connection: sqlite3.Connection,
@@ -1852,6 +1878,10 @@ class ForwardBookService:
         self.config = config
         self.recorder_config = config.forward_recorder
         self.store = ForwardRecorderStore(forward_recorder_db_path(config))
+        self.store.close_active_capture_sessions(
+            ended_at=_now(),
+            reason="service_startup_orphan_recovery",
+        )
         self._lock = threading.RLock()
         self._write_lock = threading.Lock()
         self._caches: list[BookCache] = []
@@ -1870,6 +1900,11 @@ class ForwardBookService:
         self._seed_in_progress = False
         self._seed_max_pending = 0
         self._storage_errors = 0
+        self._status_path = (
+            config.data_dir / "forward_books_status.json"
+        )
+        self._status_stop = threading.Event()
+        self._status_thread: threading.Thread | None = None
 
     def sync(
         self,
@@ -1963,6 +1998,7 @@ class ForwardBookService:
                     generation=generation,
                     cancel=cancel,
                 )
+        self._start_status_publisher()
         return self.status()
 
     def poll_once(
@@ -1973,6 +2009,10 @@ class ForwardBookService:
 
     def stop(self) -> None:
         self._shutdown_streams(reason="service_stop")
+        self._status_stop.set()
+        if self._status_thread is not None:
+            self._status_thread.join(timeout=2)
+        self._publish_status_file()
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -2046,6 +2086,43 @@ class ForwardBookService:
             },
             contexts_by_binding,
         )
+
+    def _start_status_publisher(self) -> None:
+        with self._lock:
+            if (
+                self._status_thread is not None
+                and self._status_thread.is_alive()
+            ):
+                return
+            self._status_stop.clear()
+            thread = threading.Thread(
+                target=self._status_publisher_loop,
+                name="polybot-forward-status",
+                daemon=True,
+            )
+            self._status_thread = thread
+        thread.start()
+
+    def _status_publisher_loop(self) -> None:
+        while not self._status_stop.wait(5.0):
+            self._publish_status_file()
+
+    def _publish_status_file(self) -> None:
+        try:
+            from polybot.core.holdings import _atomic_json_write
+
+            _atomic_json_write(
+                self._status_path,
+                {
+                    **self.status(),
+                    "published_at": _now(),
+                },
+            )
+        except Exception as exc:
+            log_event(
+                "forward_book_status_publish_failed",
+                error=str(exc),
+            )
 
     def _start_seed_books(
         self,

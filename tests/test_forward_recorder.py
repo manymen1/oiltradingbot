@@ -659,6 +659,29 @@ def test_new_capture_session_retires_stale_active_session(
     assert store.capture_status()["active_capture_sessions"] == 1
 
 
+def test_service_startup_closes_orphaned_capture_sessions(
+    tmp_path: Path,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    store = ForwardRecorderStore(forward_recorder_db_path(config))
+    binding = store.ensure_book_binding(context, config.forward_recorder)
+    store.start_session(
+        binding,
+        session_id="orphan",
+        started_at="2026-07-25T09:00:00+00:00",
+    )
+
+    ForwardBookService(config)
+
+    assert store.capture_status()["active_capture_sessions"] == 0
+    with store._connect(read_only=True) as connection:
+        row = connection.execute(
+            "SELECT close_reason FROM sessions WHERE session_id='orphan'"
+        ).fetchone()
+    assert row["close_reason"] == "service_startup_orphan_recovery"
+
+
 def test_websocket_starts_before_rest_seed_and_shutdown_discards_old_seed(
     tmp_path: Path,
     monkeypatch,
@@ -923,6 +946,58 @@ def test_rest_seed_keeps_only_a_bounded_future_window(
         status["rest_seed_max_pending"]
         <= config.forward_recorder.rest_seed_workers * 2
     )
+    service.stop()
+
+
+def test_live_status_snapshot_contains_connection_and_seed_metrics(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    config = replace(
+        config,
+        forward_recorder=replace(
+            config.forward_recorder,
+            rest_seed=False,
+        ),
+    )
+
+    class ConnectedBookCache:
+        def __init__(self, token_ids, **_kwargs):
+            self.token_ids = list(token_ids)
+
+        def add_listener(self, _listener):
+            return None
+
+        def start_ws(self):
+            return None
+
+        def stop_ws(self):
+            return None
+
+        def connection_state(self):
+            return {"connected": True, "reconnects": 2}
+
+    monkeypatch.setattr(
+        "polybot.rules.forward.BookCache",
+        ConnectedBookCache,
+    )
+    service = ForwardBookService(config)
+    service.sync([context])
+    service._publish_status_file()
+
+    raw = json.loads(
+        (config.data_dir / "forward_books_status.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert raw["selected_contexts"] == 1
+    assert raw["tokens"] == 2
+    assert raw["connections"] == 1
+    assert raw["connected"] == 1
+    assert raw["rest_seed_enabled"] is False
+    assert raw["published_at"]
     service.stop()
 
 
