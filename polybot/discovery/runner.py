@@ -34,7 +34,12 @@ from .opportunity import QuoteProviderProtocol, scan_group_arbitrage, scan_oppor
 from .scorer import correlation_group, grade_market
 from .sources import build_source_plan, validate_source_plan_freshness
 from .store import DiscoveryStore
-from .types import MarketContext, TRADEABLE_STATES
+from .types import (
+    SOURCE_PLAN_CURRENT,
+    SOURCE_PLAN_LEGACY,
+    MarketContext,
+    TRADEABLE_STATES,
+)
 
 
 def _load(config_path: Path) -> tuple[DiscoveryConfig, DiscoveryStore, PortfolioAllocator]:
@@ -146,13 +151,27 @@ def discover_markets_command(
     return 0
 
 
-def grade_markets_command(config_path: Path, *, analyzer=None) -> int:
+def grade_markets_command(
+    config_path: Path,
+    *,
+    analyzer=None,
+    require_semantic_assets: bool | None = None,
+    market_ids: set[str] | None = None,
+) -> int:
     """Stage 3: run the rule/context analyzer where missing, then grade every
     market and assign its state. Two passes so correlation-group counts are
     computed over provisionally eligible markets."""
     config, store, _ = _load(config_path)
+    if require_semantic_assets is None:
+        require_semantic_assets = config.rule_compiler.enabled
     analyzer = analyzer or build_rule_analyzer(config.classifier)
     contexts = store.all_contexts()
+    if market_ids is not None:
+        contexts = [
+            context
+            for context in contexts
+            if context.market_id in market_ids
+        ]
     rule_store = None
     rule_store_error = ""
     if config.rule_compiler.enabled:
@@ -200,7 +219,7 @@ def grade_markets_command(config_path: Path, *, analyzer=None) -> int:
             config.scoring,
             rule_spec=rule_spec,
             source_plan=plan,
-            require_rule_spec=config.rule_compiler.enabled,
+            require_rule_spec=require_semantic_assets,
             paper_families={
                 item.strip().upper()
                 for item in config.rule_compiler.paper_families
@@ -211,7 +230,7 @@ def grade_markets_command(config_path: Path, *, analyzer=None) -> int:
             },
             **kwargs,
         )
-        if rule_store_error and config.rule_compiler.enabled:
+        if rule_store_error and require_semantic_assets:
             graded = MarketContext.from_dict(
                 {
                     **graded.as_dict(),
@@ -265,6 +284,7 @@ def compile_rules_command(
     market_id: str | None = None,
     *,
     compiler=None,
+    market_ids: set[str] | None = None,
 ) -> int:
     """Compile current rule versions with two-pass agreement and strict binding."""
 
@@ -323,6 +343,12 @@ def compile_rules_command(
         ]
         if not contexts:
             raise SystemExit(f"unknown market_id {market_id!r}")
+    elif market_ids is not None:
+        contexts = [
+            context
+            for context in contexts
+            if context.market_id in market_ids
+        ]
     from .profit_priority import load_priority_snapshot, priority_sort_key
 
     priorities = load_priority_snapshot(config.data_dir)
@@ -371,11 +397,6 @@ def compile_rules_command(
             cached is None
             and new_compilations >= config.rule_compiler.max_per_cycle
         ):
-            _mark_rule_review_required(
-                store,
-                context,
-                "rule_compilation_deferred_cycle_limit",
-            )
             results.append(
                 {
                     "market_id": context.market_id,
@@ -488,6 +509,16 @@ def inspect_rule_command(config_path: Path, market_id: str) -> int:
 
     rule_store = RuleStore(rule_store_db_path(config))
     spec = rule_store.load_spec(market_id, context.rule_text_sha256)
+    from .coverage import build_semantic_coverage
+
+    readiness = next(
+        (
+            row
+            for row in build_semantic_coverage(config)["markets"]
+            if row["market_id"] == market_id
+        ),
+        {},
+    )
     payload = {
         "market_id": market_id,
         "current_rule_text_sha256": context.rule_text_sha256,
@@ -497,6 +528,7 @@ def inspect_rule_command(config_path: Path, market_id: str) -> int:
             market_id,
             context.rule_text_sha256,
         ),
+        "semantic_readiness": readiness,
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
@@ -580,6 +612,11 @@ def plan_sources_command(config_path: Path, market_id: str | None = None) -> int
         from polybot.rules.store import RuleStore
 
         rule_store = RuleStore(rule_store_db_path(config))
+    legacy_archived = (
+        store.quarantine_legacy_source_plans()
+        if config.rule_compiler.enabled
+        else 0
+    )
     contexts = store.all_contexts()
     if market_id:
         contexts = [c for c in contexts if c.market_id == market_id]
@@ -650,7 +687,17 @@ def plan_sources_command(config_path: Path, market_id: str | None = None) -> int
                 ),
             }
         )
-    print(json.dumps({"planned": planned, "skipped": skipped}, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "legacy_plans_archived": legacy_archived,
+                "planned": planned,
+                "skipped": skipped,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0
 
 
@@ -760,6 +807,9 @@ def emit_bot_config_command(config_path: Path, market_id: str, out: Path | None 
         out_path=out,
         ledger_path=str(allocator.state_path),
         classifier_provider=config.classifier.provider if config.classifier.provider != "rule_based" else "anthropic",
+        classifier_model=config.classifier.model,
+        classifier_cli_binary=config.classifier.cli_binary,
+        classifier_cli_timeout_seconds=config.classifier.cli_timeout_seconds,
         classifier_budget_db=(
             str(classifier_budget_db_path(config))
             if config.classifier_budget.enabled
@@ -824,7 +874,11 @@ def fleet_status_command(config_path: Path) -> int:
     executable edges. Reads state files only -- no network, no side effects
     beyond the standard config load."""
     from .calibration import CalibrationLog
-    from .fleet import FleetManager, fleet_operator_dir
+    from .fleet import (
+        FleetManager,
+        _forward_books_disabled_status,
+        fleet_operator_dir,
+    )
 
     config, store, allocator = _load(config_path)
     manager = FleetManager(config, store, live=False, per_order_usd=allocator.config.per_order_usd, ledger_path=str(allocator.state_path))
@@ -917,6 +971,53 @@ def fleet_status_command(config_path: Path) -> int:
             }
     classifier_budget_status = _classifier_budget_status(config)
     rule_engine_status = _rule_engine_status(config, store, contexts)
+    from .coverage import build_semantic_coverage
+
+    semantic_coverage = build_semantic_coverage(config)
+    coverage_by_market = {
+        row["market_id"]: row for row in semantic_coverage["markets"]
+    }
+    for market in markets:
+        readiness = coverage_by_market.get(market["market_id"], {})
+        market.update(
+            {
+                key: readiness.get(key)
+                for key in (
+                    "book_capture_ready",
+                    "rule_ready",
+                    "source_plan_ready",
+                    "evidence_ready",
+                    "paper_execution_ready",
+                    "rule_family",
+                    "blockers",
+                )
+            }
+        )
+    raw_forward_status = fleet_state.get("forward_books")
+    forward_books_status = (
+        dict(raw_forward_status)
+        if isinstance(raw_forward_status, dict)
+        else _forward_books_disabled_status(config)
+    )
+    if (
+        config.forward_recorder.enabled
+        and config.forward_recorder.shared_book_service
+        and not isinstance(raw_forward_status, dict)
+    ):
+        forward_books_status = _forward_books_disabled_status(
+            config,
+            reason="status_unavailable",
+        )
+    forward_path = forward_recorder_db_path(config)
+    if forward_path.exists():
+        try:
+            from polybot.rules.forward import ForwardRecorderStore
+
+            forward_books_status.update(
+                ForwardRecorderStore(forward_path).capture_status()
+            )
+        except Exception as exc:
+            forward_books_status["storage_error"] = str(exc)
 
     status = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -929,8 +1030,10 @@ def fleet_status_command(config_path: Path) -> int:
             "live": fleet_state.get("live"),
         },
         "central_feed": central_feed_status,
+        "forward_books": forward_books_status,
         "classifier_budget": classifier_budget_status,
         "rule_engine": rule_engine_status,
+        "semantic_coverage": semantic_coverage["summary"],
         "markets": sorted(markets, key=lambda m: (not m["holding"], m["market_id"])),
         "holding_count": sum(1 for m in markets if m["holding"]),
         "scan": {
@@ -948,6 +1051,26 @@ def fleet_status_command(config_path: Path) -> int:
         "calibration": {"forecast_calibrated": calibration.forecast_calibrated()},
     }
     print(json.dumps(status, indent=2, sort_keys=True))
+    return 0
+
+
+def semantic_coverage_command(
+    config_path: Path,
+    *,
+    all_contexts: bool = False,
+) -> int:
+    from .coverage import build_semantic_coverage
+
+    config = load_discovery_config(config_path)
+    report = build_semantic_coverage(config, persist=True)
+    if not all_contexts:
+        report = {
+            **report,
+            "markets": [
+                row for row in report["markets"] if row["recorded"]
+            ],
+        }
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
 
@@ -1006,7 +1129,15 @@ def _rule_engine_status(
         current_specs = []
         stale_plans = 0
         missing_required = 0
+        current_plans = 0
+        legacy_plans = 0
         for context in contexts:
+            plan = store.load_source_plan(context.market_id)
+            if plan is not None:
+                if plan.semantic_status == SOURCE_PLAN_LEGACY:
+                    legacy_plans += 1
+                elif plan.semantic_status == SOURCE_PLAN_CURRENT:
+                    current_plans += 1
             spec = rule_store.load_spec(
                 context.market_id,
                 context.rule_text_sha256,
@@ -1014,9 +1145,9 @@ def _rule_engine_status(
             if spec is None:
                 continue
             current_specs.append(spec)
-            plan = store.load_source_plan(context.market_id)
             if (
                 plan is None
+                or plan.semantic_status != SOURCE_PLAN_CURRENT
                 or plan.rule_text_sha256 != context.rule_text_sha256
                 or plan.rule_spec_sha256 != spec.spec_sha256
             ):
@@ -1031,6 +1162,8 @@ def _rule_engine_status(
             **rule_store.status(),
             "current_specs": len(current_specs),
             "current_families": dict(families),
+            "current_source_plans": current_plans,
+            "legacy_source_plans": legacy_plans,
             "stale_or_missing_source_plans": stale_plans,
             "plans_missing_required_sources": missing_required,
             "paper_families": config.rule_compiler.paper_families,
@@ -1157,15 +1290,44 @@ def _run_discovery_cycle(
     store = DiscoveryStore(config.data_dir)
     previous = _pipeline_state(config)
     discover_markets_command(config_path, events_fetch=events_fetch)
-    # First pass refreshes the descriptive RuleAnalysis used by the compiler
-    # prompt and source planning. In rules-first mode a missing RuleSpec keeps
-    # the market review-required at this point.
-    grade_markets_command(config_path, analyzer=analyzer)
+    # Migrate the already-monitored semantic universe in bounded batches.
+    # Existing plans keep a deferred market in this queue even after the
+    # strict pass marks its missing RuleSpec as review-required.
+    semantic_candidate_ids: set[str] | None = None
     if config.rule_compiler.enabled:
-        compile_rules_command(config_path)
+        semantic_candidate_ids = {
+            context.market_id
+            for context in store.all_contexts()
+            if (
+                context.state in TRADEABLE_STATES
+                or (
+                    store.load_source_plan(context.market_id) is not None
+                    and not context.closed
+                    and context.state not in {"CLOSED", "REJECTED"}
+                )
+            )
+        }
+    # The descriptive pre-pass supplies RuleAnalysis and prioritization, but
+    # cannot authorize execution. Only the strict post-plan pass does that.
+    grade_markets_command(
+        config_path,
+        analyzer=analyzer,
+        require_semantic_assets=False,
+        market_ids=semantic_candidate_ids,
+    )
+    if config.rule_compiler.enabled:
+        compile_rules_command(
+            config_path,
+            market_ids=semantic_candidate_ids or set(),
+        )
         plan_sources_command(config_path)
         # Eligibility is computed only after both semantic assets exist.
-        grade_markets_command(config_path, analyzer=analyzer)
+        grade_markets_command(
+            config_path,
+            analyzer=analyzer,
+            require_semantic_assets=True,
+            market_ids=semantic_candidate_ids or set(),
+        )
     else:
         plan_sources_command(config_path)
 

@@ -67,11 +67,16 @@ def recorded_book_contexts(
     if not config.forward_recorder.record_all_contexts:
         return desired_contexts
     desired_ids = {context.market_id for context in desired_contexts}
-    extra = [
-        context
-        for context in all_contexts
-        if context.market_id not in desired_ids and not context.closed
-    ]
+    from .scope import market_scope_decision
+
+    extra = []
+    for context in all_contexts:
+        if context.market_id in desired_ids:
+            continue
+        decision = market_scope_decision(context, config.universe)
+        if decision.status != "IN_SCOPE":
+            continue
+        extra.append(context)
     # Volume first: attention is where both stale quotes and crowd reaction
     # live, and it is observable now without any forward data.
     extra.sort(
@@ -85,6 +90,44 @@ def recorded_book_contexts(
     if cap > 0:
         extra = extra[: max(0, cap - len(desired_contexts))]
     return [*desired_contexts, *extra]
+
+
+def _forward_books_disabled_status(
+    config: DiscoveryConfig,
+    *,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    if reason is None:
+        reason = (
+            "forward_recorder.enabled=false"
+            if not config.forward_recorder.enabled
+            else "forward_recorder.shared_book_service=false"
+            if not config.forward_recorder.shared_book_service
+            else "status_unavailable"
+        )
+    return {
+        "enabled": False,
+        "paper_only": True,
+        "shared": config.forward_recorder.shared_book_service,
+        "reason": reason,
+    }
+
+
+def _publish_forward_books_status(
+    config: DiscoveryConfig,
+    status: dict[str, Any],
+) -> None:
+    """Publish recorder startup state without claiming a fresh fleet sync."""
+    path = config.data_dir / "fleet_state.json"
+    current: dict[str, Any] = {}
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                current = raw
+        except (OSError, json.JSONDecodeError):
+            current = {}
+    _atomic_json_write(path, {**current, "forward_books": status})
 
 
 class FleetManager:
@@ -492,16 +535,27 @@ class FleetManager:
                     str(existing.sources.source_plan_sha256)
                     == source_plan_sha256(plan)
                 )
+                classifier_transport_ok = (
+                    str(existing.classifier.provider) == provider
+                    and str(existing.classifier.model)
+                    == str(self.config.classifier.model)
+                    and str(existing.classifier.cli_binary)
+                    == str(self.config.classifier.cli_binary)
+                    and int(existing.classifier.cli_timeout_seconds)
+                    == int(self.config.classifier.cli_timeout_seconds)
+                )
             except (OSError, TypeError, ValueError):
                 live_classifier_ok = False
                 central_feed_ok = False
                 classifier_budget_ok = False
                 source_plan_ok = False
+                classifier_transport_ok = False
             if (
                 context.rule_text_sha256 in text
                 and expected_mode in text
                 and side_ok
                 and provider_ok
+                and classifier_transport_ok
                 and live_classifier_ok
                 and central_feed_ok
                 and classifier_budget_ok
@@ -517,6 +571,9 @@ class FleetManager:
             dry_run=not self.live,
             entry_side=entry_side,
             classifier_provider=self.config.classifier.provider if self.config.classifier.provider != "rule_based" else "anthropic",
+            classifier_model=self.config.classifier.model,
+            classifier_cli_binary=self.config.classifier.cli_binary,
+            classifier_cli_timeout_seconds=self.config.classifier.cli_timeout_seconds,
             classifier_budget_db=(
                 str(classifier_budget_db_path(self.config))
                 if self.config.classifier_budget.enabled
@@ -712,6 +769,37 @@ def run_fleet_command(
 
         forward_book_service = ForwardBookService(config)
     try:
+        if forward_book_service is None:
+            forward_books_status = _forward_books_disabled_status(config)
+        else:
+            startup_contexts = store.all_contexts()
+            startup_desired = manager.desired_markets(startup_contexts)
+            startup_recorded = recorded_book_contexts(
+                config,
+                startup_contexts,
+                startup_desired,
+            )
+            try:
+                forward_books_status = forward_book_service.sync(
+                    startup_recorded,
+                    start_websocket=not once,
+                )
+            except Exception as exc:
+                log_event(
+                    "forward_book_service_startup_error",
+                    error=str(exc),
+                )
+                forward_books_status = {
+                    **forward_book_service.status(),
+                    "enabled": False,
+                    "reason": f"startup_error:{exc}",
+                }
+        log_event(
+            "forward_book_service_startup",
+            **forward_books_status,
+        )
+        _publish_forward_books_status(config, forward_books_status)
+
         while True:
             try:
                 _run_discovery_cycle(config_path, config, events_fetch=events_fetch, quotes=quotes, analyzer=analyzer, notifier=notifier, markets_fetch=markets_fetch)
@@ -750,6 +838,10 @@ def run_fleet_command(
                 if forward_book_service is not None:
                     summary["forward_books"] = (
                         forward_book_service.status()
+                    )
+                else:
+                    summary["forward_books"] = (
+                        _forward_books_disabled_status(config)
                     )
                 summary["classifier_budget"] = _classifier_budget_status(config)
                 _atomic_json_write(config.data_dir / "fleet_state.json", {**summary, "live": live, "updated_at": datetime.now(timezone.utc).isoformat()})

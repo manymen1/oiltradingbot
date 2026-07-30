@@ -17,6 +17,8 @@ from polybot.discovery.sources import (
     source_plan_sha256,
     validate_source_plan_freshness,
 )
+from polybot.discovery.store import DiscoveryStore
+from polybot.discovery.types import SOURCE_PLAN_LEGACY
 from polybot.rules.compiler import fixture_semantics
 from polybot.rules.contracts import RuleSpec, SourceRequirement
 from test_rule_contracts import _golden_rules, context_for_case
@@ -230,3 +232,68 @@ def test_source_plan_freshness_accepts_exact_semantic_version() -> None:
     spec = _spec(context)
     plan = build_source_plan(context, spec)
     validate_source_plan_freshness(context, plan, spec)
+
+
+def test_aggregator_cannot_gain_confirmation_or_auto_trade_authority() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    spec = _spec(context)
+    plan = build_source_plan(context, spec)
+    google_index = next(
+        index
+        for index, source in enumerate(plan.source_records)
+        if source.source_id == "aggregator:google_news"
+    )
+    records = list(plan.source_records)
+    records[google_index] = replace(
+        records[google_index],
+        roles=["CONFIRMATION"],
+    )
+    elevated = replace(
+        plan,
+        source_records=records,
+        auto_trade_domains=[
+            *plan.auto_trade_domains,
+            "news.google.com",
+        ],
+    )
+
+    with pytest.raises(ValueError, match="aggregator|authority"):
+        validate_source_plan_freshness(context, elevated, spec)
+
+
+def test_required_source_without_endpoint_is_not_current() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    spec = _spec(context)
+    plan = build_source_plan(context, spec)
+    required = replace(
+        plan.source_records[0],
+        required=True,
+        feed_urls=[],
+        poll_urls=[],
+    )
+    records = [required, *plan.source_records[1:]]
+    invalid = replace(plan, source_records=records)
+
+    with pytest.raises(ValueError, match="no usable endpoint"):
+        validate_source_plan_freshness(context, invalid, spec)
+
+
+def test_legacy_plan_is_quarantined_and_replacement_is_versioned(
+    tmp_path,
+) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    store = DiscoveryStore(tmp_path)
+    legacy = build_source_plan(context)
+    assert legacy.semantic_status == SOURCE_PLAN_LEGACY
+    store.save_source_plan(legacy)
+
+    assert store.quarantine_legacy_source_plans() == 1
+    assert store.quarantine_legacy_source_plans() == 0
+    assert len(list(store.legacy_plans_dir.glob("*.json"))) == 1
+
+    current = build_source_plan(context, _spec(context))
+    store.save_source_plan(current)
+    loaded = store.load_source_plan(context.market_id)
+    assert loaded is not None
+    assert loaded.semantic_status == "CURRENT"
+    assert len(list(store.plan_history_dir.glob("*.json"))) == 1

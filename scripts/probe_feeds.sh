@@ -53,9 +53,10 @@ for u in "${FEEDS[@]}"; do
   u="${u%%#*}"
   u="$(printf '%s' "$u" | tr -d '[:space:]')"
   [ -z "$u" ] && continue
-  code=$(curl -s -o /tmp/probe.xml -w '%{http_code}' -L --max-time 12 \
+  : > /tmp/probe.xml
+  code=$(curl --compressed -s -o /tmp/probe.xml -w '%{http_code}' -L --max-time 12 \
     -A 'Mozilla/5.0 (compatible; polybot/1.0)' "$u" 2>/dev/null)
-  items=$(grep -c '<item\|<entry' /tmp/probe.xml 2>/dev/null || echo 0)
+  items=$(grep -o '<item[ >]\|<entry[ >]' /tmp/probe.xml 2>/dev/null | wc -l)
   raw=$(grep -m1 -o '<pubDate>[^<]*\|<updated>[^<]*\|<published>[^<]*' /tmp/probe.xml 2>/dev/null \
     | head -1 | sed 's/<[a-zA-Z]*>//')
   age="-"
@@ -64,6 +65,14 @@ for u in "${FEEDS[@]}"; do
     [ -n "$ts" ] && age=$(( (now - ts) / 60 ))
   fi
   status="dead"
-  [ "$code" = "200" ] && [ "${items:-0}" -gt 0 ] && status="LIVE"
+  if [ "$code" = "200" ] && [ "${items:-0}" -gt 0 ]; then
+    status="LIVE"
+  elif [ "$code" = "200" ]; then
+    first=$(sed -e 's/^[[:space:]]*//' -e '/^$/d' /tmp/probe.xml 2>/dev/null | head -c 1)
+    if python3 -m json.tool /tmp/probe.xml >/dev/null 2>&1 \
+      || [ "$first" = "{" ] || [ "$first" = "[" ]; then
+      status="JSON"
+    fi
+  fi
   printf '%-5s %-4s items=%-4s age=%6s min  %s\n' "$status" "$code" "$items" "$age" "$u"
 done

@@ -122,17 +122,6 @@ def grade_market(
                 scores,
                 group,
             )
-        if (
-            source_plan.rule_text_sha256 != context.rule_text_sha256
-            or source_plan.rule_spec_sha256 != rule_spec.spec_sha256
-        ):
-            return _finalize(
-                context,
-                "RULES_REVIEW_REQUIRED",
-                ["stale_rule_spec_source_plan"],
-                scores,
-                group,
-            )
         if source_plan.missing_required_source_refs:
             return _finalize(
                 context,
@@ -141,6 +130,22 @@ def grade_market(
                     "required_rule_source_unresolved:"
                     + ",".join(source_plan.missing_required_source_refs)
                 ],
+                scores,
+                group,
+            )
+        try:
+            from .sources import validate_source_plan_freshness
+
+            validate_source_plan_freshness(
+                context,
+                source_plan,
+                rule_spec,
+            )
+        except ValueError as exc:
+            return _finalize(
+                context,
+                "RULES_REVIEW_REQUIRED",
+                [f"stale_or_invalid_source_plan:{exc}"],
                 scores,
                 group,
             )

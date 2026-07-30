@@ -9,7 +9,7 @@ from typing import Any
 
 from polybot.core.holdings import _atomic_json_write
 
-from .types import MarketContext, SourcePlan
+from .types import SOURCE_PLAN_LEGACY, MarketContext, SourcePlan
 
 
 def _safe_name(market_id: str) -> str:
@@ -29,6 +29,8 @@ class DiscoveryStore:
         self.data_dir = data_dir
         self.contexts_dir = data_dir / "contexts"
         self.plans_dir = data_dir / "source_plans"
+        self.legacy_plans_dir = data_dir / "source_plans_legacy"
+        self.plan_history_dir = data_dir / "source_plans_history"
         self.coverage_dir = data_dir / "coverage"
 
     # -- contexts --
@@ -62,7 +64,21 @@ class DiscoveryStore:
 
     def save_source_plan(self, plan: SourcePlan) -> SourcePlan:
         stamped = SourcePlan.from_dict({**plan.as_dict(), "created_at": plan.created_at or _now()})
-        _atomic_json_write(self.plans_dir / f"{_safe_name(plan.market_id)}.json", stamped.as_dict())
+        path = self.plans_dir / f"{_safe_name(plan.market_id)}.json"
+        if path.exists():
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                existing = None
+            if isinstance(existing, dict) and existing != stamped.as_dict():
+                self._archive_source_plan(existing, self.plan_history_dir)
+                parsed = SourcePlan.from_dict(existing)
+                if parsed.semantic_status == SOURCE_PLAN_LEGACY:
+                    self._archive_source_plan(
+                        existing,
+                        self.legacy_plans_dir,
+                    )
+        _atomic_json_write(path, stamped.as_dict())
         return stamped
 
     def load_source_plan(self, market_id: str) -> SourcePlan | None:
@@ -71,6 +87,47 @@ class DiscoveryStore:
             return None
         raw = json.loads(path.read_text(encoding="utf-8"))
         return SourcePlan.from_dict(raw) if isinstance(raw, dict) else None
+
+    def quarantine_legacy_source_plans(self) -> int:
+        """Archive pre-RuleSpec plans without deleting their active record."""
+        if not self.plans_dir.exists():
+            return 0
+        archived = 0
+        for path in sorted(self.plans_dir.glob("*.json")):
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(raw, dict):
+                continue
+            plan = SourcePlan.from_dict(raw)
+            if plan.semantic_status != SOURCE_PLAN_LEGACY:
+                continue
+            _, created = self._archive_source_plan(
+                raw,
+                self.legacy_plans_dir,
+            )
+            archived += int(created)
+        return archived
+
+    def _archive_source_plan(
+        self,
+        raw: dict[str, Any],
+        directory: Path,
+    ) -> tuple[Path, bool]:
+        encoded = json.dumps(
+            raw,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        digest = hashlib.sha256(encoded).hexdigest()
+        market_id = str(raw.get("market_id") or "unknown")
+        path = directory / f"{_safe_name(market_id)}-{digest}.json"
+        created = not path.exists()
+        if created:
+            _atomic_json_write(path, raw)
+        return path, created
 
     # -- universe coverage --
 

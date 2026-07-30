@@ -31,6 +31,9 @@ def emit_bot_config(
     dry_run: bool = True,
     entry_side: str = "YES",
     classifier_provider: str = "anthropic",
+    classifier_model: str = "claude-sonnet-4-6",
+    classifier_cli_binary: str = "claude",
+    classifier_cli_timeout_seconds: int = 180,
     classifier_budget_db: str = "",
     classifier_max_escalations_per_hour: int = 4,
     classifier_max_escalations_per_day: int = 20,
@@ -68,9 +71,22 @@ def emit_bot_config(
             central_feed_db=central_feed_db,
             central_feed_stale_after_seconds=central_feed_stale_after_seconds,
         )
-    # The executor inherits the pipeline's classification transport:
-    # claude_cli = the operator's Claude subscription, anthropic = metered API.
+    # The executor inherits the pipeline's complete classification transport;
+    # provider-only inheritance can pair Codex with a stale Claude model/binary.
     payload["classifier"]["provider"] = classifier_provider or "anthropic"
+    payload["classifier"]["model"] = classifier_model
+    payload["classifier"]["cli_binary"] = classifier_cli_binary
+    payload["classifier"]["cli_timeout_seconds"] = int(
+        classifier_cli_timeout_seconds
+    )
+    if classifier_provider.strip().lower() in {
+        "codex_cli",
+        "codex-cli",
+        "codex",
+    }:
+        # There is no separate cheap-screen model configured for the Codex
+        # transport. An empty value keeps screening disabled explicitly.
+        payload["classifier"]["screen_model"] = ""
     if classifier_budget_db:
         payload["classifier"].update(
             {

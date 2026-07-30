@@ -54,6 +54,50 @@ def _spec(family: str):
     return context, spec
 
 
+def test_codex_cli_evidence_extractor_accepts_schema_json(
+    tmp_path: Path,
+) -> None:
+    context, spec = _spec("OCCURRENCE_BEFORE_DEADLINE")
+    plan = build_source_plan(context, spec)
+    article = _article(
+        "codex-article",
+        "Officials scheduled talks next month.",
+    )
+    payload = {
+        "target_outcome": spec.outcomes[0].name,
+        "assertion": "SCHEDULED",
+        "predicate_matches": True,
+        "temporal_relation": "IN_WINDOW",
+        "event_at": "",
+        "observed_value": "",
+        "observed_value_upper": "",
+        "observed_unit": "",
+        "supporting_quote": article.raw_text,
+        "clauses_satisfied": [],
+        "clauses_violated": [],
+    }
+    extractor = EvidenceExtractor(
+        ClassifierConfig(
+            provider="codex_cli",
+            model="gpt-5.5",
+            cli_binary="codex",
+        ),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=lambda _prompt: json.dumps(payload),
+    )
+
+    result = extractor.extract(
+        context=context,
+        spec=spec,
+        source_plan=plan,
+        article=article,
+    )
+
+    assert result.status == "EXTRACTED"
+    assert result.claim is not None
+    assert result.claim.rule_spec_sha256 == spec.spec_sha256
+
+
 def _claim(
     spec: RuleSpec,
     *,

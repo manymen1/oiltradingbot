@@ -730,6 +730,16 @@ def inspect_generic_rule_market_command(
     data_dir = (
         config.data_dir / "rule_runner" / market_dir_slug(market_id)
     )
+    from polybot.discovery.coverage import build_semantic_coverage
+
+    semantic_readiness = next(
+        (
+            row
+            for row in build_semantic_coverage(config)["markets"]
+            if row["market_id"] == market_id
+        ),
+        {},
+    )
     payload = {
         "market_id": market_id,
         "paper_only": True,
@@ -758,6 +768,7 @@ def inspect_generic_rule_market_command(
         "last_cycle": _read_json(data_dir / "last_cycle.json"),
         "paper_broker": _read_json(data_dir / "paper_broker.json"),
         "heartbeat": _read_json(data_dir / "heartbeat.json"),
+        "semantic_readiness": semantic_readiness,
     }
     if config.forward_recorder.enabled and spec is not None and plan is not None:
         from .forward import forward_completeness_report

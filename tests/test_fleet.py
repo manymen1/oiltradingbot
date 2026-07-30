@@ -11,8 +11,14 @@ from polybot.discovery.config import (
     ClassifierBudgetConfig,
     DiscoveryConfig,
     FleetConfig,
+    ForwardRecorderConfig,
 )
-from polybot.discovery.fleet import FleetManager, run_fleet_command, set_fleet_mode_command
+from polybot.discovery.fleet import (
+    FleetManager,
+    _forward_books_disabled_status,
+    run_fleet_command,
+    set_fleet_mode_command,
+)
 from polybot.discovery.scorer import grade_market
 from polybot.discovery.config import ScoringConfig
 from polybot.discovery.sources import build_source_plan
@@ -92,6 +98,19 @@ def _events_fetch(events):
         return events if params.get("offset", 0) == 0 else []
 
     return fetch
+
+
+def test_forward_books_disabled_status_names_shared_service_reason() -> None:
+    config = DiscoveryConfig(
+        forward_recorder=ForwardRecorderConfig(
+            enabled=True,
+            shared_book_service=False,
+        )
+    )
+
+    assert _forward_books_disabled_status(config)["reason"] == (
+        "forward_recorder.shared_book_service=false"
+    )
 
 
 def _write_priority_snapshot(config, contexts, *, cold_ids=()):
@@ -186,6 +205,12 @@ def test_fleet_once_spawns_a_bot_per_eligible_market(tmp_path, monkeypatch) -> N
     # fleet_state.json records the cycle; once-mode shuts children down.
     state = json.loads((tmp_path / "data" / "fleet_state.json").read_text(encoding="utf-8"))
     assert len(state["desired"]) == 2
+    assert state["forward_books"] == {
+        "enabled": False,
+        "paper_only": True,
+        "reason": "forward_recorder.enabled=false",
+        "shared": True,
+    }
     assert all(process.terminated for process in spawner.processes)
     assert [m for m, _f in notifier.messages if "bot started" in m]
 
@@ -538,9 +563,101 @@ def test_fleet_status_reports_positions_ledger_and_scan(tmp_path, monkeypatch, c
     assert row["market_id"] == market.market_id and row["holding"] is True
     assert row["heartbeat_age_seconds"] is not None and row["heartbeat_age_seconds"] < 60
     assert status["scan"]["executable"][0]["edge"] == 0.12
+    assert status["forward_books"]["enabled"] is False
+    assert (
+        status["forward_books"]["reason"]
+        == "forward_recorder.enabled=false"
+    )
+    assert "semantic_coverage" in status
+    assert status["semantic_coverage"]["contexts"] == 1
+    assert row["rule_ready"] is False
+    assert "current_rule_spec_missing" in row["blockers"]
     # Fresh ledger: full drawdown headroom available.
     assert status["ledger"]["realized_net"] == 0.0
     assert status["ledger"]["drawdown_headroom"] == status["ledger"]["max_drawdown_usd"]
+
+
+def test_forward_books_bootstrap_precedes_discovery_cycle(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _patch_roots(monkeypatch, tmp_path)
+    config_path = _fleet_yaml(tmp_path)
+    with config_path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            """
+rule_compiler:
+  enabled: true
+rule_runner:
+  enabled: true
+forward_recorder:
+  enabled: true
+  rest_seed: false
+"""
+        )
+    calls: list[str] = []
+
+    class FakeForwardBooks:
+        def __init__(self, _config):
+            self._status = {
+                "enabled": True,
+                "paper_only": True,
+                "shared": True,
+                "reason": "no_recordable_contexts",
+                "selected_contexts": 0,
+                "bindings": 0,
+                "tokens": 0,
+                "connections": 0,
+                "connected": 0,
+                "reconnects": 0,
+                "streaming": False,
+                "last_sync_at": "startup",
+            }
+
+        def sync(self, _contexts, *, start_websocket=True):
+            calls.append("startup_sync")
+            return self._status
+
+        def poll_once(self, _contexts):
+            calls.append("post_discovery_sync")
+            return self._status
+
+        def status(self):
+            return self._status
+
+        def stop(self):
+            calls.append("stop")
+
+    monkeypatch.setattr(
+        "polybot.rules.forward.ForwardBookService",
+        FakeForwardBooks,
+    )
+
+    def fake_cycle(*_args, **_kwargs):
+        calls.append("discovery")
+
+    monkeypatch.setattr(
+        "polybot.discovery.runner._run_discovery_cycle",
+        fake_cycle,
+    )
+
+    assert run_fleet_command(
+        config_path,
+        once=True,
+        events_fetch=_events_fetch([]),
+        quotes=_FakeQuotes(),
+        notifier=_Notifier(),
+        spawner=_Spawner(),
+    ) == 0
+    assert calls[:3] == [
+        "startup_sync",
+        "discovery",
+        "post_discovery_sync",
+    ]
+    state = json.loads(
+        (tmp_path / "data" / "fleet_state.json").read_text(encoding="utf-8")
+    )
+    assert state["forward_books"]["enabled"] is True
 
 
 def test_fleet_emits_no_side_config_when_no_edge_is_best(tmp_path, monkeypatch) -> None:

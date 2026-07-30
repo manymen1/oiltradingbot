@@ -231,6 +231,80 @@ class CentralFeedStore:
             "promotion_pending_rows": int(promotion["pending_rows"] or 0),
         }
 
+    def feed_health(
+        self,
+        feed_urls: Iterable[str],
+        *,
+        stale_after_seconds: float,
+        now: datetime | None = None,
+    ) -> dict[str, dict[str, object]]:
+        """Return exact endpoint readiness for source-plan preflight.
+
+        Absence is explicit: a configured URL that has never been attempted is
+        not silently treated as healthy.
+        """
+        urls = sorted(
+            {
+                str(url).strip()
+                for url in feed_urls
+                if str(url).strip()
+            }
+        )
+        if not urls:
+            return {}
+        placeholders = ",".join("?" for _ in urls)
+        with self._connect(read_only=True) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT feed_url, last_polled_at, last_success_at,
+                       last_error, inserted_total
+                FROM feeds
+                WHERE feed_url IN ({placeholders})
+                """,
+                urls,
+            ).fetchall()
+        by_url = {str(row["feed_url"]): row for row in rows}
+        as_of = now or datetime.now(timezone.utc)
+        maximum_age = max(1.0, float(stale_after_seconds))
+        result: dict[str, dict[str, object]] = {}
+        for url in urls:
+            row = by_url.get(url)
+            success_at = (
+                str(row["last_success_at"] or "") if row is not None else ""
+            )
+            age = _timestamp_age_seconds(success_at, as_of)
+            error = str(row["last_error"] or "") if row is not None else ""
+            if row is None:
+                status = "NOT_POLLED"
+            elif error:
+                status = "ERROR"
+            elif age is None:
+                status = "NO_SUCCESS"
+            elif age > maximum_age:
+                status = "STALE"
+            else:
+                status = "HEALTHY"
+            result[url] = {
+                "status": status,
+                "healthy": status == "HEALTHY",
+                "last_polled_at": (
+                    str(row["last_polled_at"] or "")
+                    if row is not None
+                    else ""
+                ),
+                "last_success_at": success_at,
+                "age_seconds": (
+                    round(age, 3) if age is not None else None
+                ),
+                "last_error": error,
+                "inserted_total": (
+                    int(row["inserted_total"] or 0)
+                    if row is not None
+                    else 0
+                ),
+            }
+        return result
+
 
 class CentralFeedPromotionCache:
     """Cross-process single-flight cache for publisher-page promotion.
@@ -867,6 +941,21 @@ def _article_matches(
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _timestamp_age_seconds(
+    value: str,
+    now: datetime,
+) -> float | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return max(0.0, (now - parsed).total_seconds())
 
 
 def _json_list(value: object) -> list[object]:

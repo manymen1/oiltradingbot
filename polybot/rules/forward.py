@@ -7,7 +7,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -27,7 +27,6 @@ from polybot.discovery.store import DiscoveryStore
 from polybot.discovery.types import (
     MarketContext,
     SourcePlan,
-    TRADEABLE_STATES,
     market_dir_slug,
 )
 from polybot.log import log_event
@@ -41,8 +40,10 @@ from .contracts import (
 )
 from .store import RuleStore
 
-FORWARD_RECORDER_SCHEMA_VERSION = 2
+FORWARD_RECORDER_SCHEMA_VERSION = 3
 FORWARD_TIMELINE_SCHEMA_VERSION = 2
+SEMANTIC_BINDING = "SEMANTIC"
+BOOK_CAPTURE_BINDING = "BOOK_CAPTURE"
 
 
 class ForwardRecorderStore:
@@ -73,6 +74,7 @@ class ForwardRecorderStore:
                 """
                 CREATE TABLE IF NOT EXISTS bindings (
                     binding_sha256 TEXT PRIMARY KEY,
+                    binding_kind TEXT NOT NULL DEFAULT 'SEMANTIC',
                     market_id TEXT NOT NULL,
                     event_slug TEXT NOT NULL,
                     rule_spec_sha256 TEXT NOT NULL,
@@ -249,6 +251,18 @@ class ForwardRecorderStore:
                 "evidence_policy_json",
                 "TEXT NOT NULL DEFAULT '{}'",
             )
+            _ensure_sqlite_column(
+                connection,
+                "bindings",
+                "binding_kind",
+                "TEXT NOT NULL DEFAULT 'SEMANTIC'",
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_forward_bindings_kind_market
+                    ON bindings(binding_kind, market_id, created_at)
+                """
+            )
 
     def ensure_binding(
         self,
@@ -277,6 +291,7 @@ class ForwardRecorderStore:
         evidence_policy_sha256 = sha256_json(evidence_policy_payload)
         binding_payload = {
             "schema_version": FORWARD_RECORDER_SCHEMA_VERSION,
+            "binding_kind": SEMANTIC_BINDING,
             "market_id": context.market_id,
             "context_sha256": sha256_json(context_binding),
             "rule_spec_sha256": spec.spec_sha256,
@@ -290,7 +305,7 @@ class ForwardRecorderStore:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 """
-                SELECT context_json, rule_spec_json, source_plan_json,
+                SELECT binding_kind, context_json, rule_spec_json, source_plan_json,
                        recorder_policy_sha256, evidence_policy_sha256,
                        evidence_policy_json
                 FROM bindings WHERE binding_sha256=?
@@ -298,6 +313,7 @@ class ForwardRecorderStore:
                 (binding_sha256,),
             ).fetchone()
             expected = (
+                SEMANTIC_BINDING,
                 context_json,
                 spec_json,
                 source_plan_json,
@@ -315,15 +331,16 @@ class ForwardRecorderStore:
             connection.execute(
                 """
                 INSERT INTO bindings(
-                    binding_sha256, market_id, event_slug,
+                    binding_sha256, binding_kind, market_id, event_slug,
                     rule_spec_sha256, source_plan_sha256,
                     context_json, rule_spec_json, source_plan_json,
                     recorder_policy_sha256, evidence_policy_sha256,
                     evidence_policy_json, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     binding_sha256,
+                    SEMANTIC_BINDING,
                     context.market_id,
                     context.event_slug,
                     spec.spec_sha256,
@@ -339,16 +356,192 @@ class ForwardRecorderStore:
             )
         return binding_sha256
 
+    def ensure_book_binding(
+        self,
+        context: MarketContext,
+        recorder_config: ForwardRecorderConfig,
+        *,
+        created_at: str | None = None,
+    ) -> str:
+        """Create the immutable market/token binding used by raw book capture.
+
+        This binding deliberately excludes RuleSpec and SourcePlan data so the
+        shared collector can start before either semantic asset exists.
+        """
+        context_binding = _context_binding_payload(context)
+        context_json = canonical_json(context_binding)
+        recorder_policy_sha256 = sha256_json(
+            _recorder_policy_payload(recorder_config)
+        )
+        binding_payload = {
+            "schema_version": FORWARD_RECORDER_SCHEMA_VERSION,
+            "binding_kind": BOOK_CAPTURE_BINDING,
+            "market_id": context.market_id,
+            "context_sha256": sha256_json(context_binding),
+            "recorder_policy_sha256": recorder_policy_sha256,
+        }
+        binding_sha256 = sha256_json(binding_payload)
+        at = created_at or _now()
+        empty_json = canonical_json({})
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT binding_kind, context_json, recorder_policy_sha256,
+                       rule_spec_sha256, source_plan_sha256,
+                       rule_spec_json, source_plan_json
+                FROM bindings WHERE binding_sha256=?
+                """,
+                (binding_sha256,),
+            ).fetchone()
+            expected = (
+                BOOK_CAPTURE_BINDING,
+                context_json,
+                recorder_policy_sha256,
+                "",
+                "",
+                empty_json,
+                empty_json,
+            )
+            if row is not None:
+                actual = tuple(str(row[index]) for index in range(len(expected)))
+                if actual != expected:
+                    raise ValueError(
+                        "immutable forward book capture binding conflict"
+                    )
+                return binding_sha256
+            connection.execute(
+                """
+                INSERT INTO bindings(
+                    binding_sha256, binding_kind, market_id, event_slug,
+                    rule_spec_sha256, source_plan_sha256,
+                    context_json, rule_spec_json, source_plan_json,
+                    recorder_policy_sha256, evidence_policy_sha256,
+                    evidence_policy_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    binding_sha256,
+                    BOOK_CAPTURE_BINDING,
+                    context.market_id,
+                    context.event_slug,
+                    "",
+                    "",
+                    context_json,
+                    empty_json,
+                    empty_json,
+                    recorder_policy_sha256,
+                    "",
+                    empty_json,
+                    at,
+                ),
+            )
+        return binding_sha256
+
     def latest_binding(self, market_id: str) -> str | None:
         with self._connect(read_only=True) as connection:
             row = connection.execute(
                 """
                 SELECT binding_sha256 FROM bindings
-                WHERE market_id=? ORDER BY created_at DESC LIMIT 1
+                WHERE market_id=? AND binding_kind=?
+                ORDER BY created_at DESC, binding_sha256 DESC LIMIT 1
                 """,
-                (market_id,),
+                (market_id, SEMANTIC_BINDING),
             ).fetchone()
         return str(row["binding_sha256"]) if row else None
+
+    def latest_book_binding(self, market_id: str) -> str | None:
+        with self._connect(read_only=True) as connection:
+            row = connection.execute(
+                """
+                SELECT binding_sha256 FROM bindings
+                WHERE market_id=? AND binding_kind=?
+                ORDER BY created_at DESC, binding_sha256 DESC LIMIT 1
+                """,
+                (market_id, BOOK_CAPTURE_BINDING),
+            ).fetchone()
+        return str(row["binding_sha256"]) if row else None
+
+    def capture_status(self) -> dict[str, Any]:
+        """Return fresh store-level health without needing the live service."""
+        with self._connect(read_only=True) as connection:
+            bindings = connection.execute(
+                """
+                SELECT COUNT(*) AS n FROM bindings WHERE binding_kind=?
+                """,
+                (BOOK_CAPTURE_BINDING,),
+            ).fetchone()
+            sessions = connection.execute(
+                """
+                SELECT COUNT(*) AS n FROM sessions s
+                JOIN bindings b ON b.binding_sha256=s.binding_sha256
+                WHERE b.binding_kind=? AND s.ended_at IS NULL
+                """,
+                (BOOK_CAPTURE_BINDING,),
+            ).fetchone()
+            books = connection.execute(
+                """
+                SELECT COUNT(*) AS n, MAX(received_at) AS latest
+                FROM book_events e
+                JOIN bindings b ON b.binding_sha256=e.binding_sha256
+                WHERE b.binding_kind=?
+                """,
+                (BOOK_CAPTURE_BINDING,),
+            ).fetchone()
+            trades = connection.execute(
+                """
+                SELECT COUNT(*) AS n FROM trade_prints t
+                JOIN bindings b ON b.binding_sha256=t.binding_sha256
+                WHERE b.binding_kind=?
+                """,
+                (BOOK_CAPTURE_BINDING,),
+            ).fetchone()
+        return {
+            "capture_bindings": int(bindings["n"] or 0),
+            "active_capture_sessions": int(sessions["n"] or 0),
+            "book_events": int(books["n"] or 0),
+            "trade_prints": int(trades["n"] or 0),
+            "latest_book_received_at": str(books["latest"] or ""),
+        }
+
+    @staticmethod
+    def _related_book_bindings(
+        connection: sqlite3.Connection,
+        binding_sha256: str,
+    ) -> list[str]:
+        """Return legacy semantic storage plus matching raw capture storage."""
+        binding = connection.execute(
+            """
+            SELECT binding_kind, market_id, context_json,
+                   recorder_policy_sha256
+            FROM bindings WHERE binding_sha256=?
+            """,
+            (binding_sha256,),
+        ).fetchone()
+        if binding is None or str(binding["binding_kind"]) == BOOK_CAPTURE_BINDING:
+            return [binding_sha256]
+        rows = connection.execute(
+            """
+            SELECT binding_sha256 FROM bindings
+            WHERE binding_kind=? AND market_id=? AND context_json=?
+              AND recorder_policy_sha256=?
+            ORDER BY created_at, binding_sha256
+            """,
+            (
+                BOOK_CAPTURE_BINDING,
+                str(binding["market_id"]),
+                str(binding["context_json"]),
+                str(binding["recorder_policy_sha256"]),
+            ),
+        ).fetchall()
+        return [
+            binding_sha256,
+            *[
+                str(row["binding_sha256"])
+                for row in rows
+                if str(row["binding_sha256"]) != binding_sha256
+            ],
+        ]
 
     def start_session(
         self,
@@ -358,6 +551,16 @@ class ForwardRecorderStore:
         started_at: str,
     ) -> None:
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                UPDATE sessions
+                SET ended_at=?, close_reason='superseded_by_new_session'
+                WHERE binding_sha256=? AND ended_at IS NULL
+                  AND session_id<>?
+                """,
+                (started_at, binding_sha256, session_id),
+            )
             connection.execute(
                 """
                 INSERT INTO sessions(
@@ -610,13 +813,18 @@ class ForwardRecorderStore:
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
         with self._connect(read_only=True) as connection:
+            book_bindings = self._related_book_bindings(
+                connection,
+                binding_sha256,
+            )
+            placeholders = ",".join("?" for _ in book_bindings)
             row = connection.execute(
-                """
+                f"""
                 SELECT received_at, snapshot_json FROM book_events
-                WHERE binding_sha256=? AND token_id=?
+                WHERE binding_sha256 IN ({placeholders}) AND token_id=?
                 ORDER BY received_at DESC, id DESC LIMIT 1
                 """,
-                (binding_sha256, token_id),
+                (*book_bindings, token_id),
             ).fetchone()
         if row is None:
             return {
@@ -960,26 +1168,31 @@ class ForwardRecorderStore:
         binding_sha256: str,
     ) -> dict[str, list[dict[str, Any]]]:
         with self._connect(read_only=True) as connection:
+            book_bindings = self._related_book_bindings(
+                connection,
+                binding_sha256,
+            )
+            placeholders = ",".join("?" for _ in book_bindings)
             books = [
                 dict(row)
                 for row in connection.execute(
-                    """
+                    f"""
                     SELECT * FROM book_events
-                    WHERE binding_sha256=?
+                    WHERE binding_sha256 IN ({placeholders})
                     ORDER BY received_at, id
                     """,
-                    (binding_sha256,),
+                    book_bindings,
                 ).fetchall()
             ]
             trades = [
                 dict(row)
                 for row in connection.execute(
-                    """
+                    f"""
                     SELECT * FROM trade_prints
-                    WHERE binding_sha256=?
+                    WHERE binding_sha256 IN ({placeholders})
                     ORDER BY received_at, id
                     """,
-                    (binding_sha256,),
+                    book_bindings,
                 ).fetchall()
             ]
             articles = [
@@ -996,12 +1209,12 @@ class ForwardRecorderStore:
             resolutions = [
                 dict(row)
                 for row in connection.execute(
-                    """
+                    f"""
                     SELECT * FROM resolutions
-                    WHERE binding_sha256=?
+                    WHERE binding_sha256 IN ({placeholders})
                     ORDER BY observed_at, outcome_name
                     """,
-                    (binding_sha256,),
+                    book_bindings,
                 ).fetchall()
             ]
         return {
@@ -1021,11 +1234,16 @@ class ForwardRecorderStore:
         """Return the last known socket state for the token at sample time."""
         sample_at = _iso(at, "stream availability time")
         with self._connect(read_only=True) as connection:
+            book_bindings = self._related_book_bindings(
+                connection,
+                binding_sha256,
+            )
+            placeholders = ",".join("?" for _ in book_bindings)
             rows = connection.execute(
-                """
+                f"""
                 SELECT event_type, payload_json
                 FROM operational_events
-                WHERE binding_sha256=?
+                WHERE binding_sha256 IN ({placeholders})
                   AND observed_at<=?
                   AND event_type IN (
                       'ws_open', 'ws_pong', 'ws_error', 'ws_close',
@@ -1033,7 +1251,7 @@ class ForwardRecorderStore:
                   )
                 ORDER BY observed_at DESC, id DESC
                 """,
-                (binding_sha256, sample_at),
+                (*book_bindings, sample_at),
             ).fetchall()
         for row in rows:
             payload = json.loads(str(row["payload_json"]))
@@ -1054,51 +1272,63 @@ class ForwardRecorderStore:
         max_sample_lag_ms: int,
     ) -> dict[str, Any]:
         with self._connect(read_only=True) as connection:
+            book_bindings = self._related_book_bindings(
+                connection,
+                binding_sha256,
+            )
+            placeholders = ",".join("?" for _ in book_bindings)
             sessions = connection.execute(
-                "SELECT COUNT(*) AS n FROM sessions WHERE binding_sha256=?",
-                (binding_sha256,),
+                f"""
+                SELECT COUNT(*) AS n FROM sessions
+                WHERE binding_sha256 IN ({placeholders})
+                """,
+                book_bindings,
             ).fetchone()
             books = connection.execute(
-                """
+                f"""
                 SELECT COUNT(*) AS n,
                        COUNT(DISTINCT token_id) AS tokens,
                        SUM(CASE WHEN source_at != '' THEN 1 ELSE 0 END) AS sourced
-                FROM book_events WHERE binding_sha256=?
+                FROM book_events
+                WHERE binding_sha256 IN ({placeholders})
                 """,
-                (binding_sha256,),
+                book_bindings,
             ).fetchone()
             book_latency_rows = connection.execute(
-                """
+                f"""
                 SELECT source_latency_ms FROM book_events
-                WHERE binding_sha256=? AND source_latency_ms IS NOT NULL
+                WHERE binding_sha256 IN ({placeholders})
+                  AND source_latency_ms IS NOT NULL
                 """,
-                (binding_sha256,),
+                book_bindings,
             ).fetchall()
             trades = connection.execute(
-                """
+                f"""
                 SELECT COUNT(*) AS n,
                        COUNT(DISTINCT token_id) AS tokens,
                        SUM(CASE WHEN source_at != '' THEN 1 ELSE 0 END) AS sourced
-                FROM trade_prints WHERE binding_sha256=?
+                FROM trade_prints
+                WHERE binding_sha256 IN ({placeholders})
                 """,
-                (binding_sha256,),
+                book_bindings,
             ).fetchone()
             trade_latency_rows = connection.execute(
-                """
+                f"""
                 SELECT source_latency_ms FROM trade_prints
-                WHERE binding_sha256=? AND source_latency_ms IS NOT NULL
+                WHERE binding_sha256 IN ({placeholders})
+                  AND source_latency_ms IS NOT NULL
                 """,
-                (binding_sha256,),
+                book_bindings,
             ).fetchall()
             seen_tokens = {
                 str(row["token_id"])
                 for row in connection.execute(
-                    """
+                    f"""
                     SELECT DISTINCT token_id FROM book_events
-                    WHERE binding_sha256=?
+                    WHERE binding_sha256 IN ({placeholders})
                       AND event_type IN ('book', 'rest_book')
                     """,
-                    (binding_sha256,),
+                    book_bindings,
                 ).fetchall()
             }
             articles = connection.execute(
@@ -1165,18 +1395,20 @@ class ForwardRecorderStore:
                 (binding_sha256,),
             ).fetchall()
             resolutions = connection.execute(
-                """
+                f"""
                 SELECT COUNT(DISTINCT outcome_name) AS n
-                FROM resolutions WHERE binding_sha256=?
+                FROM resolutions
+                WHERE binding_sha256 IN ({placeholders})
                 """,
-                (binding_sha256,),
+                book_bindings,
             ).fetchone()
             ops = connection.execute(
-                """
+                f"""
                 SELECT event_type, COUNT(*) AS n FROM operational_events
-                WHERE binding_sha256=? GROUP BY event_type
+                WHERE binding_sha256 IN ({placeholders})
+                GROUP BY event_type
                 """,
-                (binding_sha256,),
+                book_bindings,
             ).fetchall()
 
         book_count = int(books["n"] or 0)
@@ -1620,9 +1852,8 @@ class ForwardBookService:
         self.config = config
         self.recorder_config = config.forward_recorder
         self.store = ForwardRecorderStore(forward_recorder_db_path(config))
-        self.discovery = DiscoveryStore(config.data_dir)
-        self.rule_store = RuleStore(rule_store_db_path(config))
         self._lock = threading.RLock()
+        self._write_lock = threading.Lock()
         self._caches: list[BookCache] = []
         self._bindings_by_token: dict[str, list[str]] = {}
         self._contexts_by_binding: dict[str, MarketContext] = {}
@@ -1630,7 +1861,15 @@ class ForwardBookService:
         self._fingerprint = ""
         self._streaming = False
         self._last_sync_at = ""
+        self._generation = 0
+        self._seed_cancel = threading.Event()
+        self._seed_thread: threading.Thread | None = None
+        self._seed_total = 0
+        self._seed_completed = 0
         self._seed_errors = 0
+        self._seed_in_progress = False
+        self._seed_max_pending = 0
+        self._storage_errors = 0
 
     def sync(
         self,
@@ -1675,6 +1914,7 @@ class ForwardBookService:
             self._bindings_by_token = bindings_by_token
             self._contexts_by_binding = contexts_by_binding
             self._sessions_by_binding = sessions
+            generation = self._generation
 
         tokens = sorted(bindings_by_token)
         shard_size = self.recorder_config.max_tokens_per_connection
@@ -1692,7 +1932,12 @@ class ForwardBookService:
                 ),
                 max_snapshot_levels=self.recorder_config.max_book_levels,
             )
-            cache.add_listener(self._on_stream_event)
+            cache.add_listener(
+                lambda record, generation=generation: self._on_stream_event(
+                    record,
+                    generation=generation,
+                )
+            )
             caches.append(cache)
         with self._lock:
             self._caches = caches
@@ -1700,11 +1945,24 @@ class ForwardBookService:
             self._fingerprint = fingerprint
             self._last_sync_at = started_at
 
-        if self.recorder_config.rest_seed:
-            self._seed_books(caches)
         if start_websocket:
             for cache in caches:
                 cache.start_ws()
+        if self.recorder_config.rest_seed:
+            if start_websocket:
+                self._start_seed_books(caches, generation=generation)
+            else:
+                cancel = threading.Event()
+                with self._lock:
+                    self._seed_total = len(tokens)
+                    self._seed_completed = 0
+                    self._seed_errors = 0
+                    self._seed_in_progress = bool(tokens)
+                self._seed_books(
+                    caches,
+                    generation=generation,
+                    cancel=cancel,
+                )
         return self.status()
 
     def poll_once(
@@ -1721,10 +1979,16 @@ class ForwardBookService:
             connections = [
                 cache.connection_state() for cache in self._caches
             ]
-            return {
+            status = {
                 "enabled": True,
                 "paper_only": True,
                 "shared": True,
+                "reason": (
+                    ""
+                    if self._contexts_by_binding
+                    else "no_recordable_contexts"
+                ),
+                "selected_contexts": len(self._contexts_by_binding),
                 "bindings": len(self._contexts_by_binding),
                 "tokens": len(self._bindings_by_token),
                 "connections": len(self._caches),
@@ -1734,10 +1998,17 @@ class ForwardBookService:
                 "reconnects": sum(
                     int(item["reconnects"]) for item in connections
                 ),
+                "rest_seed_enabled": self.recorder_config.rest_seed,
+                "rest_seed_in_progress": self._seed_in_progress,
+                "rest_seed_total": self._seed_total,
+                "rest_seed_completed": self._seed_completed,
                 "rest_seed_errors": self._seed_errors,
+                "rest_seed_max_pending": self._seed_max_pending,
+                "storage_errors": self._storage_errors,
                 "streaming": self._streaming,
                 "last_sync_at": self._last_sync_at,
             }
+        return {**status, **self.store.capture_status()}
 
     def _resolve_bindings(
         self,
@@ -1746,22 +2017,10 @@ class ForwardBookService:
         bindings_by_token: dict[str, list[str]] = {}
         contexts_by_binding: dict[str, MarketContext] = {}
         for context in contexts:
-            if context.state not in TRADEABLE_STATES:
-                continue
-            plan = self.discovery.load_source_plan(context.market_id)
-            spec = self.rule_store.load_spec(
-                context.market_id,
-                context.rule_text_sha256,
-            )
-            if plan is None or spec is None:
-                continue
             try:
-                binding = self.store.ensure_binding(
+                binding = self.store.ensure_book_binding(
                     context,
-                    spec,
-                    plan,
                     self.recorder_config,
-                    evidence_policy=_evidence_policy_payload(self.config),
                 )
             except ValueError as exc:
                 log_event(
@@ -1771,14 +2030,15 @@ class ForwardBookService:
                 )
                 continue
             contexts_by_binding[binding] = context
-            for outcome in spec.outcomes:
+            for outcome in context.outcomes:
                 for token_id in (
                     outcome.yes_token_id,
                     outcome.no_token_id,
                 ):
-                    bindings_by_token.setdefault(token_id, []).append(
-                        binding
-                    )
+                    if token_id:
+                        bindings_by_token.setdefault(token_id, []).append(
+                            binding
+                        )
         return (
             {
                 token: sorted(set(bindings))
@@ -1787,39 +2047,122 @@ class ForwardBookService:
             contexts_by_binding,
         )
 
-    def _seed_books(self, caches: list[BookCache]) -> None:
+    def _start_seed_books(
+        self,
+        caches: list[BookCache],
+        *,
+        generation: int,
+    ) -> None:
+        cancel = threading.Event()
+        jobs = sum(len(cache.token_ids) for cache in caches)
+        with self._lock:
+            self._seed_cancel = cancel
+            self._seed_total = jobs
+            self._seed_completed = 0
+            self._seed_errors = 0
+            self._seed_in_progress = bool(jobs)
+            self._seed_max_pending = 0
+        if not jobs:
+            return
+        thread = threading.Thread(
+            target=self._seed_books,
+            args=(caches,),
+            kwargs={"generation": generation, "cancel": cancel},
+            name="polybot-book-rest-seed",
+            daemon=True,
+        )
+        with self._lock:
+            self._seed_thread = thread
+        thread.start()
+
+    def _seed_books(
+        self,
+        caches: list[BookCache],
+        *,
+        generation: int,
+        cancel: threading.Event,
+    ) -> None:
         jobs: list[tuple[BookCache, str]] = [
             (cache, token_id)
             for cache in caches
             for token_id in cache.token_ids
         ]
         if not jobs:
+            with self._lock:
+                if generation == self._generation:
+                    self._seed_in_progress = False
             return
-        with ThreadPoolExecutor(
-            max_workers=min(
-                self.recorder_config.rest_seed_workers,
-                len(jobs),
-            )
-        ) as pool:
-            futures = {
-                pool.submit(cache.rest_snapshot, token_id): token_id
-                for cache, token_id in jobs
-            }
-            for future in as_completed(futures):
-                token_id = futures[future]
+        worker_count = min(
+            self.recorder_config.rest_seed_workers,
+            len(jobs),
+        )
+        pool = ThreadPoolExecutor(
+            max_workers=worker_count,
+            thread_name_prefix="polybot-book-rest",
+        )
+        pending = {}
+        remaining = iter(jobs)
+
+        def submit_available() -> None:
+            while (
+                not cancel.is_set()
+                and len(pending) < worker_count * 2
+            ):
                 try:
-                    future.result()
-                except Exception as exc:
-                    with self._lock:
-                        self._seed_errors += 1
-                    self._record_token_operational(
-                        token_id,
-                        event_type="rest_seed_error",
-                        payload={"error": str(exc)},
-                    )
+                    cache, token_id = next(remaining)
+                except StopIteration:
+                    return
+                pending[pool.submit(cache.rest_snapshot, token_id)] = (
+                    token_id
+                )
+                with self._lock:
+                    if generation == self._generation:
+                        self._seed_max_pending = max(
+                            self._seed_max_pending,
+                            len(pending),
+                        )
+
+        try:
+            submit_available()
+            while pending and not cancel.is_set():
+                completed, _ = wait(
+                    pending,
+                    return_when=FIRST_COMPLETED,
+                )
+                for future in completed:
+                    token_id = pending.pop(future)
+                    try:
+                        future.result()
+                    except Exception as exc:
+                        with self._lock:
+                            if generation != self._generation:
+                                return
+                            self._seed_errors += 1
+                        self._record_token_operational(
+                            token_id,
+                            event_type="rest_seed_error",
+                            payload={"error": str(exc)},
+                            generation=generation,
+                        )
+                    finally:
+                        # Removing completed futures promptly releases any
+                        # requests traceback/Response they retained.
+                        with self._lock:
+                            if generation == self._generation:
+                                self._seed_completed += 1
+                submit_available()
+        finally:
+            for future in pending:
+                future.cancel()
+            pool.shutdown(wait=False, cancel_futures=True)
+            with self._lock:
+                if generation == self._generation:
+                    self._seed_in_progress = False
 
     def _shutdown_streams(self, *, reason: str) -> None:
         with self._lock:
+            self._seed_cancel.set()
+            self._generation += 1
             caches = list(self._caches)
             sessions = dict(self._sessions_by_binding)
         for cache in caches:
@@ -1838,11 +2181,19 @@ class ForwardBookService:
             self._sessions_by_binding = {}
             self._streaming = False
             self._fingerprint = ""
+            self._seed_in_progress = False
 
-    def _on_stream_event(self, record: dict[str, Any]) -> None:
+    def _on_stream_event(
+        self,
+        record: dict[str, Any],
+        *,
+        generation: int,
+    ) -> None:
         event_type = str(record.get("event_type") or "")
         token_id = str(record.get("token_id") or "")
         with self._lock:
+            if generation != self._generation:
+                return
             bindings = list(self._bindings_by_token.get(token_id, []))
             bindings_by_token = {
                 item: list(bound)
@@ -1855,11 +2206,19 @@ class ForwardBookService:
             and isinstance(record.get("snapshot"), dict)
             and event_type in {"book", "rest_book", "price_change"}
         ):
-            for binding in bindings:
-                self.store.record_book_event(
-                    session_id=sessions[binding],
-                    binding_sha256=binding,
-                    record=record,
+            try:
+                with self._write_lock:
+                    for binding in bindings:
+                        self.store.record_book_event(
+                            session_id=sessions[binding],
+                            binding_sha256=binding,
+                            record=record,
+                        )
+            except sqlite3.Error as exc:
+                self._note_storage_error(
+                    event_type=event_type,
+                    token_id=token_id,
+                    error=exc,
                 )
             return
         if (
@@ -1867,21 +2226,37 @@ class ForwardBookService:
             and event_type == "last_trade_price"
             and isinstance(record.get("event"), dict)
         ):
-            for binding in bindings:
-                self.store.record_trade_print(
-                    session_id=sessions[binding],
-                    binding_sha256=binding,
-                    record=record,
+            try:
+                with self._write_lock:
+                    for binding in bindings:
+                        self.store.record_trade_print(
+                            session_id=sessions[binding],
+                            binding_sha256=binding,
+                            record=record,
+                        )
+            except sqlite3.Error as exc:
+                self._note_storage_error(
+                    event_type=event_type,
+                    token_id=token_id,
+                    error=exc,
                 )
             return
         if event_type == "market_resolved":
-            for binding, context in contexts.items():
-                _record_stream_resolution(
-                    store=self.store,
-                    binding_sha256=binding,
-                    session_id=sessions[binding],
-                    context=context,
-                    record=record,
+            try:
+                with self._write_lock:
+                    for binding, context in contexts.items():
+                        _record_stream_resolution(
+                            store=self.store,
+                            binding_sha256=binding,
+                            session_id=sessions[binding],
+                            context=context,
+                            record=record,
+                        )
+            except sqlite3.Error as exc:
+                self._note_storage_error(
+                    event_type=event_type,
+                    token_id=token_id,
+                    error=exc,
                 )
             return
         payload = record
@@ -1895,13 +2270,21 @@ class ForwardBookService:
             }
         else:
             target_bindings = set(sessions)
-        for binding in sorted(target_bindings):
-            self.store.record_operational_event(
-                session_id=sessions[binding],
-                binding_sha256=binding,
+        try:
+            with self._write_lock:
+                for binding in sorted(target_bindings):
+                    self.store.record_operational_event(
+                        session_id=sessions[binding],
+                        binding_sha256=binding,
+                        event_type=event_type or "market_stream_event",
+                        observed_at=observed_at,
+                        payload=payload,
+                    )
+        except sqlite3.Error as exc:
+            self._note_storage_error(
                 event_type=event_type or "market_stream_event",
-                observed_at=observed_at,
-                payload=payload,
+                token_id=token_id,
+                error=exc,
             )
 
     def _record_token_operational(
@@ -1910,18 +2293,45 @@ class ForwardBookService:
         *,
         event_type: str,
         payload: dict[str, Any],
+        generation: int,
     ) -> None:
         with self._lock:
+            if generation != self._generation:
+                return
             bindings = list(self._bindings_by_token.get(token_id, []))
             sessions = dict(self._sessions_by_binding)
-        for binding in bindings:
-            self.store.record_operational_event(
-                session_id=sessions[binding],
-                binding_sha256=binding,
+        try:
+            with self._write_lock:
+                for binding in bindings:
+                    self.store.record_operational_event(
+                        session_id=sessions[binding],
+                        binding_sha256=binding,
+                        event_type=event_type,
+                        observed_at=_now(),
+                        payload={"token_id": token_id, **payload},
+                    )
+        except sqlite3.Error as exc:
+            self._note_storage_error(
                 event_type=event_type,
-                observed_at=_now(),
-                payload={"token_id": token_id, **payload},
+                token_id=token_id,
+                error=exc,
             )
+
+    def _note_storage_error(
+        self,
+        *,
+        event_type: str,
+        token_id: str,
+        error: sqlite3.Error,
+    ) -> None:
+        with self._lock:
+            self._storage_errors += 1
+        log_event(
+            "forward_book_store_write_error",
+            event_type=event_type,
+            token_id=token_id,
+            error=str(error),
+        )
 
 
 class RecordedClobQuoteAdapter:

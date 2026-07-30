@@ -20,6 +20,9 @@ MARKET_STATES = {
 }
 
 TRADEABLE_STATES = {"PAPER_ELIGIBLE", "LIVE_CONFIRMATION_ELIGIBLE"}
+SOURCE_PLAN_SCHEMA_VERSION = 2
+SOURCE_PLAN_CURRENT = "CURRENT"
+SOURCE_PLAN_LEGACY = "LEGACY_PRE_RULESPEC"
 
 
 def market_dir_slug(market_id: str) -> str:
@@ -208,6 +211,8 @@ class SourcePlan:
     missing_required_source_refs: list[str] = field(default_factory=list)
     minimum_independent_confirmations: int = 1
     created_at: str = ""
+    schema_version: int = SOURCE_PLAN_SCHEMA_VERSION
+    semantic_status: str = SOURCE_PLAN_CURRENT
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -224,6 +229,14 @@ class SourcePlan:
             for name in cls.__dataclass_fields__  # type: ignore[attr-defined]
             if name in raw and name != "source_records"
         }
+        if "schema_version" not in raw:
+            known["schema_version"] = 1
+        if "semantic_status" not in raw:
+            known["semantic_status"] = (
+                SOURCE_PLAN_CURRENT
+                if raw.get("rule_spec_sha256") and records
+                else SOURCE_PLAN_LEGACY
+            )
         return cls(source_records=records, **known)  # type: ignore[arg-type]
 
 

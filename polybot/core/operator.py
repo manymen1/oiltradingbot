@@ -119,6 +119,20 @@ class OperatorGate:
                 blockers.append("claude_cli_not_installed")
             else:
                 warnings.append("claude_cli_not_installed")
+        from polybot.core.codex_cli import (
+            codex_cli_available,
+            is_codex_cli_provider,
+        )
+
+        if is_codex_cli_provider(
+            self.config.classifier.provider
+        ) and not codex_cli_available(
+            getattr(self.config.classifier, "cli_binary", "codex")
+        ):
+            if live_requested:
+                blockers.append("codex_cli_not_installed")
+            else:
+                warnings.append("codex_cli_not_installed")
         return OperatorStatus(
             position_id=self.position_id,
             operator_dir=str(self.operator_dir),

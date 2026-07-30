@@ -17,7 +17,14 @@ from .registry import (
     publisher_sources,
     resolve_source_reference,
 )
-from .types import MarketContext, PlannedSource, SourcePlan
+from .types import (
+    SOURCE_PLAN_CURRENT,
+    SOURCE_PLAN_LEGACY,
+    SOURCE_PLAN_SCHEMA_VERSION,
+    MarketContext,
+    PlannedSource,
+    SourcePlan,
+)
 
 
 def build_source_plan(
@@ -108,6 +115,8 @@ def build_source_plan(
         escalate_terms=escalate_terms,
         rationale=rationale,
         created_at=datetime.now(timezone.utc).isoformat(),
+        schema_version=1,
+        semantic_status=SOURCE_PLAN_LEGACY,
     )
 
 
@@ -201,6 +210,39 @@ def _build_rule_spec_source_plan(
         rationale.setdefault(url, []).append(
             f"{label} query derived from RuleSpec predicate"
         )
+    records.extend(
+        [
+            PlannedSource(
+                source_id="aggregator:google_news",
+                organization_id="aggregator:google_news",
+                independence_group="aggregator:google_news",
+                domain="news.google.com",
+                source_tier="aggregator",
+                feed_urls=[
+                    url
+                    for url in aggregator_urls
+                    if "news.google.com" in url
+                ],
+                roles=["DISCOVERY_ONLY"],
+                timestamp_quality="indexed",
+            ),
+            PlannedSource(
+                source_id="aggregator:bing_news",
+                organization_id="aggregator:bing_news",
+                independence_group="aggregator:bing_news",
+                domain="bing.com",
+                source_tier="aggregator",
+                feed_urls=[
+                    url
+                    for url in aggregator_urls
+                    if "bing.com" in url
+                ],
+                roles=["DISCOVERY_ONLY"],
+                timestamp_quality="indexed",
+            ),
+        ]
+    )
+    records = _merge_source_records(records)
 
     feed_urls = _ordered_unique(direct_urls + aggregator_urls)
     poll_urls = _ordered_unique(
@@ -231,6 +273,8 @@ def _build_rule_spec_source_plan(
             semantics.resolution_policy.independent_confirmation_sources
         ),
         created_at=datetime.now(timezone.utc).isoformat(),
+        schema_version=SOURCE_PLAN_SCHEMA_VERSION,
+        semantic_status=SOURCE_PLAN_CURRENT,
     )
 
 
@@ -393,6 +437,8 @@ def source_plan_sha256(plan: SourcePlan) -> str:
         "minimum_independent_confirmations": (
             plan.minimum_independent_confirmations
         ),
+        "schema_version": plan.schema_version,
+        "semantic_status": plan.semantic_status,
     }
     encoded = json.dumps(
         execution_fields,
@@ -408,9 +454,98 @@ def validate_source_plan_freshness(
     rule_spec: RuleSpec,
 ) -> None:
     rule_spec.validate_context_binding(context)
+    if plan.schema_version != SOURCE_PLAN_SCHEMA_VERSION:
+        raise ValueError(
+            "source plan schema is legacy or unsupported"
+        )
+    if plan.semantic_status != SOURCE_PLAN_CURRENT:
+        raise ValueError("source plan is not semantically current")
     if plan.market_id != context.market_id:
         raise ValueError("source plan market_id does not match context")
     if plan.rule_text_sha256 != context.rule_text_sha256:
         raise ValueError("source plan is stale for current rule text")
     if plan.rule_spec_sha256 != rule_spec.spec_sha256:
         raise ValueError("source plan is stale for current RuleSpec")
+    if not plan.source_records:
+        raise ValueError("source plan has no structured source records")
+    if plan.missing_required_source_refs:
+        raise ValueError(
+            "source plan has unresolved required sources: "
+            + ",".join(plan.missing_required_source_refs)
+        )
+
+    feed_domains = {
+        _url_domain(url)
+        for url in plan.feed_urls
+        if _url_domain(url)
+    }
+    recorded_feed_domains = {
+        _url_domain(url)
+        for source in plan.source_records
+        for url in source.feed_urls
+        if _url_domain(url)
+    }
+    if not feed_domains.issubset(recorded_feed_domains):
+        raise ValueError(
+            "source plan contains feeds without structured source records"
+        )
+
+    aggregator_domains = {"news.google.com", "bing.com", "www.bing.com"}
+    semantic_domains = {
+        source.domain.casefold().removeprefix("www.")
+        for source in plan.source_records
+        if set(source.roles) & {"CONFIRMATION", "SETTLEMENT"}
+        and source.source_tier
+        not in {"aggregator", "state_affiliated_press"}
+    }
+    auto_trade_domains = {
+        domain.casefold().removeprefix("www.")
+        for domain in plan.auto_trade_domains
+    }
+    if not auto_trade_domains.issubset(semantic_domains):
+        raise ValueError(
+            "auto-trade domains lack structured semantic authority"
+        )
+    for source in plan.source_records:
+        normalized_domain = source.domain.casefold().removeprefix("www.")
+        if (
+            source.source_tier == "aggregator"
+            or normalized_domain in {"news.google.com", "bing.com"}
+        ) and set(source.roles) != {"DISCOVERY_ONLY"}:
+            raise ValueError(
+                "aggregator sources must be DISCOVERY_ONLY"
+            )
+        if source.required and not (
+            source.feed_urls or source.poll_urls
+        ):
+            raise ValueError(
+                f"required source has no usable endpoint:{source.source_id}"
+            )
+    if auto_trade_domains & {
+        domain.removeprefix("www.")
+        for domain in aggregator_domains
+    }:
+        raise ValueError(
+            "aggregator domains cannot authorize semantic execution"
+        )
+
+    confirmation_groups = {
+        source.independence_group
+        for source in plan.source_records
+        if set(source.roles) & {"CONFIRMATION", "SETTLEMENT"}
+        and source.source_tier
+        not in {"aggregator", "state_affiliated_press"}
+    }
+    if (
+        len(confirmation_groups)
+        < plan.minimum_independent_confirmations
+    ):
+        raise ValueError(
+            "source plan lacks required independent confirmations"
+        )
+
+
+def _url_domain(url: str) -> str:
+    from urllib.parse import urlparse
+
+    return urlparse(url).netloc.casefold().removeprefix("www.")

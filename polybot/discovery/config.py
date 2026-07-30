@@ -1215,6 +1215,9 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
             "claude_cli",
             "claude-cli",
             "claude_code_cli",
+            "codex_cli",
+            "codex-cli",
+            "codex",
         },
     )
     estimator = config.estimator

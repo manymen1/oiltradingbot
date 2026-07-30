@@ -106,6 +106,9 @@ class LLMRuleAnalyzer:
         if provider in {"claude_cli", "claude-cli", "claude_code_cli"}:
             text = self._claude_cli(prompt)
             model_label = f"claude_cli:{self.config.model}"
+        elif provider in {"codex_cli", "codex-cli", "codex"}:
+            text = self._codex_cli(prompt)
+            model_label = f"codex_cli:{self.config.model}"
         else:
             text = self._anthropic(prompt)
             model_label = f"anthropic:{self.config.model}"
@@ -143,6 +146,25 @@ class LLMRuleAnalyzer:
         text, _usage = extract_claude_cli_result(stdout)
         return text
 
+    def _codex_cli(self, prompt: str) -> str:
+        from polybot.core.codex_cli import (
+            extract_codex_cli_result,
+            run_codex_cli,
+        )
+
+        stdout = (
+            self._cli_runner(prompt)
+            if self._cli_runner is not None
+            else run_codex_cli(
+                prompt,
+                model=self.config.model,
+                output_schema=_ANALYSIS_SCHEMA,
+                cli_binary=self.config.cli_binary,
+                timeout_seconds=self.config.cli_timeout_seconds,
+            )
+        )
+        return extract_codex_cli_result(stdout)
+
     def _client(self) -> Any:
         if self._anthropic_client is None:
             import anthropic
@@ -157,10 +179,19 @@ class LLMRuleAnalyzer:
 def build_rule_analyzer(config: ClassifierConfig) -> RuleAnalyzerProtocol:
     if config.provider == "rule_based":
         return FixtureRuleAnalyzer()
-    if config.provider.strip().lower() in {"anthropic", "claude_cli", "claude-cli", "claude_code_cli"}:
+    if config.provider.strip().lower() in {
+        "anthropic",
+        "claude_cli",
+        "claude-cli",
+        "claude_code_cli",
+        "codex_cli",
+        "codex-cli",
+        "codex",
+    }:
         return LLMRuleAnalyzer(config)
     raise RuntimeError(
-        f"unsupported rule analyzer provider: {config.provider} (supported: anthropic, claude_cli, rule_based)"
+        f"unsupported rule analyzer provider: {config.provider} "
+        "(supported: anthropic, claude_cli, codex_cli, rule_based)"
     )
 
 

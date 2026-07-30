@@ -256,6 +256,47 @@ class RuleStore:
             ).fetchall()
         return [RuleSpec.from_dict(json.loads(str(row["spec_json"]))) for row in rows]
 
+    def market_activity_status(
+        self,
+        market_id: str,
+        rule_spec_sha256: str,
+    ) -> dict[str, int]:
+        with self._connect(read_only=True) as connection:
+            claims = connection.execute(
+                """
+                SELECT COUNT(*) AS n FROM evidence_claims
+                WHERE market_id=? AND rule_spec_sha256=?
+                """,
+                (market_id, rule_spec_sha256),
+            ).fetchone()
+            extractions = connection.execute(
+                """
+                SELECT COUNT(*) AS n FROM extraction_passes
+                WHERE market_id=? AND rule_spec_sha256=?
+                """,
+                (market_id, rule_spec_sha256),
+            ).fetchone()
+            evaluations = connection.execute(
+                """
+                SELECT COUNT(*) AS n FROM rule_evaluations
+                WHERE market_id=? AND rule_spec_sha256=?
+                """,
+                (market_id, rule_spec_sha256),
+            ).fetchone()
+            proofs = connection.execute(
+                """
+                SELECT COUNT(*) AS n FROM decision_proofs
+                WHERE market_id=? AND rule_spec_sha256=?
+                """,
+                (market_id, rule_spec_sha256),
+            ).fetchone()
+        return {
+            "evidence_claims": int(claims["n"] or 0),
+            "extraction_passes": int(extractions["n"] or 0),
+            "evaluations": int(evaluations["n"] or 0),
+            "decision_proofs": int(proofs["n"] or 0),
+        }
+
     def save_pass(self, item: CompilationPass) -> None:
         normalized_json = (
             canonical_json(item.normalized_output)

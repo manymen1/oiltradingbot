@@ -137,9 +137,13 @@ class BookCache:
                 self._listeners.append(listener)
 
     def rest_snapshot(self, token_id: str) -> None:
-        response = requests.get(f"{self.clob_host}/book", params={"token_id": token_id}, timeout=10)
-        response.raise_for_status()
-        payload = response.json()
+        with requests.get(
+            f"{self.clob_host}/book",
+            params={"token_id": token_id},
+            timeout=10,
+        ) as response:
+            response.raise_for_status()
+            payload = response.json()
         if not isinstance(payload, dict):
             raise ValueError("CLOB book response must be an object")
         self._apply_book(token_id, payload, event_type="rest_book")

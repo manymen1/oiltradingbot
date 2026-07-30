@@ -9,7 +9,7 @@ WorkingDirectory=/home/tstuv/poly/anthropic-exec-bot
 EnvironmentFile=/home/tstuv/poly/anthropic-exec-bot/.env
 Environment=PATH=/home/tstuv/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Add --live only after a monitoring soak with fleet.position_mode alert_only.
-ExecStart=/home/tstuv/poly/anthropic-exec-bot/.venv/bin/python -m polybot.geopolitics run-fleet --config configs/discovery/geopolitics.yaml
+ExecStart=/home/tstuv/poly/anthropic-exec-bot/.venv/bin/python -m polybot.geopolitics run-fleet --config configs/geopolitics/discovery.yaml
 # Kill the whole control group so supervised bot subprocesses stop with the fleet.
 KillMode=control-group
 Restart=on-failure

@@ -126,10 +126,22 @@ class LLMBinaryClassifier:
         if provider == "anthropic":
             raw = self._anthropic(prompt)
         elif provider in {"claude_cli", "claude-cli", "claude_code_cli"}:
-            raw = self._cli_with_anthropic_fallback(prompt)
+            raw = self._cli_with_anthropic_fallback(
+                prompt,
+                invoke=self._claude_cli,
+                label="claude CLI",
+            )
+        elif provider in {"codex_cli", "codex-cli", "codex"}:
+            raw = self._cli_with_anthropic_fallback(
+                prompt,
+                invoke=self._codex_cli,
+                label="codex CLI",
+            )
         else:
             raise RuntimeError(
-                f"unsupported binary classifier provider: {self.config.provider} (supported: anthropic, claude_cli, rule_based)"
+                "unsupported binary classifier provider: "
+                f"{self.config.provider} "
+                "(supported: anthropic, claude_cli, codex_cli, rule_based)"
             )
         return RuleSignal.from_dict(_json_object(raw))
 
@@ -153,18 +165,45 @@ class LLMBinaryClassifier:
         self.last_usage = usage
         return text
 
-    def _cli_with_anthropic_fallback(self, prompt: str) -> str:
+    def _codex_cli(self, prompt: str) -> str:
+        """Classify through the locally authenticated Codex CLI."""
+        from polybot.core.codex_cli import (
+            extract_codex_cli_result,
+            run_codex_cli,
+        )
+
+        stdout = (
+            self._cli_runner(prompt)
+            if self._cli_runner is not None
+            else run_codex_cli(
+                prompt,
+                model=self.config.model,
+                output_schema=_OUTPUT_SCHEMA,
+                cli_binary=self.config.cli_binary,
+                timeout_seconds=self.config.cli_timeout_seconds,
+            )
+        )
+        self.last_usage = None
+        return extract_codex_cli_result(stdout)
+
+    def _cli_with_anthropic_fallback(
+        self,
+        prompt: str,
+        *,
+        invoke: Any,
+        label: str,
+    ) -> str:
         """CLI first; if it fails AND an API key exists, fall back to the
         metered API rather than missing a trade-grade classification."""
         try:
-            return self._claude_cli(prompt)
+            return invoke(prompt)
         except Exception as exc:
             if not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("LLM_API_KEY")):
                 raise
             fallback_model = os.getenv("ANTHROPIC_CLASSIFIER_FALLBACK_MODEL") or "claude-sonnet-4-6"
             raw = self._anthropic(prompt, model=fallback_model)
             usage = dict(self.last_usage or {})
-            usage["fallback_from"] = "claude CLI"
+            usage["fallback_from"] = label
             usage["fallback_error"] = str(exc)[:500]
             usage["fallback_model"] = fallback_model
             self.last_usage = usage

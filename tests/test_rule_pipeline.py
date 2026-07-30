@@ -78,16 +78,59 @@ def test_compile_cycle_caps_only_new_specs_and_cached_specs_are_free(
         for item in first["results"]
         if item["status"] == "DEFERRED"
     )
-    assert (
-        store.load_context(deferred_id).state
-        == "RULES_REVIEW_REQUIRED"
-    )
+    # Hitting a batch limit is scheduling, not a semantic failure: it must
+    # not mutate the market's descriptive state.
+    assert store.load_context(deferred_id).state == contexts[
+        [item.market_id for item in contexts].index(deferred_id)
+    ].state
 
     assert compile_rules_command(config_path) == 0
     second = json.loads(capsys.readouterr().out)
     assert second["cached"] == 1
     assert second["compiled"] == 1
     assert second["deferred"] == 0
+
+
+def test_semantic_pregrade_is_scoped_and_does_not_authorize_without_assets(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    selected = replace(
+        context_for_case(_golden_rules()[0], strong_analysis=True),
+        state="DISCOVERED",
+    )
+    untouched = replace(
+        context_for_case(_golden_rules()[1], strong_analysis=True),
+        state="MONITOR_ONLY",
+        state_reasons=["manual_review"],
+    )
+    store.save_context(selected)
+    store.save_context(untouched)
+
+    grade_markets_command(
+        config_path,
+        require_semantic_assets=False,
+        market_ids={selected.market_id},
+    )
+    capsys.readouterr()
+    assert store.load_context(selected.market_id).state in {
+        "PAPER_ELIGIBLE",
+        "LIVE_CONFIRMATION_ELIGIBLE",
+    }
+    assert store.load_context(untouched.market_id).state == "MONITOR_ONLY"
+
+    grade_markets_command(
+        config_path,
+        require_semantic_assets=True,
+        market_ids={selected.market_id},
+    )
+    capsys.readouterr()
+    strict = store.load_context(selected.market_id)
+    assert strict.state == "RULES_REVIEW_REQUIRED"
+    assert strict.state_reasons == ["valid_rule_spec_missing"]
 
 
 def test_compile_plan_grade_roundtrip_is_paper_only(

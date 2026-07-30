@@ -343,6 +343,9 @@ def validate_binary_config(config: BinaryBotConfig) -> None:
             "claude_cli",
             "claude-cli",
             "claude_code_cli",
+            "codex_cli",
+            "codex-cli",
+            "codex",
         },
     )
     validate_portfolio_link_config(config.portfolio)

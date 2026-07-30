@@ -147,9 +147,12 @@ classifier_budget:
   # Atomic global sub-quotas: incumbent evidence, cold-start exploration, and
   # rule compilation/retries/safety work. No process may borrow by starting
   # earlier than another.
-  exploitation_fraction: 0.70
+  # Ten two-pass RuleSpecs fit in the system lane each hour while migration
+  # is active. Evidence retains the largest lane and exploration stays at the
+  # profit-priority policy's fixed 20%.
+  exploitation_fraction: 0.46
   exploration_fraction: 0.20
-  system_fraction: 0.10
+  system_fraction: 0.34
 
 profit_priority:
   enabled: true
@@ -242,10 +245,10 @@ forward_recorder:
   # is permanently missing from the research record -- including the
   # MONITOR_ONLY and ungraded markets whose gradings the data is meant to
   # test. Recording confers no execution permission and never shrinks the
-  # monitored set. Raise max_recorded_markets off 0 if the open universe
-  # turns out large enough that connection count matters (200 tokens each).
+  # monitored set. The 200-context cap keeps the current universe near 48
+  # connections (200 tokens each) while never displacing monitored markets.
   record_all_contexts: true
-  max_recorded_markets: 0
+  max_recorded_markets: 200
   quote_survival_horizons_ms:
     - 100
     - 250
@@ -272,14 +275,12 @@ allocator:
   max_drawdown_usd: 150.0
 
 classifier:
-  # claude_cli routes ALL classification (rule analysis, screen tier,
-  # confirm passes) through the Claude Code CLI using your Claude
-  # SUBSCRIPTION -- no metered API billing. Requires `claude` installed and
-  # logged in on this host (`claude login`); if ANTHROPIC_API_KEY is also
-  # set in .env it becomes an automatic fallback when the CLI fails.
-  # Alternatives: anthropic (metered API), rule_based (offline smoke tests).
-  provider: claude_cli
-  model: claude-opus-4-8
+  # One locally authenticated Codex transport is inherited by rule analysis,
+  # RuleSpec compilation, evidence extraction, and generated executors.
+  # Schema-constrained two-pass stages fail closed on transport errors.
+  provider: codex_cli
+  model: gpt-5.5
+  cli_binary: codex
   cli_timeout_seconds: 180
 
 # Autonomous probability estimation: the system's own P(YES) per tradeable

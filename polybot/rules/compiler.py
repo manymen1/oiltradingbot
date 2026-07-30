@@ -339,6 +339,26 @@ class RuleCompiler:
             )
             text, _usage = extract_claude_cli_result(stdout)
             return text
+        if provider in {"codex_cli", "codex-cli", "codex"}:
+            from polybot.core.codex_cli import (
+                extract_codex_cli_result,
+                run_codex_cli,
+            )
+
+            stdout = (
+                self._cli_runner(prompt)
+                if self._cli_runner is not None
+                else run_codex_cli(
+                    prompt,
+                    model=self.classifier.model,
+                    output_schema=_SEMANTIC_SCHEMA,
+                    cli_binary=self.classifier.cli_binary,
+                    timeout_seconds=(
+                        self.classifier.cli_timeout_seconds
+                    ),
+                )
+            )
+            return extract_codex_cli_result(stdout)
         if provider != "anthropic":
             raise RuntimeError(f"unsupported rule compiler provider: {provider}")
         response = self._client().messages.create(

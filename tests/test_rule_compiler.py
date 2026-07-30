@@ -58,6 +58,26 @@ def test_two_pass_compiler_binds_instrument_and_caches(tmp_path: Path) -> None:
     assert budget.status(limits)["attempts_this_hour"] == 2
 
 
+def test_codex_cli_compiler_accepts_schema_json(tmp_path: Path) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    semantic = fixture_semantics(context).as_dict()
+    compiler = RuleCompiler(
+        ClassifierConfig(
+            provider="codex_cli",
+            model="gpt-5.5",
+            cli_binary="codex",
+        ),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=lambda _prompt: json.dumps(semantic),
+    )
+
+    result = compiler.compile(context)
+
+    assert result.status == "COMPILED"
+    assert result.spec is not None
+    assert result.spec.compiler_model == "codex_cli:gpt-5.5"
+
+
 def test_two_pass_disagreement_fails_closed_and_retains_diagnostics(
     tmp_path: Path,
 ) -> None:

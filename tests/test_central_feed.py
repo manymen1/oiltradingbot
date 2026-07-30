@@ -74,6 +74,28 @@ def test_service_fetches_union_once_and_deduplicates_restart_rows(tmp_path) -> N
     assert status["inserted_total"] == 1
 
 
+def test_feed_health_distinguishes_healthy_error_and_unpolled(
+    tmp_path,
+) -> None:
+    store = CentralFeedStore(tmp_path / "central.sqlite3")
+    healthy = "https://healthy.example/rss"
+    broken = "https://broken.example/rss"
+    missing = "https://missing.example/rss"
+    store.record_success(healthy, [])
+    store.record_error(broken, "HTTP 503")
+
+    health = store.feed_health(
+        [healthy, broken, missing],
+        stale_after_seconds=60,
+    )
+
+    assert health[healthy]["status"] == "HEALTHY"
+    assert health[healthy]["healthy"] is True
+    assert health[broken]["status"] == "ERROR"
+    assert health[broken]["last_error"] == "HTTP 503"
+    assert health[missing]["status"] == "NOT_POLLED"
+
+
 def test_service_routes_required_direct_sources_through_separate_adapter(
     tmp_path,
 ) -> None:

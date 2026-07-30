@@ -56,6 +56,9 @@ arm: ## clear the master switch back to live (per-market gates still apply)
 status: ## the 3am view: positions, heartbeats, ledger, drawdown headroom, scan
 	$(GEO) fleet-status --config $(CONFIG)
 
+semantic-coverage: ## exact capture/rule/source/evidence readiness matrix
+	$(GEO) semantic-coverage --config $(CONFIG)
+
 funnel: ## where edge died across the whole universe
 	$(GEO) funnel-report --config $(CONFIG)
 
@@ -139,4 +142,4 @@ eval: ## adversarial regression cases; nonzero exit = the change regressed
 backup: ## snapshot data/ (ledger, journals, calibration, acks)
 	deploy/backup.sh
 
-.PHONY: help setup test paper paper-once live halt watch-only arm status funnel priority economics profit-funnel calibration compile-rules inspect-rule validate-rule rule-market-once inspect-rule-market forward-completeness build-forward-timeline reconcile latency trades replay replay-rule-market promotion-report eval backup
+.PHONY: help setup test paper paper-once live halt watch-only arm status funnel priority economics profit-funnel calibration semantic-coverage compile-rules inspect-rule validate-rule rule-market-once inspect-rule-market forward-completeness build-forward-timeline reconcile latency trades replay replay-rule-market promotion-report eval backup

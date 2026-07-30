@@ -114,6 +114,12 @@ def main(argv: list[str] | None = None) -> int:
     plan_sources_parser = sub.add_parser("plan-sources")
     plan_sources_parser.add_argument("--config", required=True)
     plan_sources_parser.add_argument("--market")
+    semantic_coverage_parser = sub.add_parser("semantic-coverage")
+    semantic_coverage_parser.add_argument("--config", required=True)
+    semantic_coverage_parser.add_argument(
+        "--all-contexts",
+        action="store_true",
+    )
     scan_opportunities_parser = sub.add_parser("scan-opportunities")
     scan_opportunities_parser.add_argument("--config", required=True)
     emit_bot_config_parser = sub.add_parser("emit-bot-config")
@@ -324,6 +330,13 @@ def main(argv: list[str] | None = None) -> int:
         from .discovery.runner import plan_sources_command
 
         return plan_sources_command(Path(args.config), market_id=args.market)
+    if args.command == "semantic-coverage":
+        from .discovery.runner import semantic_coverage_command
+
+        return semantic_coverage_command(
+            Path(args.config),
+            all_contexts=args.all_contexts,
+        )
     if args.command == "scan-opportunities":
         from .discovery.runner import scan_opportunities_command
 

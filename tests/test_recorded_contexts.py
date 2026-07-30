@@ -46,6 +46,7 @@ def _context(
         volume=volume,
         liquidity=liquidity,
         closed=closed,
+        tags=["geopolitics"],
     )
 
 
@@ -93,6 +94,31 @@ def test_closed_markets_are_not_recorded() -> None:
     )
 
     assert [c.market_id for c in recorded] == ["open"]
+
+
+def test_terminal_state_markets_are_not_recorded_without_closed_flag() -> None:
+    everything = [
+        _context("open", state="MONITOR_ONLY"),
+        _context("closed-state", state="CLOSED", closed=False),
+        _context("rejected", state="REJECTED", closed=False),
+    ]
+
+    recorded = recorded_book_contexts(
+        _config(record_all_contexts=True), everything, []
+    )
+
+    assert [c.market_id for c in recorded] == ["open"]
+
+
+def test_monitored_terminal_market_preserves_superset_invariant() -> None:
+    monitored = [_context("defender", state="CLOSED", closed=False)]
+    everything = [*monitored, _context("extra", state="MONITOR_ONLY")]
+
+    recorded = recorded_book_contexts(
+        _config(record_all_contexts=True), everything, monitored
+    )
+
+    assert [c.market_id for c in recorded] == ["defender", "extra"]
 
 
 def test_extra_contexts_are_ordered_by_volume() -> None:
@@ -149,6 +175,22 @@ def test_cap_below_monitored_count_still_keeps_every_monitored_market() -> None:
     assert [c.market_id for c in recorded] == ["m1", "m2"]
 
 
+def test_unmonitored_out_of_scope_extra_is_not_recorded() -> None:
+    sports = replace(
+        _context("sports"),
+        tags=["sports"],
+        category="sports",
+        event_title="NBA finals winner",
+        question="Will Boston win the NBA finals?",
+    )
+
+    recorded = recorded_book_contexts(
+        _config(record_all_contexts=True), [sports], []
+    )
+
+    assert recorded == []
+
+
 def test_config_validation_accepts_and_rejects_the_new_fields() -> None:
     # Validate against the shipped config: the recorder sits behind a
     # dependency chain (recorder -> rule_runner -> rule_compiler), so a
@@ -157,6 +199,7 @@ def test_config_validation_accepts_and_rejects_the_new_fields() -> None:
         Path("configs/geopolitics/discovery.yaml")
     )
     assert shipped.forward_recorder.record_all_contexts is True
+    assert shipped.forward_recorder.max_recorded_markets == 200
 
     def _with(**recorder: object) -> DiscoveryConfig:
         return replace(

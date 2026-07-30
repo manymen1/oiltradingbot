@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+import threading
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -123,6 +125,50 @@ def _record_book(
             "snapshot": snapshot,
         },
     )
+
+
+def test_schema_v3_migrates_existing_bindings_as_semantic(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "forward.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE bindings (
+                binding_sha256 TEXT PRIMARY KEY,
+                market_id TEXT NOT NULL,
+                event_slug TEXT NOT NULL,
+                rule_spec_sha256 TEXT NOT NULL,
+                source_plan_sha256 TEXT NOT NULL,
+                context_json TEXT NOT NULL,
+                rule_spec_json TEXT NOT NULL,
+                source_plan_json TEXT NOT NULL,
+                recorder_policy_sha256 TEXT NOT NULL,
+                evidence_policy_sha256 TEXT NOT NULL DEFAULT '',
+                evidence_policy_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO bindings VALUES(
+                'legacy', 'market', 'event', 'spec', 'plan',
+                '{}', '{}', '{}', 'policy', '', '{}', '2026-01-01'
+            )
+            """
+        )
+
+    ForwardRecorderStore(path)
+
+    with sqlite3.connect(path) as connection:
+        kind = connection.execute(
+            """
+            SELECT binding_kind FROM bindings
+            WHERE binding_sha256='legacy'
+            """
+        ).fetchone()[0]
+    assert kind == "SEMANTIC"
 
 
 def test_book_cache_reconstructs_depth_and_accepts_current_sdk_envelope() -> None:
@@ -517,14 +563,366 @@ def test_shared_book_service_shards_and_routes_depth_without_network(
             "asks": [{"price": "0.80", "size": "100"}],
         }
     )
-    binding = service.store.latest_binding(context.market_id)
-    assert binding is not None
+    capture_binding = service.store.latest_book_binding(context.market_id)
+    assert capture_binding is not None
     snapshot = service.store.latest_book_snapshot(
-        binding_sha256=binding,
+        binding_sha256=capture_binding,
         token_id=outcome.yes_token_id,
     )
     assert snapshot["best_ask"] == 0.80
     assert snapshot["source"] == "forward_recorder_shared_store"
+
+    # Once semantic assets exist, the paper binding can read matching raw
+    # history without copying it or claiming a mismatched recorder policy.
+    semantic_binding = service.store.ensure_binding(
+        context,
+        spec,
+        _plan,
+        config.forward_recorder,
+    )
+    assert service.store.latest_binding(context.market_id) == semantic_binding
+    semantic_snapshot = service.store.latest_book_snapshot(
+        binding_sha256=semantic_binding,
+        token_id=outcome.yes_token_id,
+    )
+    assert semantic_snapshot["best_ask"] == 0.80
+
+    mismatched = service.store.ensure_binding(
+        context,
+        spec,
+        _plan,
+        replace(config.forward_recorder, max_book_levels=19),
+    )
+    assert (
+        service.store.latest_book_snapshot(
+            binding_sha256=mismatched,
+            token_id=outcome.yes_token_id,
+        )["source"]
+        == "forward_recorder_store_missing"
+    )
+    service.stop()
+
+
+def test_shared_book_service_records_ungraded_context_without_semantic_assets(
+    tmp_path: Path,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    config = replace(
+        config,
+        forward_recorder=replace(config.forward_recorder, rest_seed=False),
+    )
+    ungraded = replace(context, state="DISCOVERED")
+    service = ForwardBookService(config)
+
+    status = service.poll_once([ungraded])
+
+    assert status["selected_contexts"] == 1
+    assert status["tokens"] == 2
+    assert service.store.latest_book_binding(context.market_id) is not None
+    service.stop()
+
+
+def test_new_capture_session_retires_stale_active_session(
+    tmp_path: Path,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    store = ForwardRecorderStore(forward_recorder_db_path(config))
+    binding = store.ensure_book_binding(context, config.forward_recorder)
+    store.start_session(
+        binding,
+        session_id="stale",
+        started_at="2026-07-25T09:00:00+00:00",
+    )
+    store.start_session(
+        binding,
+        session_id="current",
+        started_at="2026-07-25T10:00:00+00:00",
+    )
+
+    with store._connect(read_only=True) as connection:
+        rows = connection.execute(
+            """
+            SELECT session_id, ended_at, close_reason
+            FROM sessions ORDER BY started_at
+            """
+        ).fetchall()
+    assert [tuple(row) for row in rows] == [
+        (
+            "stale",
+            "2026-07-25T10:00:00+00:00",
+            "superseded_by_new_session",
+        ),
+        ("current", None, ""),
+    ]
+    assert store.capture_status()["active_capture_sessions"] == 1
+
+
+def test_websocket_starts_before_rest_seed_and_shutdown_discards_old_seed(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    rest_started = threading.Event()
+    release_rest = threading.Event()
+    websocket_started = threading.Event()
+
+    class BlockingBookCache:
+        def __init__(self, token_ids, **_kwargs):
+            self.token_ids = list(token_ids)
+            self.listeners = []
+
+        def add_listener(self, listener):
+            self.listeners.append(listener)
+
+        def start_ws(self):
+            websocket_started.set()
+
+        def stop_ws(self):
+            release_rest.set()
+
+        def connection_state(self):
+            return {"connected": True, "reconnects": 0}
+
+        def rest_snapshot(self, token_id):
+            rest_started.set()
+            assert websocket_started.is_set()
+            assert release_rest.wait(2)
+            record = {
+                "event_type": "rest_book",
+                "token_id": token_id,
+                "received_at": "2026-07-25T10:00:00+00:00",
+                "source_at": "2026-07-25T10:00:00+00:00",
+                "event": {},
+                "snapshot": _snapshot(
+                    token_id,
+                    "2026-07-25T10:00:00+00:00",
+                    bid=0.40,
+                    ask=0.60,
+                ),
+            }
+            for listener in self.listeners:
+                listener(record)
+
+    monkeypatch.setattr(
+        "polybot.rules.forward.BookCache",
+        BlockingBookCache,
+    )
+    service = ForwardBookService(config)
+
+    status = service.sync([context])
+
+    assert websocket_started.is_set()
+    assert rest_started.wait(1)
+    assert status["rest_seed_in_progress"] is True
+    service.stop()
+    assert service._seed_thread is not None
+    service._seed_thread.join(timeout=2)
+    assert service.status()["rest_seed_in_progress"] is False
+    assert service.store.capture_status()["book_events"] == 0
+
+
+def test_refresh_discards_obsolete_seed_work(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    old_seed_started = threading.Event()
+    release_old_seed = threading.Event()
+    old_seed_emitted = threading.Event()
+    cache_count = 0
+
+    class RefreshBookCache:
+        def __init__(self, token_ids, **_kwargs):
+            nonlocal cache_count
+            self.token_ids = list(token_ids)
+            self.listeners = []
+            self.is_old = cache_count == 0
+            cache_count += 1
+
+        def add_listener(self, listener):
+            self.listeners.append(listener)
+
+        def start_ws(self):
+            return None
+
+        def stop_ws(self):
+            if self.is_old:
+                release_old_seed.set()
+
+        def connection_state(self):
+            return {"connected": True, "reconnects": 0}
+
+        def rest_snapshot(self, token_id):
+            if self.is_old:
+                old_seed_started.set()
+                assert release_old_seed.wait(2)
+            record = {
+                "event_type": "rest_book",
+                "token_id": token_id,
+                "received_at": "2026-07-25T10:00:00+00:00",
+                "source_at": "2026-07-25T10:00:00+00:00",
+                "event": {},
+                "snapshot": _snapshot(
+                    token_id,
+                    "2026-07-25T10:00:00+00:00",
+                    bid=0.40,
+                    ask=0.60,
+                ),
+            }
+            for listener in self.listeners:
+                listener(record)
+            if self.is_old:
+                old_seed_emitted.set()
+
+    monkeypatch.setattr(
+        "polybot.rules.forward.BookCache",
+        RefreshBookCache,
+    )
+    service = ForwardBookService(config)
+    service.sync([context])
+    assert old_seed_started.wait(1)
+    old_binding = service.store.latest_book_binding(context.market_id)
+    assert old_binding is not None
+    old_token = context.outcomes[0].yes_token_id
+
+    new_outcome = replace(
+        context.outcomes[0],
+        condition_id="new-condition",
+        yes_token_id="new-yes-token",
+        no_token_id="new-no-token",
+    )
+    refreshed = replace(
+        context,
+        market_id="new-market",
+        event_slug="new-event",
+        outcomes=[new_outcome],
+    )
+    service.sync([refreshed])
+
+    assert old_seed_emitted.wait(1)
+    assert (
+        service.store.latest_book_snapshot(
+            binding_sha256=old_binding,
+            token_id=old_token,
+        )["source"]
+        == "forward_recorder_store_missing"
+    )
+    service.stop()
+
+
+def test_seed_progress_survives_locked_diagnostic_write(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+
+    class FailedSeedBookCache:
+        def __init__(self, token_ids, **_kwargs):
+            self.token_ids = list(token_ids)
+
+        def add_listener(self, _listener):
+            return None
+
+        def start_ws(self):
+            return None
+
+        def stop_ws(self):
+            return None
+
+        def connection_state(self):
+            return {"connected": True, "reconnects": 0}
+
+        def rest_snapshot(self, _token_id):
+            raise RuntimeError("book unavailable")
+
+    monkeypatch.setattr(
+        "polybot.rules.forward.BookCache",
+        FailedSeedBookCache,
+    )
+    service = ForwardBookService(config)
+
+    def locked_write(**_kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(
+        service.store,
+        "record_operational_event",
+        locked_write,
+    )
+    service.sync([context])
+    assert service._seed_thread is not None
+    service._seed_thread.join(timeout=2)
+
+    status = service.status()
+    assert status["rest_seed_total"] == 2
+    assert status["rest_seed_completed"] == 2
+    assert status["rest_seed_errors"] == 2
+    assert status["rest_seed_in_progress"] is False
+    assert status["storage_errors"] == 2
+    service.stop()
+
+
+def test_rest_seed_keeps_only_a_bounded_future_window(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    base = context.outcomes[0]
+    context = replace(
+        context,
+        outcomes=[
+            replace(
+                base,
+                name=f"outcome-{index}",
+                condition_id=f"condition-{index}",
+                yes_token_id=f"yes-{index}",
+                no_token_id=f"no-{index}",
+            )
+            for index in range(30)
+        ],
+    )
+
+    class FastBookCache:
+        def __init__(self, token_ids, **_kwargs):
+            self.token_ids = list(token_ids)
+
+        def add_listener(self, _listener):
+            return None
+
+        def start_ws(self):
+            return None
+
+        def stop_ws(self):
+            return None
+
+        def connection_state(self):
+            return {"connected": True, "reconnects": 0}
+
+        def rest_snapshot(self, _token_id):
+            return None
+
+    monkeypatch.setattr(
+        "polybot.rules.forward.BookCache",
+        FastBookCache,
+    )
+    service = ForwardBookService(config)
+    service.sync([context])
+    assert service._seed_thread is not None
+    service._seed_thread.join(timeout=2)
+
+    status = service.status()
+    assert status["rest_seed_total"] == 60
+    assert status["rest_seed_completed"] == 60
+    assert (
+        status["rest_seed_max_pending"]
+        <= config.forward_recorder.rest_seed_workers * 2
+    )
     service.stop()
 
 
