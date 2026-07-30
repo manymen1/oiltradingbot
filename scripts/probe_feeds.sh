@@ -50,6 +50,8 @@ fi
 
 now=$(date +%s)
 for u in "${FEEDS[@]}"; do
+  u="${u%%#*}"
+  u="$(printf '%s' "$u" | tr -d '[:space:]')"
   [ -z "$u" ] && continue
   code=$(curl -s -o /tmp/probe.xml -w '%{http_code}' -L --max-time 12 \
     -A 'Mozilla/5.0 (compatible; polybot/1.0)' "$u" 2>/dev/null)
