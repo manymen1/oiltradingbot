@@ -113,6 +113,25 @@ coverage disagreement, not formatting noise. No RuleSpec or SourcePlan was
 saved, and the canary remains non-executable pending an explicit reviewed-spec
 workflow.
 
+That reviewed-spec workflow is now implemented. Candidate preparation is
+bound to one stored normalized-pass hash and the current market/rule version;
+import requires a separately repeated execution-spec hash, reviewer identity,
+and substantive review note. The imported file hash and approval are stored
+atomically with the immutable RuleSpec. Deterministic preflight, clause,
+instrument, topology, deadline-authority, SourcePlan, grading, and execution
+checks remain in force. Reviewed-only specs are unconditionally paper-only.
+No canary has been imported: the blockade candidate still requires operator
+review of its rule family, official-source representation, and terminal-Yes
+clause coverage.
+
+The blockade review exercise also exposed and fixed a deterministic source
+registry gap. Its six named US-government alternatives now resolve to the
+appropriate White House, State, Defense/War, and CENTCOM domains. Every one is
+assigned to `government:united_states`, so multiple official endpoints cannot
+be miscounted as independent confirmations. The exported draft now builds a
+fresh SourcePlan with all six policy IDs resolved, but this does not resolve
+the remaining semantic review decisions or authorize import.
+
 ## Live Mapping
 
 | # | Parent event / selected leg | Required topology | Predicate family | Resolution-source policy | Immediate blocker |

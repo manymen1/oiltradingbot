@@ -94,6 +94,21 @@ def main(argv: list[str] | None = None) -> int:
     inspect_rule_parser.add_argument("--market", required=True)
     validate_rule_parser = sub.add_parser("validate-rule")
     validate_rule_parser.add_argument("--spec", required=True)
+    prepare_rule_review_parser = sub.add_parser("prepare-rule-review")
+    prepare_rule_review_parser.add_argument("--config", required=True)
+    prepare_rule_review_parser.add_argument("--market", required=True)
+    prepare_rule_review_parser.add_argument("--pass-sha256", required=True)
+    prepare_rule_review_parser.add_argument("--out")
+    import_reviewed_rule_parser = sub.add_parser("import-reviewed-rule")
+    import_reviewed_rule_parser.add_argument("--config", required=True)
+    import_reviewed_rule_parser.add_argument("--market", required=True)
+    import_reviewed_rule_parser.add_argument("--spec", required=True)
+    import_reviewed_rule_parser.add_argument("--reviewer", required=True)
+    import_reviewed_rule_parser.add_argument("--note", required=True)
+    import_reviewed_rule_parser.add_argument(
+        "--approve-spec-sha256",
+        required=True,
+    )
     run_rule_market_parser = sub.add_parser("run-rule-market")
     run_rule_market_parser.add_argument("--config", required=True)
     run_rule_market_parser.add_argument("--market", required=True)
@@ -295,6 +310,26 @@ def main(argv: list[str] | None = None) -> int:
         from .discovery.runner import validate_rule_command
 
         return validate_rule_command(Path(args.spec))
+    if args.command == "prepare-rule-review":
+        from .rules.review import prepare_rule_review_command
+
+        return prepare_rule_review_command(
+            Path(args.config),
+            args.market,
+            args.pass_sha256,
+            out=Path(args.out) if args.out else None,
+        )
+    if args.command == "import-reviewed-rule":
+        from .rules.review import import_reviewed_rule_command
+
+        return import_reviewed_rule_command(
+            Path(args.config),
+            args.market,
+            Path(args.spec),
+            reviewer=args.reviewer,
+            note=args.note,
+            approved_spec_sha256=args.approve_spec_sha256,
+        )
     if args.command == "run-rule-market":
         from .rules.runner import run_generic_rule_market_command
 

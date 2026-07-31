@@ -76,6 +76,7 @@ def grade_market(
 
     family = ""
     compiler_is_fixture = False
+    compiler_is_reviewed = False
     deadline_mismatch_names: list[str] = []
     if require_rule_spec:
         if rule_spec is None:
@@ -117,6 +118,7 @@ def grade_market(
             family in (paper_families or set())
         )
         compiler_is_fixture = rule_spec.compiler_model == "fixture"
+        compiler_is_reviewed = rule_spec.compiler_model.startswith("reviewed:")
         if family == "SUBJECTIVE_DISCRETIONARY":
             return _finalize(
                 context,
@@ -229,6 +231,8 @@ def grade_market(
         live_blockers.append(f"rule_family_not_live_promoted:{family}")
     if compiler_is_fixture:
         live_blockers.append("fixture_rule_spec_not_live_eligible")
+    if compiler_is_reviewed:
+        live_blockers.append("reviewed_rule_spec_paper_only")
     if deadline_mismatch_names:
         live_blockers.append(
             "gamma_rule_deadline_mismatch_paper_only:"

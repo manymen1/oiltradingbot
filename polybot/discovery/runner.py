@@ -648,6 +648,10 @@ def inspect_rule_command(config_path: Path, market_id: str) -> int:
             market_id,
             context.rule_text_sha256,
         ),
+        "reviews": rule_store.review_approvals(
+            market_id,
+            context.rule_text_sha256,
+        ),
         "semantic_readiness": readiness,
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
@@ -1291,6 +1295,9 @@ def _rule_engine_status(
         return {
             "enabled": False,
             "path": str(path),
+            "reviewed_rule_market_ids": (
+                config.rule_compiler.reviewed_rule_market_ids
+            ),
             "deadline_authority": {
                 "policy": config.rule_compiler.deadline_authority_policy,
                 "market_ids": (
@@ -1334,11 +1341,20 @@ def _rule_engine_status(
         families = Counter(
             spec.semantics.rule_family for spec in current_specs
         )
+        reviewed_specs = sum(
+            1
+            for spec in current_specs
+            if spec.compiler_model.startswith("reviewed:")
+        )
         return {
             "enabled": True,
             **rule_store.status(),
             "current_specs": len(current_specs),
             "current_families": dict(families),
+            "reviewed_current_specs": reviewed_specs,
+            "reviewed_rule_market_ids": (
+                config.rule_compiler.reviewed_rule_market_ids
+            ),
             "current_source_plans": current_plans,
             "legacy_source_plans": legacy_plans,
             "stale_or_missing_source_plans": stale_plans,

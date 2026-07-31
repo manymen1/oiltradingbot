@@ -124,6 +124,45 @@ def test_untrusted_literal_source_is_not_an_outbound_poll_target() -> None:
     assert sources[0].poll_urls == []
 
 
+@pytest.mark.parametrize(
+    ("source_ref", "expected_domains"),
+    [
+        ("President of the United States", {"whitehouse.gov"}),
+        ("United States Department of State", {"state.gov"}),
+        (
+            "United States Department of Defense",
+            {"defense.gov", "war.gov"},
+        ),
+        ("United States Central Command (CENTCOM)", {"centcom.mil"}),
+        (
+            "official information from the United States government",
+            {
+                "state.gov",
+                "whitehouse.gov",
+                "defense.gov",
+                "war.gov",
+                "centcom.mil",
+            },
+        ),
+    ],
+)
+def test_named_us_official_source_alternatives_resolve_without_fake_independence(
+    source_ref: str,
+    expected_domains: set[str],
+) -> None:
+    sources = resolve_source_reference(
+        source_ref,
+        roles=["SETTLEMENT", "CONFIRMATION"],
+        required=True,
+    )
+
+    assert {item.domain for item in sources} == expected_domains
+    assert {item.independence_group for item in sources} == {
+        "government:united_states"
+    }
+    assert all(item.required for item in sources)
+
+
 def test_unpromoted_family_is_paper_only_then_can_be_promoted() -> None:
     context = context_for_case(_golden_rules()[0], strong_analysis=True)
     spec = _spec(context)

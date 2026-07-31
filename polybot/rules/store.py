@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,76 @@ class ExtractionPass:
     normalized_output: dict[str, Any] | None
     error: str = ""
     created_at: str = ""
+
+
+RULE_REVIEW_SCHEMA_VERSION = 1
+
+
+@dataclass(frozen=True)
+class RuleReviewApproval:
+    schema_version: int
+    market_id: str
+    rule_text_sha256: str
+    spec_sha256: str
+    reviewer: str
+    review_note: str
+    input_sha256: str
+    approved_at: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @property
+    def approval_sha256(self) -> str:
+        return sha256_json(self.as_dict())
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        market_id: str,
+        rule_text_sha256: str,
+        spec_sha256: str,
+        reviewer: str,
+        review_note: str,
+        input_sha256: str,
+        approved_at: str | None = None,
+    ) -> "RuleReviewApproval":
+        reviewer = str(reviewer).strip()
+        note = str(review_note).strip()
+        market_id = str(market_id).strip()
+        if not market_id:
+            raise ValueError("market_id must not be empty")
+        if not reviewer or len(reviewer) > 120 or "\n" in reviewer:
+            raise ValueError(
+                "reviewer must be a non-empty single line of at most 120 characters"
+            )
+        if len(note) < 10 or len(note) > 2000:
+            raise ValueError("review note must contain 10 to 2000 characters")
+        for value, field in (
+            (rule_text_sha256, "rule_text_sha256"),
+            (spec_sha256, "spec_sha256"),
+            (input_sha256, "input_sha256"),
+        ):
+            if re.fullmatch(r"[0-9a-f]{64}", str(value)) is None:
+                raise ValueError(f"{field} must be a lowercase SHA-256")
+        at = approved_at or _now()
+        try:
+            parsed = datetime.fromisoformat(at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("approved_at must be an ISO-8601 datetime") from exc
+        if parsed.tzinfo is None:
+            raise ValueError("approved_at must include a timezone")
+        return cls(
+            schema_version=RULE_REVIEW_SCHEMA_VERSION,
+            market_id=market_id,
+            rule_text_sha256=str(rule_text_sha256),
+            spec_sha256=str(spec_sha256),
+            reviewer=reviewer,
+            review_note=note,
+            input_sha256=str(input_sha256),
+            approved_at=parsed.isoformat(),
+        )
 
 
 class RuleStore:
@@ -104,6 +175,26 @@ class RuleStore:
                 """
                 CREATE INDEX IF NOT EXISTS compilation_pass_lookup
                 ON compilation_passes(market_id, rule_text_sha256, id)
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rule_spec_reviews (
+                    approval_sha256 TEXT PRIMARY KEY,
+                    market_id TEXT NOT NULL,
+                    rule_text_sha256 TEXT NOT NULL,
+                    spec_sha256 TEXT NOT NULL,
+                    reviewer TEXT NOT NULL,
+                    input_sha256 TEXT NOT NULL,
+                    approval_json TEXT NOT NULL,
+                    approved_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS rule_spec_review_lookup
+                ON rule_spec_reviews(market_id, rule_text_sha256, approved_at)
                 """
             )
             connection.execute(
@@ -231,6 +322,95 @@ class RuleStore:
             )
         return validated
 
+    def save_reviewed_spec(
+        self,
+        spec: RuleSpec,
+        approval: RuleReviewApproval,
+    ) -> RuleSpec:
+        """Atomically persist an exact RuleSpec and its operator approval.
+
+        The execution hash may match an already stored compiler spec, in which
+        case that immutable row is reused and only the approval is appended.
+        A different semantic hash for the same market/rule version remains an
+        immutable conflict.
+        """
+        validated = RuleSpec.from_dict(spec.as_dict())
+        if (
+            approval.market_id != validated.market_id
+            or approval.rule_text_sha256 != validated.rule_text_sha256
+            or approval.spec_sha256 != validated.spec_sha256
+        ):
+            raise ValueError("rule review approval does not bind the supplied RuleSpec")
+        payload = canonical_json(validated.as_dict())
+        approval_payload = canonical_json(approval.as_dict())
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                """
+                SELECT spec_sha256, spec_json
+                FROM rule_specs
+                WHERE market_id=? AND rule_text_sha256=?
+                """,
+                (validated.market_id, validated.rule_text_sha256),
+            ).fetchone()
+            if existing is not None:
+                if str(existing["spec_sha256"]) != validated.spec_sha256:
+                    raise ValueError(
+                        "immutable RuleSpec conflict for "
+                        f"{validated.market_id}:{validated.rule_text_sha256}"
+                    )
+                validated = RuleSpec.from_dict(
+                    json.loads(str(existing["spec_json"]))
+                )
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO rule_specs(
+                        market_id, rule_text_sha256, spec_sha256, spec_json,
+                        compiler_model, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        validated.market_id,
+                        validated.rule_text_sha256,
+                        validated.spec_sha256,
+                        payload,
+                        validated.compiler_model,
+                        validated.compiled_at,
+                    ),
+                )
+            prior_approval = connection.execute(
+                """
+                SELECT approval_json FROM rule_spec_reviews
+                WHERE approval_sha256=?
+                """,
+                (approval.approval_sha256,),
+            ).fetchone()
+            if prior_approval is not None:
+                if str(prior_approval["approval_json"]) != approval_payload:
+                    raise ValueError("immutable rule review approval conflict")
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO rule_spec_reviews(
+                        approval_sha256, market_id, rule_text_sha256,
+                        spec_sha256, reviewer, input_sha256,
+                        approval_json, approved_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        approval.approval_sha256,
+                        approval.market_id,
+                        approval.rule_text_sha256,
+                        approval.spec_sha256,
+                        approval.reviewer,
+                        approval.input_sha256,
+                        approval_payload,
+                        approval.approved_at,
+                    ),
+                )
+        return validated
+
     def load_spec(
         self,
         market_id: str,
@@ -255,6 +435,29 @@ class RuleStore:
                 "SELECT spec_json FROM rule_specs ORDER BY market_id, created_at"
             ).fetchall()
         return [RuleSpec.from_dict(json.loads(str(row["spec_json"]))) for row in rows]
+
+    def review_approvals(
+        self,
+        market_id: str,
+        rule_text_sha256: str,
+    ) -> list[dict[str, Any]]:
+        with self._connect(read_only=True) as connection:
+            rows = connection.execute(
+                """
+                SELECT approval_sha256, approval_json
+                FROM rule_spec_reviews
+                WHERE market_id=? AND rule_text_sha256=?
+                ORDER BY approved_at, approval_sha256
+                """,
+                (market_id, rule_text_sha256),
+            ).fetchall()
+        return [
+            {
+                "approval_sha256": str(row["approval_sha256"]),
+                **json.loads(str(row["approval_json"])),
+            }
+            for row in rows
+        ]
 
     def market_activity_status(
         self,
@@ -359,6 +562,36 @@ class RuleStore:
             }
             for row in rows
         ]
+
+    def compilation_pass_by_output_sha256(
+        self,
+        market_id: str,
+        rule_text_sha256: str,
+        output_sha256: str,
+    ) -> dict[str, Any] | None:
+        with self._connect(read_only=True) as connection:
+            row = connection.execute(
+                """
+                SELECT pass_index, model, normalized_output_json,
+                       output_sha256, created_at
+                FROM compilation_passes
+                WHERE market_id=? AND rule_text_sha256=? AND output_sha256=?
+                      AND normalized_output_json IS NOT NULL
+                ORDER BY id DESC LIMIT 1
+                """,
+                (market_id, rule_text_sha256, output_sha256),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "pass_index": int(row["pass_index"]),
+            "model": str(row["model"]),
+            "normalized_output": json.loads(
+                str(row["normalized_output_json"])
+            ),
+            "output_sha256": str(row["output_sha256"]),
+            "created_at": str(row["created_at"]),
+        }
 
     def compilation_pass_counts(self) -> dict[tuple[str, str], int]:
         """Return attempt history for fair bounded compiler rotation."""
@@ -637,6 +870,9 @@ class RuleStore:
             passes = connection.execute(
                 "SELECT COUNT(*) AS count FROM compilation_passes"
             ).fetchone()
+            reviews = connection.execute(
+                "SELECT COUNT(*) AS count FROM rule_spec_reviews"
+            ).fetchone()
             claims = connection.execute(
                 "SELECT COUNT(*) AS count FROM evidence_claims"
             ).fetchone()
@@ -653,6 +889,7 @@ class RuleStore:
             "path": str(self.path),
             "specs": int(specs["count"]) if specs else 0,
             "compilation_passes": int(passes["count"]) if passes else 0,
+            "rule_spec_reviews": int(reviews["count"]) if reviews else 0,
             "evidence_claims": int(claims["count"]) if claims else 0,
             "extraction_passes": (
                 int(extraction_passes["count"]) if extraction_passes else 0
@@ -666,4 +903,9 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-__all__ = ["CompilationPass", "ExtractionPass", "RuleStore"]
+__all__ = [
+    "CompilationPass",
+    "ExtractionPass",
+    "RuleReviewApproval",
+    "RuleStore",
+]

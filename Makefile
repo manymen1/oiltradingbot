@@ -77,6 +77,12 @@ calibration: ## are the probability sources beating the market? (Brier report)
 compile-rules: ## compile current rule texts into immutable two-pass RuleSpecs
 	$(GEO) compile-rules --config $(CONFIG) $(if $(MARKET),--market "$(MARKET)",)
 
+plan-sources: ## derive current SourcePlans from RuleSpecs (optional MARKET=id)
+	$(GEO) plan-sources --config $(CONFIG) $(if $(MARKET),--market "$(MARKET)",)
+
+grade-markets: ## regrade discovered markets against current semantic assets
+	$(GEO) grade-markets --config $(CONFIG)
+
 inspect-rule: ## inspect current RuleSpec and both raw compiler passes (MARKET=id)
 	@test -n "$(MARKET)" || (echo "usage: make inspect-rule MARKET=<market_id>"; exit 1)
 	$(GEO) inspect-rule --config $(CONFIG) --market "$(MARKET)"
@@ -84,6 +90,20 @@ inspect-rule: ## inspect current RuleSpec and both raw compiler passes (MARKET=i
 validate-rule: ## strictly validate an exported RuleSpec JSON (SPEC=path)
 	@test -n "$(SPEC)" || (echo "usage: make validate-rule SPEC=<file.json>"; exit 1)
 	$(GEO) validate-rule --spec "$(SPEC)"
+
+prepare-rule-review: ## export one stored compiler pass for review (MARKET=id PASS_SHA256=hash OUT=file)
+	@test -n "$(MARKET)" || (echo "usage: make prepare-rule-review MARKET=<market_id> PASS_SHA256=<hash> OUT=<file.json>"; exit 1)
+	@test -n "$(PASS_SHA256)" || (echo "usage: make prepare-rule-review MARKET=<market_id> PASS_SHA256=<hash> OUT=<file.json>"; exit 1)
+	@test -n "$(OUT)" || (echo "usage: make prepare-rule-review MARKET=<market_id> PASS_SHA256=<hash> OUT=<file.json>"; exit 1)
+	$(GEO) prepare-rule-review --config $(CONFIG) --market "$(MARKET)" --pass-sha256 "$(PASS_SHA256)" --out "$(OUT)"
+
+import-reviewed-rule: ## import an exact reviewed RuleSpec (MARKET=id SPEC=file REVIEWER=id NOTE=text APPROVE_SPEC_SHA256=hash)
+	@test -n "$(MARKET)" || (echo "usage: make import-reviewed-rule MARKET=<market_id> SPEC=<file.json> REVIEWER=<id> NOTE=<text> APPROVE_SPEC_SHA256=<hash>"; exit 1)
+	@test -n "$(SPEC)" || (echo "usage: make import-reviewed-rule MARKET=<market_id> SPEC=<file.json> REVIEWER=<id> NOTE=<text> APPROVE_SPEC_SHA256=<hash>"; exit 1)
+	@test -n "$(REVIEWER)" || (echo "usage: make import-reviewed-rule MARKET=<market_id> SPEC=<file.json> REVIEWER=<id> NOTE=<text> APPROVE_SPEC_SHA256=<hash>"; exit 1)
+	@test -n "$(NOTE)" || (echo "usage: make import-reviewed-rule MARKET=<market_id> SPEC=<file.json> REVIEWER=<id> NOTE=<text> APPROVE_SPEC_SHA256=<hash>"; exit 1)
+	@test -n "$(APPROVE_SPEC_SHA256)" || (echo "usage: make import-reviewed-rule MARKET=<market_id> SPEC=<file.json> REVIEWER=<id> NOTE=<text> APPROVE_SPEC_SHA256=<hash>"; exit 1)
+	$(GEO) import-reviewed-rule --config $(CONFIG) --market "$(MARKET)" --spec "$(SPEC)" --reviewer "$(REVIEWER)" --note "$(NOTE)" --approve-spec-sha256 "$(APPROVE_SPEC_SHA256)"
 
 rule-market-once: ## run one generic rules-first paper cycle (MARKET=id)
 	@test -n "$(MARKET)" || (echo "usage: make rule-market-once MARKET=<market_id>"; exit 1)
@@ -142,4 +162,4 @@ eval: ## adversarial regression cases; nonzero exit = the change regressed
 backup: ## snapshot data/ (ledger, journals, calibration, acks)
 	deploy/backup.sh
 
-.PHONY: help setup test paper paper-once live halt watch-only arm status funnel priority economics profit-funnel calibration semantic-coverage compile-rules inspect-rule validate-rule rule-market-once inspect-rule-market forward-completeness build-forward-timeline reconcile latency trades replay replay-rule-market promotion-report eval backup
+.PHONY: help setup test paper paper-once live halt watch-only arm status funnel priority economics profit-funnel calibration semantic-coverage compile-rules plan-sources grade-markets inspect-rule validate-rule prepare-rule-review import-reviewed-rule rule-market-once inspect-rule-market forward-completeness build-forward-timeline reconcile latency trades replay replay-rule-market promotion-report eval backup

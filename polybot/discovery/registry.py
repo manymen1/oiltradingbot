@@ -89,6 +89,40 @@ DIRECT_ACTOR_FEEDS: dict[str, list[str]] = {
     ],
 }
 
+# Verbatim Polymarket rules often name a US-government umbrella and then list
+# example offices. Preserve the named alternative instead of flattening every
+# phrase to every government domain. All offices intentionally retain the same
+# independence group: five official websites are still one government source.
+_NAMED_OFFICIAL_ACTOR_REFERENCES: dict[
+    str,
+    tuple[str, set[str]],
+] = {
+    "official information from the united states government": (
+        "united_states",
+        {"state.gov", "whitehouse.gov", "defense.gov", "war.gov", "centcom.mil"},
+    ),
+    "official representatives of the united states government": (
+        "united_states",
+        {"state.gov", "whitehouse.gov", "defense.gov", "war.gov", "centcom.mil"},
+    ),
+    "president of the united states": (
+        "united_states",
+        {"whitehouse.gov"},
+    ),
+    "united states central command (centcom)": (
+        "united_states",
+        {"centcom.mil"},
+    ),
+    "united states department of defense": (
+        "united_states",
+        {"defense.gov", "war.gov"},
+    ),
+    "united states department of state": (
+        "united_states",
+        {"state.gov"},
+    ),
+}
+
 # Ordered by MEASURED freshness (scripts/probe_feeds.sh, 2026-07-20), not by
 # reputation. These markets resolve on "a consensus of credible reporting",
 # so the trigger is the first credible REPORT -- official government feeds
@@ -311,6 +345,14 @@ def resolve_source_reference(
     normalized = " ".join(source_ref.casefold().split())
     domain = _source_ref_domain(source_ref)
     matches: list[PlannedSource] = []
+    official_reference = _NAMED_OFFICIAL_ACTOR_REFERENCES.get(normalized)
+    if official_reference is not None:
+        actor, allowed_domains = official_reference
+        matches.extend(
+            item
+            for item in actor_sources([actor])
+            if item.domain in allowed_domains
+        )
     for item in publisher_sources():
         raw = _PUBLISHERS[item.organization_id]
         aliases = [str(alias).casefold() for alias in raw["aliases"]]

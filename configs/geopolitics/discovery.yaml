@@ -216,6 +216,23 @@ rule_compiler:
     - us-strike-on-cuba-by
     - iran-successfully-targets-shipping-onptptpt-20260729163314520
     - iran-charges-hormuz-fees-byptptpt-20260625175035466
+  # Reviewed imports are explicit, hash-confirmed operator actions. Keep this
+  # separate from scheduling and deadline authority so none of those settings
+  # can silently authorize a human-reviewed semantic contract.
+  reviewed_rule_market_ids:
+    - us-x-iran-effective-ceasfire-byptptpt-2-week-pause-20260715194822042
+    - israel-x-iran-ceasefire-continues-throughptptpt-20260716224448963
+    - iran-leader-end-of-2026
+    - us-iran-final-nuclear-deal-by-20260621201254412
+    - us-announces-end-of-iranian-blockade-byptptpt-20260713152715080
+    - bab-el-mandeb-strait-effectively-closed-by
+    - next-round-of-us-iran-peace-talks-byptptpt-20260623022722982
+    - iran-military-action-against-a-gulf-state-onptptpt-20260708212328295
+    - will-hamaz-disarm-by-december-31
+    - where-will-the-next-next-round-of-us-iran-peace-talks-beptptpt-20260623023740663
+    - us-strike-on-cuba-by
+    - iran-successfully-targets-shipping-onptptpt-20260729163314520
+    - iran-charges-hormuz-fees-byptptpt-20260625175035466
   db_path: "data/discovery/rules.sqlite3"
   paper_families:
     - OCCURRENCE_BEFORE_DEADLINE

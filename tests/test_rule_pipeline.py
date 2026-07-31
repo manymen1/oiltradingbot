@@ -34,8 +34,13 @@ from polybot.rules.contracts import (
     RuleSpec,
     STRICT_DEADLINE_AUTHORITY,
     VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY,
+    sha256_json,
 )
-from polybot.rules.store import RuleStore
+from polybot.rules.review import (
+    import_reviewed_rule_command,
+    prepare_rule_review_command,
+)
+from polybot.rules.store import CompilationPass, RuleStore
 from test_rule_contracts import _golden_rules, context_for_case
 
 
@@ -46,6 +51,7 @@ def _config(
     priority_market_ids: list[str] | None = None,
     deadline_authority_policy: str = STRICT_DEADLINE_AUTHORITY,
     deadline_authority_market_ids: list[str] | None = None,
+    reviewed_rule_market_ids: list[str] | None = None,
 ) -> Path:
     path = tmp_path / "discovery.yaml"
     priority_yaml = (
@@ -64,6 +70,14 @@ def _config(
         if deadline_authority_market_ids
         else " []"
     )
+    reviewed_market_yaml = (
+        "\n" + "\n".join(
+            f"    - {market_id}"
+            for market_id in reviewed_rule_market_ids
+        )
+        if reviewed_rule_market_ids
+        else " []"
+    )
     path.write_text(
         f"""
 data_dir: {tmp_path / "data"}
@@ -78,6 +92,7 @@ rule_compiler:
   priority_market_ids:{priority_yaml}
   deadline_authority_policy: {deadline_authority_policy}
   deadline_authority_market_ids:{deadline_market_yaml}
+  reviewed_rule_market_ids:{reviewed_market_yaml}
   db_path: {tmp_path / "rules.sqlite3"}
   paper_families:
     - OCCURRENCE_BEFORE_DEADLINE
@@ -360,6 +375,172 @@ def test_deadline_authority_config_is_explicit_and_scoped(
             )
         )
 
+
+def test_reviewed_rule_allowlist_is_explicit_and_scoped(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="must also be explicit priority"):
+        load_discovery_config(
+            _config(
+                tmp_path,
+                priority_market_ids=["market-a"],
+                reviewed_rule_market_ids=["market-b"],
+            )
+        )
+
+    with pytest.raises(ValueError, match="must not contain duplicates"):
+        load_discovery_config(
+            _config(
+                tmp_path,
+                priority_market_ids=["market-a"],
+                reviewed_rule_market_ids=["market-a", "market-a"],
+            )
+        )
+
+
+def test_reviewed_rule_import_is_hash_confirmed_bound_and_audited(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    config_path = _config(
+        tmp_path,
+        priority_market_ids=[context.market_id],
+        reviewed_rule_market_ids=[context.market_id],
+    )
+    config = load_discovery_config(config_path)
+    discovery_store = DiscoveryStore(config.data_dir)
+    discovery_store.save_context(context)
+    rule_store = RuleStore(rule_store_db_path(config))
+    semantics = fixture_semantics(context).as_dict()
+    pass_sha256 = sha256_json(semantics)
+    rule_store.save_pass(
+        CompilationPass(
+            market_id=context.market_id,
+            rule_text_sha256=context.rule_text_sha256,
+            pass_index=1,
+            model="codex_cli:test",
+            raw_output=json.dumps(semantics),
+            normalized_output=semantics,
+        )
+    )
+    candidate_path = tmp_path / "candidate.json"
+
+    assert (
+        prepare_rule_review_command(
+            config_path,
+            context.market_id,
+            pass_sha256,
+            out=candidate_path,
+        )
+        == 0
+    )
+    prepared = json.loads(capsys.readouterr().out)
+    candidate = RuleSpec.from_dict(
+        json.loads(candidate_path.read_text(encoding="utf-8"))
+    )
+    assert prepared["candidate_spec_sha256"] == candidate.spec_sha256
+    assert rule_store.load_spec(
+        context.market_id,
+        context.rule_text_sha256,
+    ) is None
+
+    with pytest.raises(SystemExit, match="approved hash does not match"):
+        import_reviewed_rule_command(
+            config_path,
+            context.market_id,
+            candidate_path,
+            reviewer="operator@example",
+            note="Reviewed exact clauses and source policy.",
+            approved_spec_sha256="0" * 64,
+        )
+
+    assert (
+        import_reviewed_rule_command(
+            config_path,
+            context.market_id,
+            candidate_path,
+            reviewer="operator@example",
+            note="Reviewed exact clauses and source policy.",
+            approved_spec_sha256=candidate.spec_sha256,
+        )
+        == 0
+    )
+    imported = json.loads(capsys.readouterr().out)
+    saved = rule_store.load_spec(
+        context.market_id,
+        context.rule_text_sha256,
+    )
+    assert saved is not None
+    assert saved.spec_sha256 == candidate.spec_sha256
+    assert saved.compiler_model == "reviewed:operator@example"
+    plan = build_source_plan(context, saved)
+    graded = grade_market(
+        context,
+        ScoringConfig(
+            allow_fixture_analysis_live=True,
+            min_rule_text_chars=1,
+        ),
+        rule_spec=saved,
+        source_plan=plan,
+        require_rule_spec=True,
+        paper_families={saved.semantics.rule_family},
+        live_confirmation_families={saved.semantics.rule_family},
+    )
+    assert graded.state == "PAPER_ELIGIBLE"
+    assert "reviewed_rule_spec_paper_only" in graded.state_reasons
+    reviews = rule_store.review_approvals(
+        context.market_id,
+        context.rule_text_sha256,
+    )
+    assert len(reviews) == 1
+    assert reviews[0]["approval_sha256"] == imported["approval_sha256"]
+    assert reviews[0]["reviewer"] == "operator@example"
+    assert discovery_store.load_source_plan(context.market_id) is None
+    reviewed_context = discovery_store.load_context(context.market_id)
+    assert reviewed_context is not None
+    assert reviewed_context.state == "RULES_REVIEW_REQUIRED"
+    assert reviewed_context.state_reasons == [
+        "reviewed_rule_spec_imported_source_plan_required"
+    ]
+
+    assert inspect_rule_command(config_path, context.market_id) == 0
+    inspected = json.loads(capsys.readouterr().out)
+    assert inspected["reviews"][0]["approval_sha256"] == imported[
+        "approval_sha256"
+    ]
+
+
+def test_reviewed_rule_import_rejects_context_tampering(
+    tmp_path: Path,
+) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    config_path = _config(
+        tmp_path,
+        priority_market_ids=[context.market_id],
+        reviewed_rule_market_ids=[context.market_id],
+    )
+    config = load_discovery_config(config_path)
+    DiscoveryStore(config.data_dir).save_context(context)
+    candidate = RuleSpec.from_context(
+        context,
+        fixture_semantics(context),
+        compiler_model="operator_review_draft",
+        compiled_at="2026-07-31T00:00:00+00:00",
+    )
+    raw = candidate.as_dict()
+    raw["outcomes"][0]["yes_token_id"] = "tampered-token"
+    candidate_path = tmp_path / "tampered.json"
+    candidate_path.write_text(json.dumps(raw), encoding="utf-8")
+    tampered = RuleSpec.from_dict(raw)
+
+    with pytest.raises(SystemExit, match="context binding failed"):
+        import_reviewed_rule_command(
+            config_path,
+            context.market_id,
+            candidate_path,
+            reviewer="operator@example",
+            note="This should fail immutable binding validation.",
+            approved_spec_sha256=tampered.spec_sha256,
+        )
 
 def test_compile_cycle_caps_only_new_specs_and_cached_specs_are_free(
     tmp_path: Path,

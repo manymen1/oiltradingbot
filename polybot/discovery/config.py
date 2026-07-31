@@ -423,6 +423,10 @@ class RuleCompilerConfig:
     # so scheduling priority can never imply semantic authority.
     deadline_authority_policy: str = "STRICT_GAMMA_MATCH_V1"
     deadline_authority_market_ids: list[str] = field(default_factory=list)
+    # A reviewed RuleSpec can be imported only for markets named here. The
+    # import command remains an explicit, hash-confirmed operator action and
+    # never runs as part of an autonomous discovery cycle.
+    reviewed_rule_market_ids: list[str] = field(default_factory=list)
     paper_families: list[str] = field(default_factory=_default_rule_families)
     # A family reaches live only after replay/calibration promotion.
     live_confirmation_families: list[str] = field(default_factory=list)
@@ -1046,6 +1050,26 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
         raise ValueError(
             "deadline authority markets must also be explicit priority markets: "
             + ", ".join(unpinned_deadline_markets)
+        )
+    require_string_list(
+        config.rule_compiler.reviewed_rule_market_ids,
+        "rule_compiler.reviewed_rule_market_ids",
+    )
+    reviewed_market_ids = [
+        item.strip()
+        for item in config.rule_compiler.reviewed_rule_market_ids
+    ]
+    if len(reviewed_market_ids) != len(set(reviewed_market_ids)):
+        raise ValueError(
+            "rule_compiler.reviewed_rule_market_ids must not contain duplicates"
+        )
+    unpinned_reviewed_markets = sorted(
+        set(reviewed_market_ids) - set(priority_market_ids)
+    )
+    if unpinned_reviewed_markets:
+        raise ValueError(
+            "reviewed rule markets must also be explicit priority markets: "
+            + ", ".join(unpinned_reviewed_markets)
         )
     for field_name in ("paper_families", "live_confirmation_families"):
         values = getattr(config.rule_compiler, field_name)
