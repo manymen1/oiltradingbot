@@ -622,6 +622,9 @@ def compilation_prompt(context: MarketContext, *, pass_index: int) -> str:
         (
             f"- {item.name}: label={item.label!r}; "
             f"deadline={item.deadline_iso or 'missing'}; "
+            f"rule_deadline={item.rule_deadline_iso or 'not_exact'}; "
+            f"timezone={item.deadline_timezone or 'not_explicit'}; "
+            f"post_deadline_window={item.post_deadline_window or 'none'}; "
             f"question={item.question!r}; "
             f"rule_sha256={item.rule_text_sha256 or 'missing'}; "
             f"resolution_source={item.resolution_source or 'none'}"

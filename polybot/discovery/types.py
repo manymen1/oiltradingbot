@@ -61,9 +61,17 @@ class OutcomeRecord:
     rule_text: str = ""
     rule_text_sha256: str = ""
     resolution_source: str = ""
-    # MATCH/MISMATCH compares an explicit date in the leg label/question with
-    # Gamma's leg endDate. UNKNOWN means there was no deterministic date to
-    # compare; it is not an assertion that the metadata is correct.
+    # Deterministic timing derived from the verbatim leg rules. The rule
+    # deadline preserves the rules' local offset while deadline_timezone keeps
+    # the named clock used for calendar-day evaluation. An empty deadline means
+    # the rules do not provide enough information to derive an exact instant.
+    rule_deadline_iso: str = ""
+    deadline_timezone: str = ""
+    post_deadline_window: str = ""
+    # MATCH/MISMATCH compares Gamma's leg endDate with the exact rule-derived
+    # cutoff when available, otherwise with an explicit date in the leg
+    # label/question. UNKNOWN means there was no deterministic date to compare;
+    # it is not an assertion that the metadata is correct.
     deadline_consistency: str = "UNKNOWN"
     tick_size: str = "0.01"
     neg_risk: bool = False

@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -283,6 +283,19 @@ class RuleSemantics:
 
     def normalized_dict(self) -> dict[str, Any]:
         raw = self.as_dict()
+        for key in ("start_iso", "end_iso"):
+            value = raw["window"][key]
+            if value:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(
+                        tzinfo=ZoneInfo(raw["window"]["timezone"])
+                    )
+                raw["window"][key] = (
+                    parsed.astimezone(timezone.utc)
+                    .isoformat(timespec="seconds")
+                    .replace("+00:00", "Z")
+                )
         for key in ("qualifying_conditions", "exclusions", "subjective_terms"):
             raw[key] = sorted({_normalize_text(item) for item in raw[key]})
         raw["predicate"]["subjects"] = sorted(

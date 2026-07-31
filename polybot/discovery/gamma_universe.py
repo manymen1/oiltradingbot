@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -420,6 +421,17 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
             else ""
         )
         outcome_deadline = str(raw.get("endDate") or "")
+        (
+            rule_deadline,
+            deadline_timezone,
+            post_deadline_window,
+            deadline_consistency,
+        ) = _deadline_contract(
+            label=label,
+            question=meta.question,
+            deadline_iso=outcome_deadline,
+            rule_text=outcome_rule_text,
+        )
         outcomes.append(
             OutcomeRecord(
                 name=name,
@@ -433,11 +445,10 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
                 rule_text=outcome_rule_text,
                 rule_text_sha256=outcome_rule_sha256,
                 resolution_source=meta.resolution_source.strip(),
-                deadline_consistency=_deadline_consistency(
-                    label=label,
-                    question=meta.question,
-                    deadline_iso=outcome_deadline,
-                ),
+                rule_deadline_iso=rule_deadline,
+                deadline_timezone=deadline_timezone,
+                post_deadline_window=post_deadline_window,
+                deadline_consistency=deadline_consistency,
                 tick_size=meta.tick_size,
                 neg_risk=meta.neg_risk,
                 last_yes_price=meta.outcome_prices[0] if meta.outcome_prices else None,
@@ -506,31 +517,199 @@ _DATE_LABEL = re.compile(
     r"\b(" + "|".join(_MONTHS) + r")\s+(\d{1,2})(?:,\s*(\d{4}))?\b",
     re.IGNORECASE,
 )
+_RULE_EXPLICIT_DEADLINE_DATE = re.compile(
+    r"\b(?:by|through|on|at)\s+(?:the\s+)?"
+    r"(" + "|".join(_MONTHS) + r")\s+(\d{1,2}),\s*(\d{4})"
+    r"(?=[^.\n]{0,80}(?:\d{1,2}:\d{2}\s*(?:am|pm)|"
+    r"(?:eastern|iran|arabia)\s+standard\s+time|\b(?:et|irst|ast)\b))",
+    re.IGNORECASE,
+)
+_RULE_DEADLINE_TIME = re.compile(
+    r"(?:specified|listed|end)\s+date"
+    r"(?:\s*,|\s+at)?\s*"
+    r"(\d{1,2}):(\d{2})\s*(am|pm)\s*"
+    r"(?:eastern\s+time\s*\((et)\)|(et)|"
+    r"iran\s+standard\s+time\s*\((irst)\)|(irst)|"
+    r"arabia\s+standard\s+time\s*\((ast)\)|(ast)|"
+    r"(utc))\b",
+    re.IGNORECASE,
+)
+_RULE_EXPLICIT_DATE_TIME = re.compile(
+    r"\b(?:by|through|on|at)\s+(?:the\s+)?"
+    r"(" + "|".join(_MONTHS) + r")\s+(\d{1,2}),\s*(\d{4})"
+    r"(?:\s*,|\s+at)\s*(\d{1,2}):(\d{2})\s*(am|pm)\s*"
+    r"(?:eastern\s+time\s*\((et)\)|(et)|"
+    r"iran\s+standard\s+time\s*\((irst)\)|(irst)|"
+    r"arabia\s+standard\s+time\s*\((ast)\)|(ast)|"
+    r"(utc))\b",
+    re.IGNORECASE,
+)
+_DEADLINE_TIMEZONE = re.compile(
+    r"\b(?:by|through|on)\s+(?:the\s+)?"
+    r"(?:specified|listed|end)\s+date(?:\s*,)?\s*"
+    r"(iran\s+standard\s+time\s*\(irst\)|irst(?:\s*\(utc\s*\+3:30\))?|"
+    r"arabia\s+standard\s+time\s*\(ast\)|ast|"
+    r"eastern\s+time\s*\(et\)|et|utc)\b",
+    re.IGNORECASE,
+)
+_POST_DEADLINE_PATTERNS = (
+    re.compile(
+        r"remain open[^.\n]{0,180}?"
+        r"(?:up to\s+|an additional\s+)?(\d+)\s+"
+        r"(?:full\s+)?calendar\s+days?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"within\s+(\d+)\s+(?:full\s+)?calendar\s+days?"
+        r"[^.\n]{0,60}after",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"remain open until the end of the (second|third|fourth|fifth) day after",
+        re.IGNORECASE,
+    ),
+)
+_ORDINAL_DAYS = {"second": 2, "third": 3, "fourth": 4, "fifth": 5}
+_TIMEZONE_NAMES = {
+    "et": "America/New_York",
+    "eastern time (et)": "America/New_York",
+    "irst": "Asia/Tehran",
+    "irst (utc +3:30)": "Asia/Tehran",
+    "iran standard time (irst)": "Asia/Tehran",
+    "ast": "Asia/Riyadh",
+    "arabia standard time (ast)": "Asia/Riyadh",
+    "utc": "UTC",
+}
 
 
-def _deadline_consistency(
+def _deadline_contract(
     *,
     label: str,
     question: str,
     deadline_iso: str,
-) -> str:
-    match = _DATE_LABEL.search(label) or _DATE_LABEL.search(question)
-    if match is None or not deadline_iso.strip():
-        return "UNKNOWN"
+    rule_text: str,
+) -> tuple[str, str, str, str]:
+    """Derive the leg's rule clock and compare it with Gamma metadata.
+
+    Exact rule cutoffs are compared as instants. Date-only rules retain the
+    older calendar-date comparison. This intentionally treats `23:59Z` and
+    `23:59 ET` as different rather than normalizing away a four-hour gap.
+    """
+
+    label_match = _DATE_LABEL.search(label) or _DATE_LABEL.search(question)
+    post_deadline_window = _post_deadline_window(rule_text)
+    if not deadline_iso.strip():
+        return "", "", post_deadline_window, "UNKNOWN"
     try:
         deadline = datetime.fromisoformat(
             deadline_iso.strip().replace("Z", "+00:00")
         )
     except ValueError:
-        return "MISMATCH"
-    expected_year = int(match.group(3)) if match.group(3) else deadline.year
+        return "", "", post_deadline_window, "MISMATCH"
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+
+    explicit_date = _RULE_EXPLICIT_DEADLINE_DATE.search(rule_text)
+    date_match = explicit_date or label_match
+    if date_match is None:
+        return "", "", post_deadline_window, "UNKNOWN"
+
+    expected_year = (
+        int(date_match.group(3))
+        if date_match.group(3)
+        else deadline.year
+    )
     expected = (
         expected_year,
-        _MONTHS[match.group(1).casefold()],
-        int(match.group(2)),
+        _MONTHS[date_match.group(1).casefold()],
+        int(date_match.group(2)),
     )
+    time_match = _RULE_EXPLICIT_DATE_TIME.search(rule_text)
+    if time_match is None:
+        time_match = _RULE_DEADLINE_TIME.search(rule_text)
+    timezone_match = _DEADLINE_TIMEZONE.search(rule_text)
+    timezone_name = ""
+    if time_match is not None:
+        timezone_name = _timezone_from_groups(time_match.groups())
+    if not timezone_name and timezone_match is not None:
+        timezone_name = _timezone_name(timezone_match.group(1))
+
+    # A rule that defines a whole named calendar day but omits a clock time
+    # ends at 23:59 on that named clock at Gamma's minute precision.
+    hour, minute = 23, 59
+    if time_match is not None:
+        if time_match.re is _RULE_EXPLICIT_DATE_TIME:
+            hour = int(time_match.group(4))
+            minute = int(time_match.group(5))
+            meridiem = time_match.group(6)
+        else:
+            hour = int(time_match.group(1))
+            minute = int(time_match.group(2))
+            meridiem = time_match.group(3)
+        hour = _hour_24(hour, meridiem)
+
+    if timezone_name:
+        try:
+            rule_deadline = datetime(
+                expected[0],
+                expected[1],
+                expected[2],
+                hour,
+                minute,
+                tzinfo=ZoneInfo(timezone_name),
+            )
+        except ValueError:
+            return "", timezone_name, post_deadline_window, "MISMATCH"
+        observed_utc = deadline.astimezone(timezone.utc).replace(
+            second=0,
+            microsecond=0,
+        )
+        expected_utc = rule_deadline.astimezone(timezone.utc).replace(
+            second=0,
+            microsecond=0,
+        )
+        consistency = "MATCH" if observed_utc == expected_utc else "MISMATCH"
+        return (
+            rule_deadline.isoformat(timespec="seconds"),
+            timezone_name,
+            post_deadline_window,
+            consistency,
+        )
+
     observed = (deadline.year, deadline.month, deadline.day)
-    return "MATCH" if observed == expected else "MISMATCH"
+    consistency = "MATCH" if observed == expected else "MISMATCH"
+    return "", "", post_deadline_window, consistency
+
+
+def _timezone_from_groups(groups: tuple[str | None, ...]) -> str:
+    for value in reversed(groups):
+        if value:
+            timezone_name = _timezone_name(value)
+            if timezone_name:
+                return timezone_name
+    return ""
+
+
+def _timezone_name(value: str) -> str:
+    return _TIMEZONE_NAMES.get(" ".join(value.casefold().split()), "")
+
+
+def _hour_24(hour: int, meridiem: str) -> int:
+    if not 1 <= hour <= 12:
+        raise ValueError("rule deadline hour must be between 1 and 12")
+    if meridiem.casefold() == "am":
+        return 0 if hour == 12 else hour
+    return 12 if hour == 12 else hour + 12
+
+
+def _post_deadline_window(rule_text: str) -> str:
+    windows: list[int] = []
+    for pattern in _POST_DEADLINE_PATTERNS:
+        for match in pattern.finditer(rule_text):
+            raw = match.group(1).casefold()
+            days = int(raw) if raw.isdigit() else _ORDINAL_DAYS[raw]
+            windows.append(days)
+    return f"P{max(windows)}D" if windows else ""
 
 
 def _outcome_topology(

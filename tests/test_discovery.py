@@ -200,6 +200,74 @@ def test_grouped_topology_and_deadline_consistency_are_per_leg() -> None:
     ] == ["MATCH", "MISMATCH"]
 
 
+def test_exact_rule_deadline_detects_gamma_timezone_shift() -> None:
+    event = _binary_event(
+        description=(
+            "This market resolves Yes if the event occurs by the listed date, "
+            "11:59 PM ET. Otherwise it resolves No. If conflicting reports "
+            "remain, this market may remain open for an additional 3 calendar "
+            "days after the listed date."
+        )
+    )
+    market = event["markets"][0]
+    market["endDate"] = "2026-09-30T23:59:00Z"
+
+    shifted = context_from_event(event)
+
+    assert shifted is not None
+    outcome = shifted.outcomes[0]
+    assert outcome.rule_deadline_iso == "2026-09-30T23:59:00-04:00"
+    assert outcome.deadline_timezone == "America/New_York"
+    assert outcome.post_deadline_window == "P3D"
+    assert outcome.deadline_consistency == "MISMATCH"
+
+    market["endDate"] = "2026-10-01T03:59:00Z"
+    matching = context_from_event(event)
+    assert matching is not None
+    assert matching.outcomes[0].deadline_consistency == "MATCH"
+
+
+def test_rule_deadline_explicit_year_overrides_leg_label() -> None:
+    event = _binary_event(
+        description=(
+            "This market resolves Yes if Hamas announces disarmament by "
+            "December 31, 2025, 11:59 PM ET. Otherwise it resolves No."
+        )
+    )
+    event["title"] = "Will Hamas disarm by December 31, 2026?"
+    market = event["markets"][0]
+    market["question"] = "Will Hamas disarm by December 31, 2026?"
+    market["endDate"] = "2027-01-01T04:59:00Z"
+
+    context = context_from_event(event)
+
+    assert context is not None
+    outcome = context.outcomes[0]
+    assert outcome.rule_deadline_iso == "2025-12-31T23:59:00-05:00"
+    assert outcome.deadline_consistency == "MISMATCH"
+
+
+def test_named_calendar_day_uses_rule_timezone() -> None:
+    event = _binary_event(
+        description=(
+            "This market resolves Yes if the event occurs on the specified "
+            "date IRST (UTC +3:30). Otherwise it resolves No."
+        )
+    )
+    event["title"] = "Will the event occur on August 23?"
+    market = event["markets"][0]
+    market["question"] = "Will the event occur on August 23?"
+    market["endDate"] = "2026-08-23T23:59:00Z"
+
+    context = context_from_event(event)
+
+    assert context is not None
+    outcome = context.outcomes[0]
+    assert outcome.rule_deadline_iso == "2026-08-23T23:59:00+03:30"
+    assert outcome.deadline_timezone == "Asia/Tehran"
+    assert outcome.deadline_consistency == "MISMATCH"
+
+
 def test_malformed_fee_metadata_is_preserved_as_entry_blocker() -> None:
     event = _binary_event()
     market = event["markets"][0]

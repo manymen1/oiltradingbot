@@ -3258,6 +3258,7 @@ def _context_binding_payload(context: MarketContext) -> dict[str, Any]:
         "deadline_iso": context.deadline_iso,
         "rule_text_sha256": context.rule_text_sha256,
         "rule_version": context.rule_version,
+        "outcome_topology": context.outcome_topology,
         "resolution_source": context.resolution_source,
         "neg_risk": context.neg_risk,
         "outcomes": [
@@ -3268,6 +3269,12 @@ def _context_binding_payload(context: MarketContext) -> dict[str, Any]:
                 "condition_id": outcome.condition_id,
                 "yes_token_id": outcome.yes_token_id,
                 "no_token_id": outcome.no_token_id,
+                "deadline_iso": outcome.deadline_iso,
+                "rule_text_sha256": outcome.rule_text_sha256,
+                "resolution_source": outcome.resolution_source,
+                "rule_deadline_iso": outcome.rule_deadline_iso,
+                "deadline_timezone": outcome.deadline_timezone,
+                "post_deadline_window": outcome.post_deadline_window,
                 "tick_size": outcome.tick_size,
                 "neg_risk": outcome.neg_risk,
                 "fee_schedule": (

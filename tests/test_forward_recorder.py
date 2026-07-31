@@ -684,6 +684,28 @@ def test_capture_binding_ignores_operational_health_policy(
     assert changed_health == baseline
 
 
+def test_capture_binding_rotates_when_rule_timing_changes(
+    tmp_path: Path,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    store = ForwardRecorderStore(forward_recorder_db_path(config))
+
+    baseline = store.ensure_book_binding(context, config.forward_recorder)
+    changed_outcome = replace(
+        context.outcomes[0],
+        rule_deadline_iso="2026-09-30T23:59:00-04:00",
+        deadline_timezone="America/New_York",
+        post_deadline_window="P3D",
+    )
+    changed_timing = store.ensure_book_binding(
+        replace(context, outcomes=[changed_outcome]),
+        config.forward_recorder,
+    )
+
+    assert changed_timing != baseline
+
+
 def test_service_startup_closes_orphaned_capture_sessions(
     tmp_path: Path,
 ) -> None:

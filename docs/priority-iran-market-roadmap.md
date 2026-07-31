@@ -32,22 +32,37 @@ The first RuleSpec-v2 safety tranche is implemented:
   divergent rules/sources, unsupported topology, and active deadline
   mismatches fail before any model call.
 - Source plans include every resolution source bound into the RuleSpec.
+- Context construction now derives each leg's exact rule cutoff when the
+  verbatim rules identify a clock, preserving the IANA timezone and any
+  post-deadline resolution window. Gamma timestamps are compared as instants,
+  not merely as calendar labels.
+- Compiler-pass timestamps are canonicalized to UTC before agreement. Two
+  offsets representing the same instant agree; different instants remain
+  consensus-critical.
 
-The 2026-07-31 Gamma preflight supports eleven of the thirteen events at this
-layer. The final-nuclear-deal event remains blocked on its active
-`december_31` deadline mismatch, and Bab el-Mandeb remains blocked on its
-active `september_30` mismatch. "Supported" here means safe to compile and
-evaluate in paper mode; it does not mean the market has passed the later
-source-adapter, replay, or live-promotion phases.
+The initial date-only 2026-07-31 Gamma preflight appeared to support eleven of
+the thirteen events at this layer. Exact-instant replay corrected that result:
+all thirteen have at least one active Gamma deadline that conflicts with the
+verbatim rule clock. Common examples are Gamma `23:59Z` versus rule
+`23:59 America/New_York`, daily Gamma cutoffs that roll into the following
+IRST/AST calendar date, and Gamma `00:00Z` versus a rule's explicit ET time.
+The final-nuclear-deal and Bab el-Mandeb events additionally retain their
+previously detected wrong-date legs. All thirteen therefore fail before a
+model call until the metadata is corrected or a separately reviewed
+rule-deadline authority policy is implemented.
 
 The first real two-pass canary, the US-Iran effective-ceasefire event, failed
 closed with `compiler_passes_disagree`. Both passes selected
 `DURATION_REQUIREMENT`, the 14-calendar-day reset predicate, the same
-exclusions, and the same source identities. They differed in equivalent
-deadline serialization and in assigning conflict-resolution clauses between
-qualifying conditions and the resolution policy. No RuleSpec was saved. This
-is evidence for canonical clause IDs and normalized instants in Phase 2; it is
-not a reason to relax exact agreement.
+exclusions, and the same source identities. They differed in the deadline
+instant and in assigning conflict-resolution clauses between
+qualifying conditions and the resolution policy. More precise review showed
+that the deadline serializations were not equivalent:
+`2026-08-31T23:59:00Z` is four hours earlier than
+`2026-08-31T23:59:00-04:00`. No RuleSpec was saved. The stored canary is now a
+regression example for fail-closed deadline disagreement; the clause-placement
+variation still motivates canonical clause IDs and is not a reason to relax
+exact agreement.
 
 ## Live Mapping
 

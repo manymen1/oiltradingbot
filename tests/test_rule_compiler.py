@@ -356,6 +356,49 @@ def test_source_rationale_wording_is_noncritical_consensus(
     assert result.spec is not None
 
 
+def test_equivalent_iso_instants_reach_consensus(tmp_path: Path) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    base = fixture_semantics(context).as_dict()
+    base["window"]["end_iso"] = "2026-09-30T23:59:00-04:00"
+
+    def runner(prompt: str) -> str:
+        payload = json.loads(json.dumps(base))
+        if "pass: 2 of 2" in prompt:
+            payload["window"]["end_iso"] = "2026-10-01T03:59:00Z"
+        return _envelope(payload)
+
+    result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=runner,
+    ).compile(context)
+
+    assert result.status == "COMPILED"
+    assert result.spec is not None
+    assert result.spec.semantics.window.end_iso == "2026-10-01T03:59:00Z"
+
+
+def test_different_iso_instants_remain_blocking(tmp_path: Path) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    base = fixture_semantics(context).as_dict()
+    base["window"]["end_iso"] = "2026-08-31T23:59:00-04:00"
+
+    def runner(prompt: str) -> str:
+        payload = json.loads(json.dumps(base))
+        if "pass: 2 of 2" in prompt:
+            payload["window"]["end_iso"] = "2026-08-31T23:59:00Z"
+        return _envelope(payload)
+
+    result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=runner,
+    ).compile(context)
+
+    assert result.status == "DISAGREEMENT"
+    assert result.spec is None
+
+
 def test_compilation_prompt_names_closed_validation_constraints() -> None:
     context = context_for_case(_golden_rules()[0], strong_analysis=True)
 
