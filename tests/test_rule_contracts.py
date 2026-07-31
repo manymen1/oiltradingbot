@@ -26,6 +26,9 @@ FEE_OBSERVED_AT = "2026-07-25T00:00:00+00:00"
 
 
 def context_for_case(case: dict, *, strong_analysis: bool = False) -> MarketContext:
+    rule_sha256 = hashlib.sha256(
+        case["rule_text"].encode("utf-8")
+    ).hexdigest()
     outcomes = [
         OutcomeRecord(
             name="yes",
@@ -35,6 +38,10 @@ def context_for_case(case: dict, *, strong_analysis: bool = False) -> MarketCont
             condition_id=f"{case['id']}-condition",
             yes_token_id=f"{case['id']}-yes-token",
             no_token_id=f"{case['id']}-no-token",
+            deadline_iso="2026-12-31T23:59:59-05:00",
+            rule_text=case["rule_text"],
+            rule_text_sha256=rule_sha256,
+            resolution_source=case.get("resolution_source", ""),
             fee_schedule=explicit_zero_fee_schedule(FEE_OBSERVED_AT),
         )
     ]
@@ -48,6 +55,10 @@ def context_for_case(case: dict, *, strong_analysis: bool = False) -> MarketCont
                 condition_id=f"{case['id']}-other-condition",
                 yes_token_id=f"{case['id']}-other-yes-token",
                 no_token_id=f"{case['id']}-other-no-token",
+                deadline_iso="2026-12-31T23:59:59-05:00",
+                rule_text=case["rule_text"],
+                rule_text_sha256=rule_sha256,
+                resolution_source=case.get("resolution_source", ""),
                 fee_schedule=explicit_zero_fee_schedule(FEE_OBSERVED_AT),
             )
         )
@@ -60,10 +71,13 @@ def context_for_case(case: dict, *, strong_analysis: bool = False) -> MarketCont
         deadline_iso="2026-12-31T23:59:59-05:00",
         outcomes=outcomes,
         rule_text=case["rule_text"],
-        rule_text_sha256=hashlib.sha256(
-            case["rule_text"].encode("utf-8")
-        ).hexdigest(),
+        rule_text_sha256=rule_sha256,
         rule_version=1,
+        outcome_topology=(
+            "SINGLE_BINARY"
+            if case["kind"] == "binary"
+            else "EXCLUSIVE_ONE_OF_N"
+        ),
         resolution_source=case.get("resolution_source", ""),
         liquidity=1000.0,
         volume=1000.0,
@@ -156,6 +170,13 @@ def test_rule_spec_is_strict_and_stably_hashed() -> None:
         compiler_model="anthropic:model-b",
         compiled_at="2026-07-25T00:01:00+00:00",
     )
+    assert first.schema_version == 2
+    assert first.outcome_topology == "SINGLE_BINARY"
+    assert first.outcomes[0].deadline_iso == context.deadline_iso
+    assert (
+        first.outcomes[0].rule_text_sha256
+        == context.rule_text_sha256
+    )
     assert first.spec_sha256 == second.spec_sha256
     raw = first.as_dict()
     raw["unexpected"] = "trade YES"
@@ -183,6 +204,20 @@ def test_rule_spec_binding_rejects_instrument_mutation() -> None:
     )
     with pytest.raises(ValueError, match="instrument binding changed"):
         spec.validate_context_binding(changed)
+
+    for field, value in (
+        ("deadline_iso", "2027-01-31T23:59:59+00:00"),
+        ("rule_text_sha256", "f" * 64),
+        ("resolution_source", "https://example.com/other-oracle"),
+    ):
+        changed = replace(
+            context,
+            outcomes=[
+                replace(context.outcomes[0], **{field: value})
+            ],
+        )
+        with pytest.raises(ValueError, match="instrument binding changed"):
+            spec.validate_context_binding(changed)
 
 
 def test_family_specific_contract_validation_fails_closed() -> None:

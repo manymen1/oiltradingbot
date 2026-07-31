@@ -19,7 +19,12 @@ from polybot.discovery.config import (
 from polybot.discovery.context import FixtureRuleAnalyzer
 from polybot.discovery.emit import emit_bot_config
 from polybot.discovery.gamma_universe import context_from_event, is_geopolitical_candidate, merge_refresh
-from polybot.discovery.opportunity import scan_group_arbitrage, scan_opportunities, tradable_edge
+from polybot.discovery.opportunity import (
+    config_probability_lookup,
+    scan_group_arbitrage,
+    scan_opportunities,
+    tradable_edge,
+)
 from polybot.discovery.runner import (
     discover_markets_command,
     emit_bot_config_command,
@@ -137,6 +142,14 @@ def test_context_from_grouped_event() -> None:
     assert context.market_id == "us-iran-talks-location"
     assert [o.name for o in context.outcomes] == ["qatar", "oman"]
     assert context.outcomes[0].yes_token_id == "talks-qatar-yes"
+    assert context.outcome_topology == "EXCLUSIVE_ONE_OF_N"
+    assert context.outcomes[0].deadline_iso == "2026-09-30T23:59:00Z"
+    assert context.outcomes[0].deadline_consistency == "UNKNOWN"
+    assert context.outcomes[0].rule_text == (
+        RULES + "\n\nreuters.com"
+    )
+    assert context.outcomes[0].rule_text_sha256
+    assert context.outcomes[0].resolution_source == "reuters.com"
     assert context.rule_text_sha256
 
 
@@ -144,11 +157,47 @@ def test_context_from_binary_event() -> None:
     context = context_from_event(_binary_event())
     assert context is not None
     assert context.kind == "binary"
+    assert context.outcome_topology == "SINGLE_BINARY"
     assert context.market_id == "0xiran-ceasefire-m"
     assert len(context.outcomes) == 1
     assert context.outcomes[0].fee_schedule is not None
     assert context.outcomes[0].fee_schedule.fees_enabled is False
     assert context.outcomes[0].fee_schedule_error == ""
+
+
+def test_grouped_topology_and_deadline_consistency_are_per_leg() -> None:
+    event = _grouped_event()
+    event["negRisk"] = False
+    event["title"] = "Iran successfully targets shipping on...?"
+    for index, market in enumerate(event["markets"], start=1):
+        market["negRisk"] = False
+        market["groupItemTitle"] = f"August {index}"
+        market["question"] = (
+            "Will Iran successfully target shipping "
+            f"on August {index}?"
+        )
+        market["endDate"] = f"2026-08-0{index}T23:59:00Z"
+
+    daily = context_from_event(event)
+    assert daily is not None
+    assert daily.outcome_topology == "INDEPENDENT_MULTI"
+    assert {
+        outcome.deadline_consistency for outcome in daily.outcomes
+    } == {"MATCH"}
+
+    event["title"] = "US-Iran final nuclear deal by...?"
+    for market in event["markets"]:
+        market["question"] = (
+            "Will there be a final nuclear deal by "
+            f"{market['groupItemTitle']}?"
+        )
+    event["markets"][1]["endDate"] = "2026-09-30T23:59:00Z"
+    ladder = context_from_event(event)
+    assert ladder is not None
+    assert ladder.outcome_topology == "MONOTONE_DEADLINE_LADDER"
+    assert [
+        outcome.deadline_consistency for outcome in ladder.outcomes
+    ] == ["MATCH", "MISMATCH"]
 
 
 def test_malformed_fee_metadata_is_preserved_as_entry_blocker() -> None:
@@ -173,6 +222,36 @@ def test_rule_change_drops_analysis_and_demotes() -> None:
     assert merged.rule_analysis is None
     assert merged.state == "RULES_REVIEW_REQUIRED"
     assert merged.state_reasons == ["rule_text_changed"]
+
+
+def test_refresh_updates_outcome_topology_and_bound_leg_metadata() -> None:
+    original = context_from_event(_grouped_event())
+    assert original is not None
+    event = _grouped_event()
+    event["negRisk"] = False
+    event["resolutionSource"] = "https://example.com/settlement"
+    event["title"] = "Iran successfully targets shipping on...?"
+    for index, market in enumerate(event["markets"], start=1):
+        market["negRisk"] = False
+        market["groupItemTitle"] = f"August {index}"
+        market["question"] = (
+            "Will Iran successfully target shipping "
+            f"on August {index}?"
+        )
+        market["endDate"] = f"2026-08-0{index}T23:59:00Z"
+        market["resolutionSource"] = event["resolutionSource"]
+    fresh = context_from_event(event)
+    assert fresh is not None
+
+    merged = merge_refresh(original, fresh)
+
+    assert merged.outcome_topology == "INDEPENDENT_MULTI"
+    assert merged.resolution_source == event["resolutionSource"]
+    assert all(outcome.rule_text_sha256 for outcome in merged.outcomes)
+    assert all(
+        outcome.resolution_source == event["resolutionSource"]
+        for outcome in merged.outcomes
+    )
 
 
 # ---- analyzer + scorer ----
@@ -462,7 +541,13 @@ def test_default_model_pricing_is_explicitly_calibration_only(tmp_path) -> None:
         model_weight=1.0,
         disagreement_buffer_scale=0.0,
     )
-    results = scan_opportunities([context], config, _FakeQuotes(), _allocator(tmp_path))
+    results = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(),
+        _allocator(tmp_path),
+        probability_lookup=config_probability_lookup(config),
+    )
     yes = next(result for result in results if result.side == "YES")
     assert "model_pricing_calibration_only" in yes.blockers
     assert yes.tradable_edge is not None and yes.tradable_edge > config.min_edge
@@ -535,7 +620,13 @@ def test_scan_finds_executable_opportunity(tmp_path) -> None:
         model_weight=1.0,
         disagreement_buffer_scale=0.0,
     )
-    results = scan_opportunities([context], config, _FakeQuotes(), _allocator(tmp_path))
+    results = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(),
+        _allocator(tmp_path),
+        probability_lookup=config_probability_lookup(config),
+    )
     # One YES row and one NO row per estimated outcome; here YES carries the edge.
     assert [r.side for r in sorted(results, key=lambda r: r.side)] == ["NO", "YES"]
     opp = next(r for r in results if r.side == "YES")
@@ -550,17 +641,45 @@ def test_scan_finds_executable_opportunity(tmp_path) -> None:
 def test_scan_blockers(tmp_path) -> None:
     context = _graded(_binary_event())
     allocator = _allocator(tmp_path)
-    no_estimate = scan_opportunities([context], OpportunityConfig(), _FakeQuotes(), allocator)
+    empty_config = OpportunityConfig()
+    no_estimate = scan_opportunities(
+        [context],
+        empty_config,
+        _FakeQuotes(),
+        allocator,
+        probability_lookup=config_probability_lookup(empty_config),
+    )
     assert no_estimate[0].blockers == ["no_probability_estimate"]
 
     config = OpportunityConfig(probability_estimates={context.market_id: {"yes": 0.60}})
-    thin_edge = scan_opportunities([context], config, _FakeQuotes(ask=0.58, bid=0.56), allocator)
+    thin_edge = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(ask=0.58, bid=0.56),
+        allocator,
+        probability_lookup=config_probability_lookup(config),
+    )
     assert any(b.startswith("edge_below_minimum") for b in thin_edge[0].blockers)
 
-    wide = scan_opportunities([context], config, _FakeQuotes(ask=0.40, bid=0.10), allocator)
+    wide = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(ask=0.40, bid=0.10),
+        allocator,
+        probability_lookup=config_probability_lookup(config),
+    )
     assert any(b.startswith("spread_above_limit") for b in wide[0].blockers)
 
-    pricey = scan_opportunities([context], OpportunityConfig(probability_estimates={context.market_id: {"yes": 0.99}}), _FakeQuotes(ask=0.95, bid=0.94), allocator)
+    pricey_config = OpportunityConfig(
+        probability_estimates={context.market_id: {"yes": 0.99}}
+    )
+    pricey = scan_opportunities(
+        [context],
+        pricey_config,
+        _FakeQuotes(ask=0.95, bid=0.94),
+        allocator,
+        probability_lookup=config_probability_lookup(pricey_config),
+    )
     assert any(b.startswith("price_above_cap") for b in pricey[0].blockers)
 
 
@@ -673,6 +792,8 @@ def _pipeline_config(tmp_path: Path) -> Path:
         f"""
 classifier:
   provider: rule_based
+estimator:
+  enabled: false
 scoring:
   allow_fixture_analysis_live: true
 data_dir: {tmp_path / 'data'}
@@ -723,6 +844,7 @@ opportunity:
   model_pricing_mode: allocatable
   model_weight: 1.0
   disagreement_buffer_scale: 0.0
+  forecast_data_root: {tmp_path / 'forecast'}
   probability_estimates:
     "{binary_id}":
       "yes": 0.60
@@ -923,6 +1045,7 @@ opportunity:
   model_pricing_mode: allocatable
   model_weight: 1.0
   disagreement_buffer_scale: 0.0
+  forecast_data_root: {tmp_path / 'forecast'}
   probability_estimates:
     "{binary_id}":
       "yes": 0.60
@@ -964,7 +1087,13 @@ def test_scan_sizes_small_live_market_to_its_book(tmp_path) -> None:
         model_weight=1.0,
         disagreement_buffer_scale=0.0,
     )
-    results = scan_opportunities([context], config, _FakeQuotes(), _allocator(tmp_path))
+    results = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(),
+        _allocator(tmp_path),
+        probability_lookup=config_probability_lookup(config),
+    )
     assert not results[0].blockers
     assert results[0].allocation_usd == 16.0  # book-absorbable size, not the 50 per-order cap
 
@@ -979,7 +1108,13 @@ def test_scan_prices_no_side_of_overpriced_market(tmp_path) -> None:
         model_weight=1.0,
         disagreement_buffer_scale=0.0,
     )
-    results = scan_opportunities([context], config, _FakeQuotes(ask=0.80, bid=0.78), _allocator(tmp_path))
+    results = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(ask=0.80, bid=0.78),
+        _allocator(tmp_path),
+        probability_lookup=config_probability_lookup(config),
+    )
     no_row = next(r for r in results if r.side == "NO")
     assert not no_row.blockers
     assert no_row.estimated_probability == pytest.approx(0.80)
@@ -991,7 +1126,13 @@ def test_scan_prices_no_side_of_overpriced_market(tmp_path) -> None:
 def test_scan_no_side_can_be_disabled(tmp_path) -> None:
     context = _graded(_binary_event())
     config = OpportunityConfig(probability_estimates={context.market_id: {"yes": 0.60}}, scan_no_side=False)
-    results = scan_opportunities([context], config, _FakeQuotes(), _allocator(tmp_path))
+    results = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(),
+        _allocator(tmp_path),
+        probability_lookup=config_probability_lookup(config),
+    )
     assert [r.side for r in results] == ["YES"]
 
 

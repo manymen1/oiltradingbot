@@ -141,21 +141,36 @@ def _build_rule_spec_source_plan(
     records.extend(actor_sources(actors))
 
     requirements = list(semantics.source_requirements)
-    if context.resolution_source.strip() and not any(
+    bound_resolution_sources = _ordered_unique(
+        [
+            outcome.resolution_source.strip()
+            for outcome in rule_spec.outcomes
+            if outcome.resolution_source.strip()
+        ]
+        + (
+            [context.resolution_source.strip()]
+            if context.resolution_source.strip()
+            else []
+        )
+    )
+    existing_requirement_refs = {
         requirement.source_ref.casefold()
-        == context.resolution_source.strip().casefold()
         for requirement in requirements
-    ):
+    }
+    for resolution_source in bound_resolution_sources:
+        if resolution_source.casefold() in existing_requirement_refs:
+            continue
         from polybot.rules.contracts import SourceRequirement
 
         requirements.append(
             SourceRequirement(
-                source_ref=context.resolution_source.strip(),
+                source_ref=resolution_source,
                 roles=["SETTLEMENT"],
                 required=True,
-                rationale="resolution source named in market metadata",
+                rationale="resolution source bound to a market outcome",
             )
         )
+        existing_requirement_refs.add(resolution_source.casefold())
 
     required_refs: list[str] = []
     missing_required: list[str] = []

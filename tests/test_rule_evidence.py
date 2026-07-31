@@ -54,6 +54,41 @@ def _spec(family: str):
     return context, spec
 
 
+def _multi_spec(
+    family: str,
+    topology: str,
+) -> RuleSpec:
+    _context, base = _spec(family)
+    first = replace(
+        base.outcomes[0],
+        name="july_25",
+        label="July 25",
+        market_slug=f"{base.market_id}-july-25",
+        condition_id=f"{base.market_id}-july-25-condition",
+        yes_token_id=f"{base.market_id}-july-25-yes",
+        no_token_id=f"{base.market_id}-july-25-no",
+        deadline_iso="2026-07-25T23:59:59+00:00",
+    )
+    second = replace(
+        base.outcomes[0],
+        name="august_31",
+        label="August 31",
+        market_slug=f"{base.market_id}-august-31",
+        condition_id=f"{base.market_id}-august-31-condition",
+        yes_token_id=f"{base.market_id}-august-31-yes",
+        no_token_id=f"{base.market_id}-august-31-no",
+        deadline_iso="2026-08-31T23:59:59+00:00",
+    )
+    return RuleSpec.from_dict(
+        replace(
+            base,
+            kind="grouped",
+            outcome_topology=topology,
+            outcomes=[first, second],
+        ).as_dict()
+    )
+
+
 def test_codex_cli_evidence_extractor_accepts_schema_json(
     tmp_path: Path,
 ) -> None:
@@ -530,6 +565,138 @@ def test_categorical_winner_deterministically_forecloses_other_legs() -> None:
         target=spec.outcomes[0].name,
     )
     evaluations = evaluate_rule(spec, [winner, second])
+    assert [item.evidence_state for item in evaluations] == [
+        "TERMINAL_YES",
+        "TERMINAL_NO",
+    ]
+    assert all(item.terminal for item in evaluations)
+
+
+def test_independent_multi_evaluates_only_explicitly_targeted_outcome() -> None:
+    spec = _multi_spec("OCCURRENCE_BEFORE_DEADLINE", "INDEPENDENT_MULTI")
+    first_claims = [
+        _claim(
+            spec,
+            article_id=article_id,
+            assertion="PREDICATE_SATISFIED",
+            group=group,
+            target=spec.outcomes[0].name,
+        )
+        for article_id, group in (
+            ("first-wire", "reuters"),
+            ("first-independent", "associated_press"),
+        )
+    ]
+    evaluations = evaluate_rule(spec, first_claims)
+    assert [item.evidence_state for item in evaluations] == [
+        "TERMINAL_YES",
+        "AMBIGUOUS",
+    ]
+
+    untargeted = _claim(
+        spec,
+        article_id="untargeted",
+        assertion="PREDICATE_SATISFIED",
+        group="reuters",
+        target="",
+    )
+    with pytest.raises(ValueError, match="target_outcome"):
+        evaluate_rule(spec, [untargeted])
+
+
+def test_deadline_ladder_uses_each_outcome_deadline() -> None:
+    spec = _multi_spec("STATUS_AT_DEADLINE", "MONOTONE_DEADLINE_LADDER")
+    claims = [
+        _claim(
+            spec,
+            article_id=f"status-{outcome.name}",
+            assertion="STATUS_OBSERVED",
+            group="reuters",
+            target=outcome.name,
+            temporal=(
+                "AT_DEADLINE"
+                if outcome == spec.outcomes[0]
+                else "UNKNOWN"
+            ),
+        )
+        for outcome in spec.outcomes
+    ]
+    evaluations = evaluate_rule(
+        spec,
+        claims,
+        as_of=datetime(2026, 7, 31, tzinfo=timezone.utc),
+    )
+    assert [item.evidence_state for item in evaluations] == [
+        "TERMINAL_YES",
+        "STRONG_YES",
+    ]
+    assert [item.terminal for item in evaluations] == [True, False]
+
+
+def test_per_leg_window_rejects_event_after_target_deadline() -> None:
+    spec = _multi_spec(
+        "OCCURRENCE_BEFORE_DEADLINE",
+        "MONOTONE_DEADLINE_LADDER",
+    )
+    late_claims = [
+        _claim(
+            spec,
+            article_id=article_id,
+            assertion="PREDICATE_SATISFIED",
+            group=group,
+            target=spec.outcomes[0].name,
+            event_at="2026-08-01T00:00:00+00:00",
+        )
+        for article_id, group in (
+            ("late-wire", "reuters"),
+            ("late-independent", "associated_press"),
+        )
+    ]
+    evaluation = evaluate_rule(
+        spec,
+        late_claims,
+        as_of=datetime(2026, 7, 20, tzinfo=timezone.utc),
+    )[0]
+    assert evaluation.evidence_state == "AMBIGUOUS"
+    assert evaluation.terminal is False
+    assert "no_decisive_rule_bound_claim" in evaluation.blockers
+
+
+def test_status_report_before_leg_deadline_never_becomes_terminal_by_aging() -> None:
+    spec = _multi_spec("STATUS_AT_DEADLINE", "MONOTONE_DEADLINE_LADDER")
+    report = _claim(
+        spec,
+        article_id="early-status",
+        assertion="STATUS_OBSERVED",
+        group="reuters",
+        target=spec.outcomes[0].name,
+        temporal="IN_WINDOW",
+    )
+    evaluation = evaluate_rule(
+        spec,
+        [report],
+        as_of=datetime(2026, 8, 31, tzinfo=timezone.utc),
+    )[0]
+    assert evaluation.evidence_state == "STRONG_YES"
+    assert evaluation.terminal is False
+
+
+def test_exclusive_topology_forecloses_other_legs_for_occurrence_family() -> None:
+    spec = _multi_spec("OCCURRENCE_BEFORE_DEADLINE", "EXCLUSIVE_ONE_OF_N")
+    winner_claims = [
+        _claim(
+            spec,
+            article_id=article_id,
+            assertion="PREDICATE_SATISFIED",
+            group=group,
+            target=spec.outcomes[0].name,
+        )
+        for article_id, group in (
+            ("winner-wire", "reuters"),
+            ("winner-independent", "associated_press"),
+        )
+    ]
+    evaluations = evaluate_rule(spec, winner_claims)
     assert [item.evidence_state for item in evaluations] == [
         "TERMINAL_YES",
         "TERMINAL_NO",

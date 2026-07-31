@@ -401,10 +401,25 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
 
     grouped = len(metas) > 1
     event_slug = str(event.get("slug") or "")
+    outcome_topology = _outcome_topology(event, metas)
     outcomes: list[OutcomeRecord] = []
     for raw, meta in metas:
         label = str(raw.get("groupItemTitle") or "").strip() if grouped else "Yes"
         name = _normalize(label or meta.question)
+        outcome_rule_text = "\n\n".join(
+            part
+            for part in (
+                meta.description.strip(),
+                meta.resolution_source.strip(),
+            )
+            if part
+        )
+        outcome_rule_sha256 = (
+            hashlib.sha256(outcome_rule_text.encode("utf-8")).hexdigest()
+            if outcome_rule_text
+            else ""
+        )
+        outcome_deadline = str(raw.get("endDate") or "")
         outcomes.append(
             OutcomeRecord(
                 name=name,
@@ -414,6 +429,15 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
                 condition_id=meta.condition_id,
                 yes_token_id=meta.yes_token_id,
                 no_token_id=meta.no_token_id,
+                deadline_iso=outcome_deadline,
+                rule_text=outcome_rule_text,
+                rule_text_sha256=outcome_rule_sha256,
+                resolution_source=meta.resolution_source.strip(),
+                deadline_consistency=_deadline_consistency(
+                    label=label,
+                    question=meta.question,
+                    deadline_iso=outcome_deadline,
+                ),
                 tick_size=meta.tick_size,
                 neg_risk=meta.neg_risk,
                 last_yes_price=meta.outcome_prices[0] if meta.outcome_prices else None,
@@ -448,6 +472,7 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
         rule_text=rule_text,
         rule_text_sha256=digest,
         rule_version=1,
+        outcome_topology=outcome_topology,
         resolution_source=str(event.get("resolutionSource") or metas[0][1].resolution_source or ""),
         neg_risk=any(meta.neg_risk for _, meta in metas),
         category=str(event.get("category") or ""),
@@ -461,6 +486,72 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
         discovered_at=now,
         updated_at=now,
     )
+
+
+_MONTHS = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
+_DATE_LABEL = re.compile(
+    r"\b(" + "|".join(_MONTHS) + r")\s+(\d{1,2})(?:,\s*(\d{4}))?\b",
+    re.IGNORECASE,
+)
+
+
+def _deadline_consistency(
+    *,
+    label: str,
+    question: str,
+    deadline_iso: str,
+) -> str:
+    match = _DATE_LABEL.search(label) or _DATE_LABEL.search(question)
+    if match is None or not deadline_iso.strip():
+        return "UNKNOWN"
+    try:
+        deadline = datetime.fromisoformat(
+            deadline_iso.strip().replace("Z", "+00:00")
+        )
+    except ValueError:
+        return "MISMATCH"
+    expected_year = int(match.group(3)) if match.group(3) else deadline.year
+    expected = (
+        expected_year,
+        _MONTHS[match.group(1).casefold()],
+        int(match.group(2)),
+    )
+    observed = (deadline.year, deadline.month, deadline.day)
+    return "MATCH" if observed == expected else "MISMATCH"
+
+
+def _outcome_topology(
+    event: dict[str, Any],
+    metas: list[tuple[dict[str, Any], Any]],
+) -> str:
+    if len(metas) == 1:
+        return "SINGLE_BINARY"
+    if bool(event.get("negRisk")) or any(meta.neg_risk for _, meta in metas):
+        return "EXCLUSIVE_ONE_OF_N"
+    text = "\n".join(
+        [
+            str(event.get("title") or ""),
+            *(str(meta.question or "") for _, meta in metas),
+        ]
+    ).casefold()
+    if re.search(r"\bon(?:\.\.\.|\s+which|\s+[a-z]+\s+\d)", text):
+        return "INDEPENDENT_MULTI"
+    if re.search(r"\b(?:by|through)(?:\.\.\.|\s+[a-z]+\s+\d)", text):
+        return "MONOTONE_DEADLINE_LADDER"
+    return "UNCLASSIFIED"
 
 
 def merge_refresh(existing: MarketContext, fresh: MarketContext) -> MarketContext:
@@ -480,6 +571,9 @@ def merge_refresh(existing: MarketContext, fresh: MarketContext) -> MarketContex
         "accepting_orders": fresh.accepting_orders,
         "tags": fresh.tags,
         "category": fresh.category,
+        "outcome_topology": fresh.outcome_topology,
+        "resolution_source": fresh.resolution_source,
+        "neg_risk": fresh.neg_risk,
     }
     if rule_changed:
         merged.update(

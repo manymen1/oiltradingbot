@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from polybot.core.fees import FEE_POLICY_VERSION, FeeScheduleSnapshot
 
-RULE_SPEC_SCHEMA_VERSION = 1
+RULE_SPEC_SCHEMA_VERSION = 2
 EVIDENCE_CLAIM_SCHEMA_VERSION = 1
 RULE_EVALUATION_SCHEMA_VERSION = 1
 TRADE_INTENT_SCHEMA_VERSION = 1
@@ -95,13 +95,35 @@ class OutcomeBinding:
     condition_id: str
     yes_token_id: str
     no_token_id: str
+    deadline_iso: str
+    rule_text_sha256: str
+    resolution_source: str
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "OutcomeBinding":
         data = _object(raw, "outcome")
         _known(data, cls.__dataclass_fields__, "outcome")
         values = {
-            name: _text(data.get(name), f"outcome.{name}")
+            name: (
+                _iso_datetime(
+                    data.get(name, ""),
+                    f"outcome.{name}",
+                    allow_empty=True,
+                )
+                if name == "deadline_iso"
+                else _sha256(
+                    data.get(name),
+                    f"outcome.{name}",
+                )
+                if name == "rule_text_sha256"
+                else _text(
+                    data.get(name, ""),
+                    f"outcome.{name}",
+                    allow_empty=True,
+                )
+                if name == "resolution_source"
+                else _text(data.get(name), f"outcome.{name}")
+            )
             for name in cls.__dataclass_fields__
         }
         return cls(**values)
@@ -374,6 +396,7 @@ class RuleSpec:
     question: str
     rule_text_sha256: str
     rule_version: int
+    outcome_topology: str
     outcomes: list[OutcomeBinding]
     semantics: RuleSemantics
     compiler_model: str
@@ -409,10 +432,25 @@ class RuleSpec:
                 condition_id=item.condition_id,
                 yes_token_id=item.yes_token_id,
                 no_token_id=item.no_token_id,
+                deadline_iso=item.deadline_iso or context.deadline_iso,
+                rule_text_sha256=(
+                    item.rule_text_sha256 or context.rule_text_sha256
+                ),
+                resolution_source=(
+                    item.resolution_source or context.resolution_source
+                ).strip(),
             )
             for item in context.outcomes
         ]
-        return cls(
+        topology = str(
+            getattr(context, "outcome_topology", "") or ""
+        ).strip().upper()
+        if topology == "UNCLASSIFIED":
+            if context.kind == "binary":
+                topology = "SINGLE_BINARY"
+            elif context.neg_risk:
+                topology = "EXCLUSIVE_ONE_OF_N"
+        spec = cls(
             schema_version=RULE_SPEC_SCHEMA_VERSION,
             market_id=_text(context.market_id, "market_id"),
             kind=_choice(
@@ -428,11 +466,26 @@ class RuleSpec:
                 "rule_version",
                 minimum=1,
             ),
+            outcome_topology=_choice(
+                topology,
+                {
+                    "SINGLE_BINARY",
+                    "EXCLUSIVE_ONE_OF_N",
+                    "INDEPENDENT_MULTI",
+                    "MONOTONE_DEADLINE_LADDER",
+                    "MONOTONE_THRESHOLD_LADDER",
+                    "TOP_K",
+                    "UNCLASSIFIED",
+                },
+                "outcome_topology",
+            ),
             outcomes=outcomes,
             semantics=semantics,
             compiler_model=_text(compiler_model, "compiler_model"),
             compiled_at=_iso_datetime(compiled_at, "compiled_at"),
         )
+        spec._validate_topology()
+        return spec
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "RuleSpec":
@@ -448,6 +501,7 @@ class RuleSpec:
             OutcomeBinding.from_dict(item)
             for item in _list(data.get("outcomes"), "outcomes", minimum=1)
         ]
+        _unique([item.name for item in outcomes], "outcome names")
         condition_ids = [item.condition_id for item in outcomes]
         token_ids = [
             token
@@ -456,7 +510,7 @@ class RuleSpec:
         ]
         _unique(condition_ids, "outcome condition ids")
         _unique(token_ids, "outcome token ids")
-        return cls(
+        spec = cls(
             schema_version=schema,
             market_id=_text(data.get("market_id"), "market_id"),
             kind=_choice(
@@ -475,11 +529,57 @@ class RuleSpec:
                 "rule_version",
                 minimum=1,
             ),
+            outcome_topology=_choice(
+                data.get("outcome_topology"),
+                {
+                    "SINGLE_BINARY",
+                    "EXCLUSIVE_ONE_OF_N",
+                    "INDEPENDENT_MULTI",
+                    "MONOTONE_DEADLINE_LADDER",
+                    "MONOTONE_THRESHOLD_LADDER",
+                    "TOP_K",
+                    "UNCLASSIFIED",
+                },
+                "outcome_topology",
+            ),
             outcomes=outcomes,
             semantics=RuleSemantics.from_dict(data.get("semantics")),
             compiler_model=_text(data.get("compiler_model"), "compiler_model"),
             compiled_at=_iso_datetime(data.get("compiled_at"), "compiled_at"),
         )
+        spec._validate_topology()
+        return spec
+
+    def _validate_topology(self) -> None:
+        if self.outcome_topology == "SINGLE_BINARY" and len(self.outcomes) != 1:
+            raise ValueError("SINGLE_BINARY requires exactly one outcome")
+        if (
+            self.outcome_topology
+            in {
+                "INDEPENDENT_MULTI",
+                "MONOTONE_DEADLINE_LADDER",
+                "MONOTONE_THRESHOLD_LADDER",
+                "EXCLUSIVE_ONE_OF_N",
+            }
+            and len(self.outcomes) < 2
+        ):
+            raise ValueError(
+                f"{self.outcome_topology} requires at least two outcomes"
+            )
+        if self.outcome_topology in {
+            "INDEPENDENT_MULTI",
+            "MONOTONE_DEADLINE_LADDER",
+        }:
+            missing = [
+                outcome.name
+                for outcome in self.outcomes
+                if not outcome.deadline_iso
+            ]
+            if missing:
+                raise ValueError(
+                    f"{self.outcome_topology} requires per-outcome deadlines: "
+                    + ",".join(missing)
+                )
 
     def validate_context_binding(self, context: Any) -> None:
         expected = RuleSpec.from_context(
@@ -495,6 +595,7 @@ class RuleSpec:
             "question",
             "rule_text_sha256",
             "rule_version",
+            "outcome_topology",
             "outcomes",
         )
         mismatches = [

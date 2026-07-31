@@ -219,6 +219,13 @@ class RuleCompiler:
         budget_purpose: str = "system",
         priority_score_sha256: str = "",
     ) -> CompilationResult:
+        blocker = rule_compilation_blocker(context)
+        if blocker:
+            return CompilationResult(
+                market_id=context.market_id,
+                status="UNSUPPORTED",
+                reason=blocker,
+            )
         cached = self.store.load_spec(
             context.market_id,
             context.rule_text_sha256,
@@ -538,7 +545,7 @@ def fixture_semantics(context: MarketContext) -> RuleSemantics:
     ):
         family = "SOURCE_LOCKED_ANNOUNCEMENT"
         comparator = "ANNOUNCED"
-    elif context.kind == "grouped":
+    elif context.outcome_topology == "EXCLUSIVE_ONE_OF_N":
         family = "CATEGORICAL_EXCLUSIVE"
         comparator = "EQUALS"
     else:
@@ -611,12 +618,42 @@ def fixture_semantics(context: MarketContext) -> RuleSemantics:
 
 def compilation_prompt(context: MarketContext, *, pass_index: int) -> str:
     labels = ", ".join(item.label for item in context.outcomes[:30])
+    leg_contracts = "\n".join(
+        (
+            f"- {item.name}: label={item.label!r}; "
+            f"deadline={item.deadline_iso or 'missing'}; "
+            f"question={item.question!r}; "
+            f"rule_sha256={item.rule_text_sha256 or 'missing'}; "
+            f"resolution_source={item.resolution_source or 'none'}"
+        )
+        for item in context.outcomes[:50]
+    )
+    active_rule_texts = {
+        item.rule_text_sha256: item.rule_text
+        for item in context.outcomes
+        if item.active
+        and not item.closed
+        and item.rule_text_sha256
+        and item.rule_text
+    }
+    bound_leg_rules = "\n".join(
+        (
+            f"<<<OUTCOME_RULE sha256={digest}\n"
+            f"{rule_text}\n"
+            "OUTCOME_RULE>>>"
+        )
+        for digest, rule_text in sorted(active_rule_texts.items())
+    )
     return (
         "Compile the VERBATIM prediction-market rules into semantic JSON. "
         "This is rule interpretation, not forecasting and not a trade decision.\n"
         f"Independent compiler pass: {pass_index} of 2.\n"
         f"Question: {context.question}\n"
+        f"Deterministic outcome topology: {context.outcome_topology}\n"
         f"Outcome labels: {labels}\n"
+        f"Immutable per-leg bindings:\n{leg_contracts}\n"
+        f"Unique active per-leg verbatim rules:\n"
+        f"{bound_leg_rules or 'none supplied; use parent rules below'}\n"
         f"Deadline supplied by market metadata: {context.deadline_iso}\n"
         f"Named resolution source: {context.resolution_source or 'none'}\n"
         "Choose exactly one closed rule_family. Encode who must do what, the "
@@ -625,7 +662,8 @@ def compilation_prompt(context: MarketContext, *, pass_index: int) -> str:
         "conditions, and whether each terminal state is truly monotonic under "
         "these rules. A named oracle or resolution source must be a required "
         "SETTLEMENT source. Do not invent market IDs, token IDs, condition IDs, "
-        "prices, probabilities, or actions; those fields are intentionally "
+        "prices, probabilities, topology, or actions; those fields are "
+        "deterministically bound outside the model output and are intentionally "
         "absent from the output schema. Use SOURCE_LOCKED_ANNOUNCEMENT only when "
         "the specified source's announcement itself is the predicate. Use "
         "SUBJECTIVE_DISCRETIONARY when the oracle retains material judgment.\n"
@@ -650,6 +688,71 @@ def compilation_prompt(context: MarketContext, *, pass_index: int) -> str:
         "VERBATIM_RULES>>>\n"
         "Return only strict JSON matching the supplied schema."
     )
+
+
+def rule_compilation_blocker(context: MarketContext) -> str:
+    """Return a deterministic fail-closed blocker before model calls."""
+
+    topology = context.outcome_topology.strip().upper()
+    if topology == "UNCLASSIFIED":
+        if context.kind == "binary":
+            topology = "SINGLE_BINARY"
+        elif context.neg_risk:
+            topology = "EXCLUSIVE_ONE_OF_N"
+    if topology not in {
+        "SINGLE_BINARY",
+        "EXCLUSIVE_ONE_OF_N",
+        "INDEPENDENT_MULTI",
+        "MONOTONE_DEADLINE_LADDER",
+    }:
+        return f"unsupported_rule_topology:{topology or 'UNCLASSIFIED'}"
+    active_outcomes = [
+        outcome
+        for outcome in context.outcomes
+        if outcome.active and not outcome.closed
+    ]
+    if topology != "SINGLE_BINARY":
+        missing_deadlines = [
+            outcome.name
+            for outcome in active_outcomes
+            if not outcome.deadline_iso.strip()
+        ]
+        if missing_deadlines:
+            return "outcome_deadline_missing:" + ",".join(
+                sorted(missing_deadlines)
+            )
+        missing_rules = [
+            outcome.name
+            for outcome in active_outcomes
+            if not outcome.rule_text_sha256.strip()
+        ]
+        if missing_rules:
+            return "outcome_rule_text_missing:" + ",".join(
+                sorted(missing_rules)
+            )
+        active_rule_hashes = {
+            outcome.rule_text_sha256
+            for outcome in active_outcomes
+        }
+        if len(active_rule_hashes) > 1:
+            return "outcome_rule_text_mismatch"
+    mismatches = [
+        outcome.name
+        for outcome in active_outcomes
+        if (
+            outcome.deadline_consistency == "MISMATCH"
+        )
+    ]
+    if mismatches:
+        return "outcome_deadline_mismatch:" + ",".join(sorted(mismatches))
+    resolution_sources = {
+        " ".join(outcome.resolution_source.casefold().split())
+        for outcome in active_outcomes
+        if outcome.resolution_source.strip()
+    }
+    if len(resolution_sources) > 1:
+        return "outcome_resolution_source_mismatch"
+    return ""
 
 
 def _threshold_parts(text: str, family: str) -> tuple[str, str]:
@@ -771,6 +874,7 @@ __all__ = [
     "RuleCompiler",
     "compilation_prompt",
     "fixture_semantics",
+    "rule_compilation_blocker",
     "_critical_consensus_payload",
     "_is_transport_error",
     "_repair_semantic_payload",

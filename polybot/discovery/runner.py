@@ -294,7 +294,7 @@ def compile_rules_command(
             "rule compiler is disabled; set rule_compiler.enabled: true"
         )
     from polybot.core.budget import ClassifierBudgetStore
-    from polybot.rules.compiler import RuleCompiler
+    from polybot.rules.compiler import RuleCompiler, rule_compilation_blocker
     from polybot.rules.store import RuleStore
 
     rule_store = RuleStore(rule_store_db_path(config))
@@ -404,6 +404,21 @@ def compile_rules_command(
                     "market_id": context.market_id,
                     "status": "SKIPPED",
                     "reason": "missing_or_short_resolution_rules",
+                }
+            )
+            continue
+        semantic_blocker = rule_compilation_blocker(context)
+        if semantic_blocker:
+            _mark_rule_review_required(
+                store,
+                context,
+                semantic_blocker,
+            )
+            results.append(
+                {
+                    "market_id": context.market_id,
+                    "status": "UNSUPPORTED",
+                    "reason": semantic_blocker,
                 }
             )
             continue
@@ -531,6 +546,8 @@ def compile_rules_command(
         item["selection_reason"] = (
             "cached_validation"
             if item.get("status") == "CACHED"
+            else "semantic_topology_preflight"
+            if item.get("status") == "UNSUPPORTED"
             else "compiler_unavailable_circuit_breaker"
             if str(item.get("reason") or "").startswith(
                 "rule_compiler_unavailable_cycle:"
@@ -569,6 +586,7 @@ def compile_rules_command(
                 "DISAGREEMENT",
                 "BUDGET_BLOCKED",
                 "UNAVAILABLE",
+                "UNSUPPORTED",
                 "ERROR",
             }
         ),

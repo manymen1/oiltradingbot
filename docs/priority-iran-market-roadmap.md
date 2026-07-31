@@ -16,6 +16,30 @@ early bounded compiler attempt only. After an attempt, ordinary
 fair/profit-priority scheduling resumes so a difficult market cannot starve
 the universe.
 
+## Delivery Status
+
+The first RuleSpec-v2 safety tranche is implemented:
+
+- Gamma contexts persist deterministic topology plus each leg's deadline,
+  verbatim rule hash, resolution-source reference, and metadata consistency.
+- RuleSpec schema v2 binds those immutable fields and rejects stale context
+  reuse.
+- All supported evaluators route claims per outcome. Grouped claims require an
+  explicit target, late events cannot satisfy an earlier leg, and wall-clock
+  aging cannot turn a pre-deadline status report into a terminal result.
+- Shared semantics compile only when all active legs have one common rule
+  contract and one compatible settlement-source contract. Missing leg data,
+  divergent rules/sources, unsupported topology, and active deadline
+  mismatches fail before any model call.
+- Source plans include every resolution source bound into the RuleSpec.
+
+The 2026-07-31 Gamma preflight supports eleven of the thirteen events at this
+layer. The final-nuclear-deal event remains blocked on its active
+`december_31` deadline mismatch, and Bab el-Mandeb remains blocked on its
+active `september_30` mismatch. "Supported" here means safe to compile and
+evaluate in paper mode; it does not mean the market has passed the later
+source-adapter, replay, or live-promotion phases.
+
 ## Live Mapping
 
 | # | Parent event / selected leg | Required topology | Predicate family | Resolution-source policy | Immediate blocker |
@@ -36,7 +60,7 @@ the universe.
 
 ## Confirmed Discovery Defect
 
-Five selected events were present in the complete Gamma enumeration but were
+Six selected events were present in the complete Gamma enumeration but were
 discarded before context persistence:
 
 - five because the excluded term `nfl` matched the substring in `conflict`;

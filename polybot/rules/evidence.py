@@ -566,8 +566,13 @@ def extraction_prompt(
     pass_index: int,
     passes: int,
 ) -> str:
-    outcomes = ", ".join(
-        f"{item.name}={item.label}" for item in spec.outcomes
+    outcomes = "; ".join(
+        (
+            f"{item.name}={item.label} "
+            f"(deadline={item.deadline_iso or spec.semantics.window.end_iso}, "
+            f"rule_sha256={item.rule_text_sha256})"
+        )
+        for item in spec.outcomes
     )
     return (
         "Extract factual claims from one article against an immutable "
@@ -575,7 +580,7 @@ def extraction_prompt(
         "state, or recommend a trade.\n"
         f"Independent extraction pass: {pass_index} of {passes}.\n"
         f"Market question: {context.question}\n"
-        f"Allowed target outcomes: {outcomes}\n"
+        f"Allowed target outcomes and immutable per-leg windows: {outcomes}\n"
         f"Rule family: {spec.semantics.rule_family}\n"
         f"Predicate: {json.dumps(spec.semantics.predicate.__dict__, sort_keys=True)}\n"
         f"Window: {json.dumps(spec.semantics.window.__dict__, sort_keys=True)}\n"

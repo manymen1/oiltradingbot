@@ -20,7 +20,13 @@ from polybot.discovery.types import Opportunity
 def test_scan_blends_probability_toward_market_mid(tmp_path) -> None:
     context = _graded(_binary_event())
     config = OpportunityConfig(probability_estimates={context.market_id: {"yes": 0.60}})
-    results = scan_opportunities([context], config, _FakeQuotes(ask=0.40, bid=0.38), _allocator(tmp_path))
+    results = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(ask=0.40, bid=0.38),
+        _allocator(tmp_path),
+        probability_lookup=config_probability_lookup(config),
+    )
     opp = results[0]
     # mid = 0.39; blend = 0.35*0.60 + 0.65*0.39 = 0.4635
     assert opp.detail["market_mid"] == pytest.approx(0.39)
@@ -42,7 +48,13 @@ def test_disagreement_widens_the_edge_bar(tmp_path) -> None:
         model_weight=1.0,
         disagreement_buffer_scale=0.5,
     )
-    results = scan_opportunities([context], config, _FakeQuotes(ask=0.40, bid=0.38), _allocator(tmp_path))
+    results = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(ask=0.40, bid=0.38),
+        _allocator(tmp_path),
+        probability_lookup=config_probability_lookup(config),
+    )
     risk_extra = round(context.rule_analysis.resolution_risk * 0.05, 4)
     # base edge 0.14 minus per-market risk minus |0.60-0.39|*0.5 = 0.105
     expected = round(0.14 - risk_extra - 0.105, 4)
@@ -65,7 +77,13 @@ def test_config_estimate_deadline_decay(tmp_path) -> None:
         model_weight=1.0,
         disagreement_buffer_scale=0.0,
     )
-    results = scan_opportunities([context], config, _FakeQuotes(), _allocator(tmp_path))
+    results = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(),
+        _allocator(tmp_path),
+        probability_lookup=config_probability_lookup(config),
+    )
     opp = next(r for r in results if r.side == "YES")
     assert opp.probability_source == "config_estimate_decayed"
     assert opp.estimated_probability == pytest.approx(0.30, rel=1e-2)
@@ -81,7 +99,13 @@ def test_config_estimate_without_decay_flag_is_untouched(tmp_path) -> None:
         model_weight=1.0,
         disagreement_buffer_scale=0.0,
     )
-    results = scan_opportunities([context], config, _FakeQuotes(), _allocator(tmp_path))
+    results = scan_opportunities(
+        [context],
+        config,
+        _FakeQuotes(),
+        _allocator(tmp_path),
+        probability_lookup=config_probability_lookup(config),
+    )
     assert results[0].probability_source == "config_estimate"
     assert results[0].estimated_probability == pytest.approx(0.60)
 
@@ -318,6 +342,7 @@ classifier:
 scoring:
   allow_fixture_analysis_live: true
 opportunity:
+  forecast_data_root: {tmp_path / 'forecast'}
   probability_estimates:
     "{binary_id}":
       "yes": 0.60

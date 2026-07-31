@@ -20,6 +20,15 @@ MARKET_STATES = {
 }
 
 TRADEABLE_STATES = {"PAPER_ELIGIBLE", "LIVE_CONFIRMATION_ELIGIBLE"}
+OUTCOME_TOPOLOGIES = {
+    "SINGLE_BINARY",
+    "EXCLUSIVE_ONE_OF_N",
+    "INDEPENDENT_MULTI",
+    "MONOTONE_DEADLINE_LADDER",
+    "MONOTONE_THRESHOLD_LADDER",
+    "TOP_K",
+    "UNCLASSIFIED",
+}
 SOURCE_PLAN_SCHEMA_VERSION = 2
 SOURCE_PLAN_CURRENT = "CURRENT"
 SOURCE_PLAN_LEGACY = "LEGACY_PRE_RULESPEC"
@@ -45,6 +54,17 @@ class OutcomeRecord:
     condition_id: str
     yes_token_id: str
     no_token_id: str
+    # Immutable semantic inputs from the individual Gamma market. Grouped
+    # events cannot safely reuse the parent event deadline/rules for every
+    # leg.
+    deadline_iso: str = ""
+    rule_text: str = ""
+    rule_text_sha256: str = ""
+    resolution_source: str = ""
+    # MATCH/MISMATCH compares an explicit date in the leg label/question with
+    # Gamma's leg endDate. UNKNOWN means there was no deterministic date to
+    # compare; it is not an assertion that the metadata is correct.
+    deadline_consistency: str = "UNKNOWN"
     tick_size: str = "0.01"
     neg_risk: bool = False
     last_yes_price: float | None = None
@@ -124,6 +144,7 @@ class MarketContext:
     rule_text: str
     rule_text_sha256: str
     rule_version: int  # bumped every time the rule hash changes
+    outcome_topology: str = "UNCLASSIFIED"
     resolution_source: str = ""
     neg_risk: bool = False
     category: str = ""

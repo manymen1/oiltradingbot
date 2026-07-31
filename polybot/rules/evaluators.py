@@ -12,7 +12,13 @@ from .contracts import (
     RuleSpec,
 )
 
-EVALUATOR_VERSION = "rules-evaluator-v1"
+EVALUATOR_VERSION = "rules-evaluator-v2"
+SUPPORTED_OUTCOME_TOPOLOGIES = {
+    "SINGLE_BINARY",
+    "EXCLUSIVE_ONE_OF_N",
+    "INDEPENDENT_MULTI",
+    "MONOTONE_DEADLINE_LADDER",
+}
 SUPPORTED_EVALUATOR_FAMILIES = {
     "OCCURRENCE_BEFORE_DEADLINE",
     "CATEGORICAL_EXCLUSIVE",
@@ -36,6 +42,26 @@ def evaluate_rule(
     """
 
     family = spec.semantics.rule_family
+    if spec.outcome_topology not in SUPPORTED_OUTCOME_TOPOLOGIES:
+        return [
+            _evaluation(
+                spec,
+                outcome_name=outcome.name,
+                state="AMBIGUOUS",
+                terminal=False,
+                claims=[],
+                required=(
+                    spec.semantics.resolution_policy
+                    .independent_confirmation_sources
+                ),
+                blockers=[
+                    "unsupported_outcome_topology:"
+                    f"{spec.outcome_topology}"
+                ],
+                as_of=as_of,
+            )
+            for outcome in spec.outcomes
+        ]
     if family not in SUPPORTED_EVALUATOR_FAMILIES:
         return [
             _evaluation(
@@ -60,7 +86,18 @@ def evaluate_rule(
         ),
     )
     evaluator = FAMILY_EVALUATORS[family]
-    return evaluator(spec, ordered, as_of=as_of)
+    evaluations = evaluator(spec, ordered, as_of=as_of)
+    if (
+        spec.outcome_topology == "EXCLUSIVE_ONE_OF_N"
+        and family != "CATEGORICAL_EXCLUSIVE"
+    ):
+        return _enforce_exclusive_topology(
+            spec,
+            evaluations,
+            ordered,
+            as_of=as_of,
+        )
+    return evaluations
 
 
 def _occurrence(
@@ -69,16 +106,15 @@ def _occurrence(
     *,
     as_of: datetime | None,
 ) -> list[RuleEvaluation]:
-    outcome = spec.outcomes[0].name
-    relevant = _for_outcome(claims, outcome)
     return [
         _event_evaluation(
             spec,
-            outcome,
-            relevant,
+            outcome.name,
+            _claims_for_outcome(spec, claims, outcome.name),
             as_of=as_of,
             require_settlement=False,
         )
+        for outcome in spec.outcomes
     ]
 
 
@@ -88,16 +124,15 @@ def _source_locked(
     *,
     as_of: datetime | None,
 ) -> list[RuleEvaluation]:
-    outcome = spec.outcomes[0].name
-    relevant = _for_outcome(claims, outcome)
     return [
         _event_evaluation(
             spec,
-            outcome,
-            relevant,
+            outcome.name,
+            _claims_for_outcome(spec, claims, outcome.name),
             as_of=as_of,
             require_settlement=True,
         )
+        for outcome in spec.outcomes
     ]
 
 
@@ -110,7 +145,7 @@ def _categorical(
     terminal_by_outcome: dict[str, list[EvidenceClaim]] = {}
     for outcome in spec.outcomes:
         terminal_by_outcome[outcome.name] = _authorized_terminal_claims(
-            _for_outcome(claims, outcome.name),
+            _claims_for_outcome(spec, claims, outcome.name),
             require_settlement=False,
         )
     confirmed = [
@@ -165,7 +200,7 @@ def _categorical(
         _event_evaluation(
             spec,
             outcome.name,
-            _for_outcome(claims, outcome.name),
+            _claims_for_outcome(spec, claims, outcome.name),
             as_of=as_of,
             require_settlement=False,
         )
@@ -179,38 +214,50 @@ def _status(
     *,
     as_of: datetime | None,
 ) -> list[RuleEvaluation]:
-    outcome = spec.outcomes[0].name
-    relevant = _for_outcome(claims, outcome)
-    now = _aware(as_of or datetime.now(timezone.utc))
-    deadline = _stamp(spec.semantics.window.end_iso)
+    return [
+        _status_outcome(
+            spec,
+            outcome.name,
+            claims,
+            as_of=as_of,
+        )
+        for outcome in spec.outcomes
+    ]
+
+
+def _status_outcome(
+    spec: RuleSpec,
+    outcome: str,
+    claims: list[EvidenceClaim],
+    *,
+    as_of: datetime | None,
+) -> RuleEvaluation:
+    deadline = _outcome_deadline(spec, outcome)
+    relevant = [
+        claim
+        for claim in _claims_for_outcome(spec, claims, outcome)
+        if _claim_matches_outcome_window(claim, deadline)
+    ]
     observations = [
         claim
         for claim in relevant
         if claim.assertion == "STATUS_OBSERVED"
     ]
     if any(claim.assertion == "CONFLICTING" for claim in relevant):
-        return [
-            _evaluation(
-                spec,
-                outcome_name=outcome,
-                state="AMBIGUOUS",
-                terminal=False,
-                claims=relevant,
-                required=1,
-                blockers=["conflicting_status_evidence"],
-                as_of=as_of,
-            )
-        ]
+        return _evaluation(
+            spec,
+            outcome_name=outcome,
+            state="AMBIGUOUS",
+            terminal=False,
+            claims=relevant,
+            required=1,
+            blockers=["conflicting_status_evidence"],
+            as_of=as_of,
+        )
     if not observations:
-        return [
-            _fallback_evaluation(spec, outcome, relevant, as_of=as_of)
-        ]
+        return _fallback_evaluation(spec, outcome, relevant, as_of=as_of)
     latest = observations[-1]
-    at_measurement = (
-        latest.temporal_relation == "AT_DEADLINE"
-        or deadline is not None
-        and now >= deadline
-    )
+    at_measurement = latest.temporal_relation == "AT_DEADLINE"
     state = (
         "TERMINAL_YES"
         if at_measurement and latest.predicate_matches
@@ -225,18 +272,16 @@ def _status(
     terminal = state.startswith("TERMINAL_") and not blockers
     if blockers:
         state = "AMBIGUOUS"
-    return [
-        _evaluation(
-            spec,
-            outcome_name=outcome,
-            state=state,
-            terminal=terminal,
-            claims=[latest],
-            required=1,
-            blockers=blockers,
-            as_of=as_of,
-        )
-    ]
+    return _evaluation(
+        spec,
+        outcome_name=outcome,
+        state=state,
+        terminal=terminal,
+        claims=[latest],
+        required=1,
+        blockers=blockers,
+        as_of=as_of,
+    )
 
 
 def _numeric(
@@ -245,8 +290,30 @@ def _numeric(
     *,
     as_of: datetime | None,
 ) -> list[RuleEvaluation]:
-    outcome = spec.outcomes[0].name
-    relevant = _for_outcome(claims, outcome)
+    return [
+        _numeric_outcome(
+            spec,
+            outcome.name,
+            claims,
+            as_of=as_of,
+        )
+        for outcome in spec.outcomes
+    ]
+
+
+def _numeric_outcome(
+    spec: RuleSpec,
+    outcome: str,
+    claims: list[EvidenceClaim],
+    *,
+    as_of: datetime | None,
+) -> RuleEvaluation:
+    deadline = _outcome_deadline(spec, outcome)
+    relevant = [
+        claim
+        for claim in _claims_for_outcome(spec, claims, outcome)
+        if _claim_matches_outcome_window(claim, deadline)
+    ]
     measurements = [
         claim
         for claim in relevant
@@ -254,26 +321,22 @@ def _numeric(
         and claim.predicate_matches
     ]
     if not measurements:
-        return [
-            _fallback_evaluation(spec, outcome, relevant, as_of=as_of)
-        ]
+        return _fallback_evaluation(spec, outcome, relevant, as_of=as_of)
     latest = measurements[-1]
     lower = _decimal(latest.observed_value)
     upper = _decimal(latest.observed_value_upper) if latest.observed_value_upper else lower
     threshold = _decimal(spec.semantics.predicate.value)
     if lower is None or upper is None or threshold is None:
-        return [
-            _evaluation(
-                spec,
-                outcome_name=outcome,
-                state="AMBIGUOUS",
-                terminal=False,
-                claims=[latest],
-                required=1,
-                blockers=["numeric_value_invalid"],
-                as_of=as_of,
-            )
-        ]
+        return _evaluation(
+            spec,
+            outcome_name=outcome,
+            state="AMBIGUOUS",
+            terminal=False,
+            claims=[latest],
+            required=1,
+            blockers=["numeric_value_invalid"],
+            as_of=as_of,
+        )
     comparator = spec.semantics.predicate.comparator
     low_result = _compare(lower, threshold, comparator)
     high_result = _compare(upper, threshold, comparator)
@@ -282,9 +345,7 @@ def _numeric(
         terminal = False
         blockers = ["numeric_range_straddles_threshold"]
     else:
-        now = _aware(as_of or datetime.now(timezone.utc))
-        deadline = _stamp(spec.semantics.window.end_iso)
-        after_deadline = deadline is not None and now >= deadline
+        after_deadline = latest.temporal_relation == "AT_DEADLINE"
         monotonic_yes = comparator in {
             "GREATER_THAN",
             "GREATER_THAN_OR_EQUAL",
@@ -307,18 +368,16 @@ def _numeric(
             )
             state = "AMBIGUOUS"
             terminal = False
-    return [
-        _evaluation(
-            spec,
-            outcome_name=outcome,
-            state=state,
-            terminal=terminal,
-            claims=[latest],
-            required=1,
-            blockers=blockers,
-            as_of=as_of,
-        )
-    ]
+    return _evaluation(
+        spec,
+        outcome_name=outcome,
+        state=state,
+        terminal=terminal,
+        claims=[latest],
+        required=1,
+        blockers=blockers,
+        as_of=as_of,
+    )
 
 
 def _duration(
@@ -327,8 +386,30 @@ def _duration(
     *,
     as_of: datetime | None,
 ) -> list[RuleEvaluation]:
-    outcome = spec.outcomes[0].name
-    relevant = _for_outcome(claims, outcome)
+    return [
+        _duration_outcome(
+            spec,
+            outcome.name,
+            claims,
+            as_of=as_of,
+        )
+        for outcome in spec.outcomes
+    ]
+
+
+def _duration_outcome(
+    spec: RuleSpec,
+    outcome: str,
+    claims: list[EvidenceClaim],
+    *,
+    as_of: datetime | None,
+) -> RuleEvaluation:
+    deadline = _outcome_deadline(spec, outcome)
+    relevant = [
+        claim
+        for claim in _claims_for_outcome(spec, claims, outcome)
+        if _claim_matches_outcome_window(claim, deadline)
+    ]
     breaches = [
         claim
         for claim in relevant
@@ -347,22 +428,18 @@ def _duration(
         latest_measurement is None
         or _claim_time(latest_breach) >= _claim_time(latest_measurement)
     ):
-        return [
-            _evaluation(
-                spec,
-                outcome_name=outcome,
-                state="STRONG_NO",
-                terminal=False,
-                claims=[latest_breach],
-                required=1,
-                blockers=["duration_clock_reset"],
-                as_of=as_of,
-            )
-        ]
+        return _evaluation(
+            spec,
+            outcome_name=outcome,
+            state="STRONG_NO",
+            terminal=False,
+            claims=[latest_breach],
+            required=1,
+            blockers=["duration_clock_reset"],
+            as_of=as_of,
+        )
     if latest_measurement is None:
-        return [
-            _fallback_evaluation(spec, outcome, relevant, as_of=as_of)
-        ]
+        return _fallback_evaluation(spec, outcome, relevant, as_of=as_of)
     observed = _duration_hours(
         latest_measurement.observed_value,
         latest_measurement.observed_unit,
@@ -372,41 +449,118 @@ def _duration(
         spec.semantics.predicate.unit,
     )
     if observed is None or required is None:
-        return [
-            _evaluation(
-                spec,
-                outcome_name=outcome,
-                state="AMBIGUOUS",
-                terminal=False,
-                claims=[latest_measurement],
-                required=1,
-                blockers=["duration_value_invalid"],
-                as_of=as_of,
-            )
-        ]
+        return _evaluation(
+            spec,
+            outcome_name=outcome,
+            state="AMBIGUOUS",
+            terminal=False,
+            claims=[latest_measurement],
+            required=1,
+            blockers=["duration_value_invalid"],
+            as_of=as_of,
+        )
     terminal = observed >= required
     blockers = (
         [] if _authorized_for_terminal([latest_measurement])
         else ["duration_source_or_timestamp_not_authorized"]
     )
+    return _evaluation(
+        spec,
+        outcome_name=outcome,
+        state=(
+            "TERMINAL_YES"
+            if terminal and not blockers
+            else "PATHWAY_YES"
+            if not blockers
+            else "AMBIGUOUS"
+        ),
+        terminal=terminal and not blockers,
+        claims=[latest_measurement],
+        required=1,
+        blockers=blockers,
+        as_of=as_of,
+    )
+
+
+def _enforce_exclusive_topology(
+    spec: RuleSpec,
+    evaluations: list[RuleEvaluation],
+    claims: list[EvidenceClaim],
+    *,
+    as_of: datetime | None,
+) -> list[RuleEvaluation]:
+    terminal_yes = [
+        evaluation
+        for evaluation in evaluations
+        if evaluation.terminal
+        and evaluation.evidence_state == "TERMINAL_YES"
+    ]
+    required = (
+        spec.semantics.resolution_policy.independent_confirmation_sources
+    )
+    if len(terminal_yes) > 1:
+        conflict_claims = [
+            claim
+            for evaluation in terminal_yes
+            for claim in _claims_for_outcome(
+                spec,
+                claims,
+                evaluation.outcome_name,
+            )
+        ]
+        return [
+            _evaluation(
+                spec,
+                outcome_name=outcome.name,
+                state="AMBIGUOUS",
+                terminal=False,
+                claims=conflict_claims,
+                required=required,
+                blockers=["multiple_exclusive_outcomes_satisfied"],
+                as_of=as_of,
+            )
+            for outcome in spec.outcomes
+        ]
+    if len(terminal_yes) != 1:
+        return evaluations
+    winner = terminal_yes[0]
+    decisive = _claims_for_outcome(spec, claims, winner.outcome_name)
     return [
-        _evaluation(
+        winner
+        if evaluation.outcome_name == winner.outcome_name
+        else _evaluation(
             spec,
-            outcome_name=outcome,
-            state=(
-                "TERMINAL_YES"
-                if terminal and not blockers
-                else "PATHWAY_YES"
-                if not blockers
-                else "AMBIGUOUS"
-            ),
-            terminal=terminal and not blockers,
-            claims=[latest_measurement],
-            required=1,
-            blockers=blockers,
+            outcome_name=evaluation.outcome_name,
+            state="TERMINAL_NO",
+            terminal=True,
+            claims=decisive,
+            required=required,
+            blockers=[],
             as_of=as_of,
         )
+        for evaluation in evaluations
     ]
+
+
+def _outcome_deadline(
+    spec: RuleSpec,
+    outcome_name: str,
+) -> datetime | None:
+    binding = next(
+        (
+            outcome
+            for outcome in spec.outcomes
+            if outcome.name == outcome_name
+        ),
+        None,
+    )
+    return _stamp(
+        (
+            binding.deadline_iso
+            if binding is not None and binding.deadline_iso
+            else spec.semantics.window.end_iso
+        )
+    )
 
 
 def _event_evaluation(
@@ -418,6 +572,12 @@ def _event_evaluation(
     require_settlement: bool,
 ) -> RuleEvaluation:
     required = spec.semantics.resolution_policy.independent_confirmation_sources
+    deadline = _outcome_deadline(spec, outcome)
+    in_window_claims = [
+        claim
+        for claim in claims
+        if _claim_matches_outcome_window(claim, deadline)
+    ]
     if any(claim.assertion == "CONFLICTING" for claim in claims):
         return _evaluation(
             spec,
@@ -430,7 +590,7 @@ def _event_evaluation(
             as_of=as_of,
         )
     terminal_claims = _authorized_terminal_claims(
-        claims,
+        in_window_claims,
         require_settlement=require_settlement,
     )
     terminal_groups = _independent_count(terminal_claims)
@@ -447,7 +607,7 @@ def _event_evaluation(
         )
     raw_terminal = [
         claim
-        for claim in claims
+        for claim in in_window_claims
         if claim.assertion == "PREDICATE_SATISFIED"
         and claim.predicate_matches
         and claim.temporal_relation not in {"BEFORE_WINDOW", "AFTER_WINDOW"}
@@ -556,9 +716,8 @@ def _event_evaluation(
         )
 
     now = _aware(as_of or datetime.now(timezone.utc))
-    deadline = _stamp(spec.semantics.window.end_iso)
     if (
-        spec.kind == "binary"
+        spec.outcome_topology != "EXCLUSIVE_ONE_OF_N"
         and deadline is not None
         and now >= deadline
         and not terminal_claims
@@ -678,15 +837,34 @@ def _evaluation(
     return validated
 
 
-def _for_outcome(
+def _claims_for_outcome(
+    spec: RuleSpec,
     claims: list[EvidenceClaim],
     outcome: str,
 ) -> list[EvidenceClaim]:
     return [
         claim
         for claim in claims
-        if not claim.target_outcome or claim.target_outcome == outcome
+        if (
+            claim.target_outcome == outcome
+            or (
+                len(spec.outcomes) == 1
+                and not claim.target_outcome
+            )
+        )
     ]
+
+
+def _claim_matches_outcome_window(
+    claim: EvidenceClaim,
+    deadline: datetime | None,
+) -> bool:
+    if claim.temporal_relation in {"BEFORE_WINDOW", "AFTER_WINDOW"}:
+        return False
+    if deadline is None or not claim.event_at:
+        return True
+    event_at = _stamp(claim.event_at)
+    return event_at is not None and event_at <= deadline
 
 
 def _authorized_terminal_claims(
@@ -817,5 +995,6 @@ __all__ = [
     "EVALUATOR_VERSION",
     "FAMILY_EVALUATORS",
     "SUPPORTED_EVALUATOR_FAMILIES",
+    "SUPPORTED_OUTCOME_TOPOLOGIES",
     "evaluate_rule",
 ]

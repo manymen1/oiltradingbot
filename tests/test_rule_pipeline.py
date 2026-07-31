@@ -23,6 +23,7 @@ from polybot.rules.compiler import (
     CompilationResult,
     RuleCompiler,
     fixture_semantics,
+    rule_compilation_blocker,
 )
 from polybot.rules.contracts import RuleSpec
 from polybot.rules.store import RuleStore
@@ -110,6 +111,96 @@ def test_explicit_priority_gets_first_attempt_without_starving_unattempted(
         and item["status"] == "COMPILED"
         for item in second["results"]
     )
+
+
+def test_unsupported_multi_outcome_topology_skips_model_calls(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    context = replace(
+        context_for_case(_golden_rules()[0], strong_analysis=True),
+        outcome_topology="TOP_K",
+    )
+    config_path = _config(tmp_path)
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    store.save_context(context)
+
+    assert (
+        rule_compilation_blocker(context)
+        == "unsupported_rule_topology:TOP_K"
+    )
+    assert compile_rules_command(config_path) == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["compiled"] == 0
+    assert summary["failed"] == 1
+    assert summary["results"][0]["status"] == "UNSUPPORTED"
+    assert (
+        RuleStore(rule_store_db_path(config)).compilation_passes(
+            context.market_id,
+            context.rule_text_sha256,
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        (
+            lambda outcomes: [
+                replace(outcomes[0], deadline_iso=""),
+                outcomes[1],
+            ],
+            "outcome_deadline_missing:yes",
+        ),
+        (
+            lambda outcomes: [
+                replace(outcomes[0], rule_text_sha256="f" * 64),
+                outcomes[1],
+            ],
+            "outcome_rule_text_mismatch",
+        ),
+        (
+            lambda outcomes: [
+                replace(
+                    outcomes[0],
+                    deadline_consistency="MISMATCH",
+                ),
+                outcomes[1],
+            ],
+            "outcome_deadline_mismatch:yes",
+        ),
+        (
+            lambda outcomes: [
+                replace(
+                    outcomes[0],
+                    resolution_source="https://one.example/result",
+                ),
+                replace(
+                    outcomes[1],
+                    resolution_source="https://two.example/result",
+                ),
+            ],
+            "outcome_resolution_source_mismatch",
+        ),
+    ],
+)
+def test_multi_outcome_compilation_preflight_fails_closed(
+    mutation,
+    expected: str,
+) -> None:
+    case = next(
+        item
+        for item in _golden_rules()
+        if item["kind"] == "grouped"
+    )
+    context = replace(
+        context_for_case(case, strong_analysis=True),
+        outcome_topology="INDEPENDENT_MULTI",
+    )
+    context = replace(context, outcomes=mutation(context.outcomes))
+    assert rule_compilation_blocker(context) == expected
 
 
 def test_compile_cycle_caps_only_new_specs_and_cached_specs_are_free(
