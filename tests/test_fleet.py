@@ -607,6 +607,11 @@ def test_fleet_status_reports_positions_ledger_and_scan(tmp_path, monkeypatch, c
     )
     assert "semantic_coverage" in status
     assert status["semantic_coverage"]["contexts"] == 1
+    assert status["rule_engine"]["deadline_authority"] == {
+        "policy": "STRICT_GAMMA_MATCH_V1",
+        "market_ids": [],
+        "paper_only": True,
+    }
     assert row["rule_ready"] is False
     assert "current_rule_spec_missing" in row["blockers"]
     # Fresh ledger: full drawdown headroom available.

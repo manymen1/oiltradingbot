@@ -419,6 +419,10 @@ class RuleCompilerConfig:
     priority_market_ids: list[str] = field(default_factory=list)
     # Empty resolves to <data_dir>/rules.sqlite3.
     db_path: str = ""
+    # Strict by default. The paper-only override is independently allowlisted
+    # so scheduling priority can never imply semantic authority.
+    deadline_authority_policy: str = "STRICT_GAMMA_MATCH_V1"
+    deadline_authority_market_ids: list[str] = field(default_factory=list)
     paper_families: list[str] = field(default_factory=_default_rule_families)
     # A family reaches live only after replay/calibration promotion.
     live_confirmation_families: list[str] = field(default_factory=list)
@@ -994,6 +998,55 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
         "rule_compiler.db_path",
         allow_empty=True,
     )
+    from polybot.rules.contracts import (
+        DEADLINE_AUTHORITY_POLICIES,
+        STRICT_DEADLINE_AUTHORITY,
+        VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY,
+    )
+
+    require_text(
+        config.rule_compiler.deadline_authority_policy,
+        "rule_compiler.deadline_authority_policy",
+    )
+    deadline_policy = (
+        config.rule_compiler.deadline_authority_policy.strip().upper()
+    )
+    if deadline_policy not in DEADLINE_AUTHORITY_POLICIES:
+        raise ValueError(
+            "rule_compiler.deadline_authority_policy must be one of: "
+            + ", ".join(sorted(DEADLINE_AUTHORITY_POLICIES))
+        )
+    require_string_list(
+        config.rule_compiler.deadline_authority_market_ids,
+        "rule_compiler.deadline_authority_market_ids",
+    )
+    deadline_market_ids = [
+        item.strip()
+        for item in config.rule_compiler.deadline_authority_market_ids
+    ]
+    if len(deadline_market_ids) != len(set(deadline_market_ids)):
+        raise ValueError(
+            "rule_compiler.deadline_authority_market_ids must not contain duplicates"
+        )
+    if deadline_policy == STRICT_DEADLINE_AUTHORITY and deadline_market_ids:
+        raise ValueError(
+            "strict deadline authority cannot define market overrides"
+        )
+    if (
+        deadline_policy == VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+        and not deadline_market_ids
+    ):
+        raise ValueError(
+            "paper rule-deadline authority requires an explicit market allowlist"
+        )
+    unpinned_deadline_markets = sorted(
+        set(deadline_market_ids) - set(priority_market_ids)
+    )
+    if unpinned_deadline_markets:
+        raise ValueError(
+            "deadline authority markets must also be explicit priority markets: "
+            + ", ".join(unpinned_deadline_markets)
+        )
     for field_name in ("paper_families", "live_confirmation_families"):
         values = getattr(config.rule_compiler, field_name)
         require_string_list(values, f"rule_compiler.{field_name}")

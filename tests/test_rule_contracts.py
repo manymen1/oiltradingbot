@@ -173,7 +173,7 @@ def test_rule_spec_is_strict_and_stably_hashed() -> None:
         compiler_model="anthropic:model-b",
         compiled_at="2026-07-25T00:01:00+00:00",
     )
-    assert first.schema_version == 3
+    assert first.schema_version == 4
     assert first.outcome_topology == "SINGLE_BINARY"
     assert first.outcomes[0].deadline_iso == context.deadline_iso
     assert (
@@ -187,8 +187,8 @@ def test_rule_spec_is_strict_and_stably_hashed() -> None:
         RuleSpec.from_dict(raw)
 
     raw = first.as_dict()
-    raw["schema_version"] = 2
-    with pytest.raises(ValueError, match="unsupported RuleSpec schema_version 2"):
+    raw["schema_version"] = 3
+    with pytest.raises(ValueError, match="unsupported RuleSpec schema_version 3"):
         RuleSpec.from_dict(raw)
 
 

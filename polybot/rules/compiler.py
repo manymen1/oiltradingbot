@@ -15,6 +15,7 @@ from polybot.discovery.types import MarketContext
 from polybot.log import log_event
 
 from .contracts import (
+    DEADLINE_AUTHORITY_POLICIES,
     RULE_FAMILIES,
     RULE_COMPARATORS,
     SOURCE_ROLES,
@@ -27,6 +28,8 @@ from .contracts import (
     RuleWindow,
     SourcePolicy,
     SourceRequirement,
+    STRICT_DEADLINE_AUTHORITY,
+    VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY,
     build_rule_clause_catalog,
     source_requirement_id,
 )
@@ -282,6 +285,8 @@ class RuleCompiler:
         budget_limits: ClassifierConfig | None = None,
         anthropic_client: Any = None,
         cli_runner: Callable[[str], str] | None = None,
+        deadline_authority_policy: str = STRICT_DEADLINE_AUTHORITY,
+        deadline_authority_market_ids: set[str] | None = None,
     ):
         self.classifier = classifier
         self.store = store
@@ -289,6 +294,13 @@ class RuleCompiler:
         self.budget_limits = budget_limits or classifier
         self._anthropic_client = anthropic_client
         self._cli_runner = cli_runner
+        configured_policy = deadline_authority_policy.strip().upper()
+        if configured_policy not in DEADLINE_AUTHORITY_POLICIES:
+            raise ValueError("unsupported deadline authority policy")
+        self.deadline_authority_policy = configured_policy
+        self.deadline_authority_market_ids = set(
+            deadline_authority_market_ids or set()
+        )
 
     def compile(
         self,
@@ -297,7 +309,15 @@ class RuleCompiler:
         budget_purpose: str = "system",
         priority_score_sha256: str = "",
     ) -> CompilationResult:
-        blocker = rule_compilation_blocker(context)
+        deadline_policy = effective_deadline_authority_policy(
+            context,
+            self.deadline_authority_policy,
+            self.deadline_authority_market_ids,
+        )
+        blocker = rule_compilation_blocker(
+            context,
+            deadline_authority_policy=deadline_policy,
+        )
         if blocker:
             return CompilationResult(
                 market_id=context.market_id,
@@ -309,6 +329,12 @@ class RuleCompiler:
             context.rule_text_sha256,
         )
         if cached is not None:
+            if cached.deadline_authority_policy != deadline_policy:
+                return CompilationResult(
+                    market_id=context.market_id,
+                    status="INVALID",
+                    reason="deadline_authority_policy_changed_for_rule_version",
+                )
             cached.validate_context_binding(context)
             return CompilationResult(
                 market_id=context.market_id,
@@ -407,6 +433,7 @@ class RuleCompiler:
             semantics,
             compiler_model=model,
             compiled_at=datetime.now(timezone.utc).isoformat(),
+            deadline_authority_policy=deadline_policy,
         )
         saved = self.store.save_spec(spec)
         return CompilationResult(
@@ -430,7 +457,15 @@ class RuleCompiler:
                 semantics = fixture_semantics(context)
                 raw_output = json.dumps(semantics.as_dict())
             else:
-                prompt = compilation_prompt(context, pass_index=pass_index)
+                prompt = compilation_prompt(
+                    context,
+                    pass_index=pass_index,
+                    deadline_authority_policy=effective_deadline_authority_policy(
+                        context,
+                        self.deadline_authority_policy,
+                        self.deadline_authority_market_ids,
+                    ),
+                )
                 raw_output = self._invoke(prompt)
                 payload, repairs = _repair_semantic_payload(
                     _json_object(raw_output)
@@ -793,7 +828,12 @@ def _fixture_clause_ids(
     ]
 
 
-def compilation_prompt(context: MarketContext, *, pass_index: int) -> str:
+def compilation_prompt(
+    context: MarketContext,
+    *,
+    pass_index: int,
+    deadline_authority_policy: str = STRICT_DEADLINE_AUTHORITY,
+) -> str:
     labels = ", ".join(item.label for item in context.outcomes[:30])
     leg_contracts = "\n".join(
         (
@@ -840,6 +880,10 @@ def compilation_prompt(context: MarketContext, *, pass_index: int) -> str:
         f"{bound_leg_rules or 'none supplied; use parent rules below'}\n"
         f"Deterministic verbatim clause catalog:\n{clause_catalog}\n"
         f"Deadline supplied by market metadata: {context.deadline_iso}\n"
+        f"Deadline authority policy: {deadline_authority_policy}. "
+        "When this is VERBATIM_RULES_PAPER_ONLY_V1, interpret the exact rule "
+        "clock as the semantic resolution cutoff; Gamma remains operational "
+        "metadata and disagreement remains paper-only.\n"
         f"Named resolution source: {context.resolution_source or 'none'}\n"
         "Choose exactly one closed rule_family. Encode who must do what, the "
         "comparator, exact time window/timezone, qualifying conditions, "
@@ -879,7 +923,25 @@ def compilation_prompt(context: MarketContext, *, pass_index: int) -> str:
     )
 
 
-def rule_compilation_blocker(context: MarketContext) -> str:
+def effective_deadline_authority_policy(
+    context: MarketContext,
+    configured_policy: str,
+    market_ids: set[str],
+) -> str:
+    policy = configured_policy.strip().upper()
+    if (
+        policy == VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+        and context.market_id in market_ids
+    ):
+        return policy
+    return STRICT_DEADLINE_AUTHORITY
+
+
+def rule_compilation_blocker(
+    context: MarketContext,
+    *,
+    deadline_authority_policy: str = STRICT_DEADLINE_AUTHORITY,
+) -> str:
     """Return a deterministic fail-closed blocker before model calls."""
 
     topology = context.outcome_topology.strip().upper()
@@ -933,7 +995,29 @@ def rule_compilation_blocker(context: MarketContext) -> str:
         )
     ]
     if mismatches:
-        return "outcome_deadline_mismatch:" + ",".join(sorted(mismatches))
+        if (
+            deadline_authority_policy
+            == VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+        ):
+            missing_rule_deadlines = [
+                outcome.name
+                for outcome in active_outcomes
+                if (
+                    outcome.deadline_consistency == "MISMATCH"
+                    and (
+                        not outcome.rule_deadline_iso.strip()
+                        or not outcome.deadline_timezone.strip()
+                    )
+                )
+            ]
+            if missing_rule_deadlines:
+                return "outcome_rule_deadline_missing:" + ",".join(
+                    sorted(missing_rule_deadlines)
+                )
+        else:
+            return "outcome_deadline_mismatch:" + ",".join(
+                sorted(mismatches)
+            )
     resolution_sources = {
         " ".join(outcome.resolution_source.casefold().split())
         for outcome in active_outcomes
@@ -1208,6 +1292,7 @@ __all__ = [
     "CompilationResult",
     "RuleCompiler",
     "compilation_prompt",
+    "effective_deadline_authority_policy",
     "fixture_semantics",
     "rule_compilation_blocker",
     "_critical_consensus_payload",

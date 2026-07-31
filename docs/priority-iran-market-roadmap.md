@@ -59,6 +59,21 @@ The follow-on RuleSpec-v3 clause/source tranche is also implemented:
 - Existing RuleSpec/source-plan versions fail closed and must be recompiled;
   raw book capture remains independent and uninterrupted.
 
+The RuleSpec-v4 paper deadline-authority tranche is implemented:
+
+- Strict Gamma/rule agreement remains the global default. A separate reviewed
+  allowlist grants only these thirteen priority markets the versioned
+  `VERBATIM_RULES_PAPER_ONLY_V1` policy.
+- Every outcome binding retains the Gamma operational deadline, exact parsed
+  rule deadline, semantic evaluation deadline, timezone, consistency result,
+  and chosen authority. No mismatch is hidden or overwritten.
+- A mismatched outcome compiles only when its rule clock and timezone are both
+  exact. Bab el-Mandeb remains blocked because its September leg lacks that
+  exact binding; the other twelve pass this deterministic preflight.
+- Any compiled mismatch is unconditionally paper-only even if its rule family
+  is later promoted. Gamma continues to govern order availability while the
+  verbatim rule clock governs semantic evaluation.
+
 The initial date-only 2026-07-31 Gamma preflight appeared to support eleven of
 the thirteen events at this layer. Exact-instant replay corrected that result:
 all thirteen have at least one active Gamma deadline that conflicts with the
@@ -66,9 +81,10 @@ verbatim rule clock. Common examples are Gamma `23:59Z` versus rule
 `23:59 America/New_York`, daily Gamma cutoffs that roll into the following
 IRST/AST calendar date, and Gamma `00:00Z` versus a rule's explicit ET time.
 The final-nuclear-deal and Bab el-Mandeb events additionally retain their
-previously detected wrong-date legs. All thirteen therefore fail before a
-model call until the metadata is corrected or a separately reviewed
-rule-deadline authority policy is implemented.
+previously detected wrong-date legs. Strict mode continues to fail all
+thirteen. The reviewed v4 paper policy now permits twelve to proceed without
+treating Gamma metadata as resolution truth; Bab el-Mandeb still fails before
+a model call because its exact rule-deadline binding is incomplete.
 
 The first real two-pass canary, the US-Iran effective-ceasefire event, failed
 closed with `compiler_passes_disagree`. Both passes selected
@@ -141,7 +157,7 @@ terms remain excluded, while words containing those character sequences do not.
 5. Version the context payload deliberately so old capture data is associated
    only through an explicit compatible migration.
 
-### Phase 2 — RuleSpec v3
+### Phase 2 — RuleSpec v4
 
 1. Separate `predicate_family` from `outcome_topology`.
 2. Add at least:

@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from polybot.core.fees import FEE_POLICY_VERSION, FeeScheduleSnapshot
 
-RULE_SPEC_SCHEMA_VERSION = 3
+RULE_SPEC_SCHEMA_VERSION = 4
 EVIDENCE_CLAIM_SCHEMA_VERSION = 1
 RULE_EVALUATION_SCHEMA_VERSION = 1
 TRADE_INTENT_SCHEMA_VERSION = 1
@@ -91,6 +91,12 @@ TRADE_ACTIONS = {
     "NO_ACTION",
 }
 TRADE_SIDES = {"YES", "NO", "NONE"}
+STRICT_DEADLINE_AUTHORITY = "STRICT_GAMMA_MATCH_V1"
+VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY = "VERBATIM_RULES_PAPER_ONLY_V1"
+DEADLINE_AUTHORITY_POLICIES = {
+    STRICT_DEADLINE_AUTHORITY,
+    VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY,
+}
 
 
 def canonical_json(value: Any) -> str:
@@ -166,7 +172,14 @@ class OutcomeBinding:
     condition_id: str
     yes_token_id: str
     no_token_id: str
+    # The semantic cutoff is explicit; source deadlines remain immutable audit
+    # evidence instead of being silently collapsed into one timestamp.
     deadline_iso: str
+    gamma_deadline_iso: str
+    rule_deadline_iso: str
+    deadline_timezone: str
+    deadline_consistency: str
+    deadline_authority: str
     rule_text_sha256: str
     resolution_source: str
 
@@ -181,18 +194,34 @@ class OutcomeBinding:
                     f"outcome.{name}",
                     allow_empty=True,
                 )
-                if name == "deadline_iso"
+                if name in {
+                    "deadline_iso",
+                    "gamma_deadline_iso",
+                    "rule_deadline_iso",
+                }
                 else _sha256(
                     data.get(name),
                     f"outcome.{name}",
                 )
                 if name == "rule_text_sha256"
+                else _choice(
+                    data.get(name),
+                    {"MATCH", "MISMATCH", "UNKNOWN"},
+                    f"outcome.{name}",
+                )
+                if name == "deadline_consistency"
+                else _choice(
+                    data.get(name),
+                    {"GAMMA", "VERBATIM_RULES"},
+                    f"outcome.{name}",
+                )
+                if name == "deadline_authority"
                 else _text(
                     data.get(name, ""),
                     f"outcome.{name}",
                     allow_empty=True,
                 )
-                if name == "resolution_source"
+                if name in {"resolution_source", "deadline_timezone"}
                 else _text(data.get(name), f"outcome.{name}")
             )
             for name in cls.__dataclass_fields__
@@ -683,6 +712,7 @@ class RuleSpec:
     rule_text_sha256: str
     rule_version: int
     outcome_topology: str
+    deadline_authority_policy: str
     rule_clauses: list[RuleClause]
     outcomes: list[OutcomeBinding]
     semantics: RuleSemantics
@@ -710,8 +740,14 @@ class RuleSpec:
         *,
         compiler_model: str,
         compiled_at: str,
+        deadline_authority_policy: str = STRICT_DEADLINE_AUTHORITY,
     ) -> "RuleSpec":
         semantics = RuleSemantics.from_dict(semantics.as_dict())
+        deadline_policy = _choice(
+            deadline_authority_policy,
+            DEADLINE_AUTHORITY_POLICIES,
+            "deadline_authority_policy",
+        )
         outcomes = [
             OutcomeBinding(
                 name=item.name,
@@ -720,7 +756,28 @@ class RuleSpec:
                 condition_id=item.condition_id,
                 yes_token_id=item.yes_token_id,
                 no_token_id=item.no_token_id,
-                deadline_iso=item.deadline_iso or context.deadline_iso,
+                deadline_iso=(
+                    item.rule_deadline_iso
+                    if (
+                        deadline_policy
+                        == VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+                        and item.rule_deadline_iso
+                    )
+                    else item.deadline_iso or context.deadline_iso
+                ),
+                gamma_deadline_iso=item.deadline_iso or context.deadline_iso,
+                rule_deadline_iso=item.rule_deadline_iso,
+                deadline_timezone=item.deadline_timezone,
+                deadline_consistency=item.deadline_consistency,
+                deadline_authority=(
+                    "VERBATIM_RULES"
+                    if (
+                        deadline_policy
+                        == VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+                        and item.rule_deadline_iso
+                    )
+                    else "GAMMA"
+                ),
                 rule_text_sha256=(
                     item.rule_text_sha256 or context.rule_text_sha256
                 ),
@@ -767,6 +824,7 @@ class RuleSpec:
                 },
                 "outcome_topology",
             ),
+            deadline_authority_policy=deadline_policy,
             rule_clauses=build_rule_clause_catalog(context),
             outcomes=outcomes,
             semantics=semantics,
@@ -774,6 +832,7 @@ class RuleSpec:
             compiled_at=_iso_datetime(compiled_at, "compiled_at"),
         )
         spec._validate_topology()
+        spec._validate_deadline_authority()
         spec._validate_clause_bindings()
         return spec
 
@@ -844,6 +903,11 @@ class RuleSpec:
                 },
                 "outcome_topology",
             ),
+            deadline_authority_policy=_choice(
+                data.get("deadline_authority_policy"),
+                DEADLINE_AUTHORITY_POLICIES,
+                "deadline_authority_policy",
+            ),
             rule_clauses=rule_clauses,
             outcomes=outcomes,
             semantics=RuleSemantics.from_dict(data.get("semantics")),
@@ -851,6 +915,7 @@ class RuleSpec:
             compiled_at=_iso_datetime(data.get("compiled_at"), "compiled_at"),
         )
         spec._validate_topology()
+        spec._validate_deadline_authority()
         spec._validate_clause_bindings()
         return spec
 
@@ -885,6 +950,36 @@ class RuleSpec:
                     + ",".join(missing)
                 )
 
+    def _validate_deadline_authority(self) -> None:
+        for outcome in self.outcomes:
+            if outcome.deadline_authority == "VERBATIM_RULES":
+                if (
+                    self.deadline_authority_policy
+                    != VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+                ):
+                    raise ValueError(
+                        "verbatim rule deadline requires the paper-only policy"
+                    )
+                if not outcome.rule_deadline_iso:
+                    raise ValueError(
+                        "verbatim rule deadline authority requires an exact rule deadline"
+                    )
+                if outcome.deadline_iso != outcome.rule_deadline_iso:
+                    raise ValueError(
+                        "semantic deadline does not match verbatim rule deadline"
+                    )
+            elif outcome.deadline_iso != outcome.gamma_deadline_iso:
+                raise ValueError("Gamma deadline authority has a mismatched cutoff")
+            if (
+                outcome.deadline_consistency == "MISMATCH"
+                and self.deadline_authority_policy
+                == VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+                and outcome.deadline_authority != "VERBATIM_RULES"
+            ):
+                raise ValueError(
+                    "deadline mismatch lacks an exact verbatim rule authority"
+                )
+
     def _validate_clause_bindings(self) -> None:
         available = {item.clause_id for item in self.rule_clauses}
         semantics = self.semantics
@@ -910,6 +1005,7 @@ class RuleSpec:
             self.semantics,
             compiler_model=self.compiler_model,
             compiled_at=self.compiled_at,
+            deadline_authority_policy=self.deadline_authority_policy,
         )
         fields = (
             "market_id",
@@ -919,6 +1015,7 @@ class RuleSpec:
             "rule_text_sha256",
             "rule_version",
             "outcome_topology",
+            "deadline_authority_policy",
             "rule_clauses",
             "outcomes",
         )
@@ -1752,6 +1849,7 @@ def _sha256(value: Any, name: str) -> str:
 
 __all__ = [
     "CLAIM_ASSERTIONS",
+    "DEADLINE_AUTHORITY_POLICIES",
     "DECISION_PROOF_SCHEMA_VERSION",
     "DecisionProof",
     "EVIDENCE_CLAIM_SCHEMA_VERSION",
@@ -1771,12 +1869,14 @@ __all__ = [
     "SOURCE_ROLES",
     "SOURCE_FALLBACK_CONDITIONS",
     "SOURCE_POLICY_TYPES",
+    "STRICT_DEADLINE_AUTHORITY",
     "SourcePolicy",
     "SourceRequirement",
     "TEMPORAL_RELATIONS",
     "TRADE_ACTIONS",
     "TRADE_INTENT_SCHEMA_VERSION",
     "TRADE_SIDES",
+    "VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY",
     "TradeIntent",
     "canonical_json",
     "build_rule_clause_catalog",

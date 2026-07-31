@@ -294,7 +294,11 @@ def compile_rules_command(
             "rule compiler is disabled; set rule_compiler.enabled: true"
         )
     from polybot.core.budget import ClassifierBudgetStore
-    from polybot.rules.compiler import RuleCompiler, rule_compilation_blocker
+    from polybot.rules.compiler import (
+        RuleCompiler,
+        effective_deadline_authority_policy,
+        rule_compilation_blocker,
+    )
     from polybot.rules.store import RuleStore
 
     rule_store = RuleStore(rule_store_db_path(config))
@@ -333,6 +337,12 @@ def compile_rules_command(
             rule_store,
             budget_store=budget_store,
             budget_limits=limits,
+            deadline_authority_policy=(
+                config.rule_compiler.deadline_authority_policy
+            ),
+            deadline_authority_market_ids=set(
+                config.rule_compiler.deadline_authority_market_ids
+            ),
         )
 
     contexts = store.all_contexts()
@@ -407,7 +417,14 @@ def compile_rules_command(
                 }
             )
             continue
-        semantic_blocker = rule_compilation_blocker(context)
+        semantic_blocker = rule_compilation_blocker(
+            context,
+            deadline_authority_policy=effective_deadline_authority_policy(
+                context,
+                config.rule_compiler.deadline_authority_policy,
+                set(config.rule_compiler.deadline_authority_market_ids),
+            ),
+        )
         if semantic_blocker:
             _mark_rule_review_required(
                 store,
@@ -1271,7 +1288,17 @@ def _rule_engine_status(
 ) -> dict[str, Any]:
     path = rule_store_db_path(config)
     if not config.rule_compiler.enabled:
-        return {"enabled": False, "path": str(path)}
+        return {
+            "enabled": False,
+            "path": str(path),
+            "deadline_authority": {
+                "policy": config.rule_compiler.deadline_authority_policy,
+                "market_ids": (
+                    config.rule_compiler.deadline_authority_market_ids
+                ),
+                "paper_only": True,
+            },
+        }
     try:
         from polybot.rules.store import RuleStore
 
@@ -1320,6 +1347,13 @@ def _rule_engine_status(
             "live_confirmation_families": (
                 config.rule_compiler.live_confirmation_families
             ),
+            "deadline_authority": {
+                "policy": config.rule_compiler.deadline_authority_policy,
+                "market_ids": (
+                    config.rule_compiler.deadline_authority_market_ids
+                ),
+                "paper_only": True,
+            },
             "generic_paper_runner": {
                 "enabled": config.rule_runner.enabled,
                 "paper_only": True,

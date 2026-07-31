@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from polybot.discovery.config import load_discovery_config, rule_store_db_path
+from polybot.discovery.config import (
+    ScoringConfig,
+    load_discovery_config,
+    rule_store_db_path,
+)
 from polybot.discovery.runner import (
     compile_rules_command,
     emit_bot_config_command,
@@ -16,6 +20,7 @@ from polybot.discovery.runner import (
     validate_rule_command,
 )
 from polybot.discovery.sources import build_source_plan
+from polybot.discovery.scorer import grade_market
 from polybot.discovery.store import DiscoveryStore
 from polybot.discovery.types import MarketContext
 from polybot.core.config import ClassifierConfig
@@ -25,7 +30,11 @@ from polybot.rules.compiler import (
     fixture_semantics,
     rule_compilation_blocker,
 )
-from polybot.rules.contracts import RuleSpec
+from polybot.rules.contracts import (
+    RuleSpec,
+    STRICT_DEADLINE_AUTHORITY,
+    VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY,
+)
 from polybot.rules.store import RuleStore
 from test_rule_contracts import _golden_rules, context_for_case
 
@@ -35,6 +44,8 @@ def _config(
     *,
     max_per_cycle: int = 10,
     priority_market_ids: list[str] | None = None,
+    deadline_authority_policy: str = STRICT_DEADLINE_AUTHORITY,
+    deadline_authority_market_ids: list[str] | None = None,
 ) -> Path:
     path = tmp_path / "discovery.yaml"
     priority_yaml = (
@@ -43,6 +54,14 @@ def _config(
             for market_id in priority_market_ids
         )
         if priority_market_ids
+        else " []"
+    )
+    deadline_market_yaml = (
+        "\n" + "\n".join(
+            f"    - {market_id}"
+            for market_id in deadline_authority_market_ids
+        )
+        if deadline_authority_market_ids
         else " []"
     )
     path.write_text(
@@ -57,6 +76,8 @@ rule_compiler:
   enabled: true
   max_per_cycle: {max_per_cycle}
   priority_market_ids:{priority_yaml}
+  deadline_authority_policy: {deadline_authority_policy}
+  deadline_authority_market_ids:{deadline_market_yaml}
   db_path: {tmp_path / "rules.sqlite3"}
   paper_families:
     - OCCURRENCE_BEFORE_DEADLINE
@@ -201,6 +222,143 @@ def test_multi_outcome_compilation_preflight_fails_closed(
     )
     context = replace(context, outcomes=mutation(context.outcomes))
     assert rule_compilation_blocker(context) == expected
+
+
+def test_paper_deadline_authority_requires_an_exact_rule_clock() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    mismatch = replace(
+        context,
+        outcomes=[
+            replace(
+                context.outcomes[0],
+                deadline_consistency="MISMATCH",
+                rule_deadline_iso="2026-12-31T23:59:00-05:00",
+                deadline_timezone="America/New_York",
+            )
+        ],
+    )
+
+    assert rule_compilation_blocker(mismatch) == (
+        "outcome_deadline_mismatch:yes"
+    )
+    assert rule_compilation_blocker(
+        mismatch,
+        deadline_authority_policy=(
+            VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+        ),
+    ) == ""
+
+    incomplete = replace(
+        mismatch,
+        outcomes=[
+            replace(mismatch.outcomes[0], deadline_timezone="")
+        ],
+    )
+    assert rule_compilation_blocker(
+        incomplete,
+        deadline_authority_policy=(
+            VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+        ),
+    ) == "outcome_rule_deadline_missing:yes"
+
+
+def test_allowlisted_rule_deadline_compiles_but_remains_paper_only(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    gamma_deadline = context.outcomes[0].deadline_iso
+    rule_deadline = "2026-12-31T23:59:00-05:00"
+    context = replace(
+        context,
+        outcomes=[
+            replace(
+                context.outcomes[0],
+                deadline_consistency="MISMATCH",
+                rule_deadline_iso=rule_deadline,
+                deadline_timezone="America/New_York",
+            )
+        ],
+    )
+    config_path = _config(
+        tmp_path,
+        priority_market_ids=[context.market_id],
+        deadline_authority_policy=(
+            VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+        ),
+        deadline_authority_market_ids=[context.market_id],
+    )
+    config = load_discovery_config(config_path)
+    store = DiscoveryStore(config.data_dir)
+    store.save_context(context)
+
+    assert compile_rules_command(config_path) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["compiled"] == 1
+    spec = RuleStore(rule_store_db_path(config)).load_spec(
+        context.market_id,
+        context.rule_text_sha256,
+    )
+    assert spec is not None
+    assert (
+        spec.deadline_authority_policy
+        == VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+    )
+    assert spec.outcomes[0].deadline_authority == "VERBATIM_RULES"
+    assert spec.outcomes[0].deadline_iso == rule_deadline
+    assert spec.outcomes[0].rule_deadline_iso == rule_deadline
+    assert spec.outcomes[0].gamma_deadline_iso == gamma_deadline
+    assert spec.outcomes[0].deadline_consistency == "MISMATCH"
+    tampered = spec.as_dict()
+    tampered["outcomes"][0]["deadline_iso"] = gamma_deadline
+    with pytest.raises(
+        ValueError,
+        match="semantic deadline does not match verbatim rule deadline",
+    ):
+        RuleSpec.from_dict(tampered)
+
+    plan = build_source_plan(context, spec)
+    graded = grade_market(
+        context,
+        ScoringConfig(
+            allow_fixture_analysis_live=True,
+            min_rule_text_chars=1,
+        ),
+        rule_spec=spec,
+        source_plan=plan,
+        require_rule_spec=True,
+        paper_families={spec.semantics.rule_family},
+        live_confirmation_families={spec.semantics.rule_family},
+    )
+    assert graded.state == "PAPER_ELIGIBLE"
+    assert "gamma_rule_deadline_mismatch_paper_only:yes" in (
+        graded.state_reasons
+    )
+
+
+def test_deadline_authority_config_is_explicit_and_scoped(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="cannot define market overrides"):
+        load_discovery_config(
+            _config(
+                tmp_path,
+                priority_market_ids=["market-a"],
+                deadline_authority_market_ids=["market-a"],
+            )
+        )
+
+    with pytest.raises(ValueError, match="must also be explicit priority"):
+        load_discovery_config(
+            _config(
+                tmp_path,
+                priority_market_ids=["market-a"],
+                deadline_authority_policy=(
+                    VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+                ),
+                deadline_authority_market_ids=["market-b"],
+            )
+        )
 
 
 def test_compile_cycle_caps_only_new_specs_and_cached_specs_are_free(

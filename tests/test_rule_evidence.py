@@ -68,6 +68,7 @@ def _multi_spec(
         yes_token_id=f"{base.market_id}-july-25-yes",
         no_token_id=f"{base.market_id}-july-25-no",
         deadline_iso="2026-07-25T23:59:59+00:00",
+        gamma_deadline_iso="2026-07-25T23:59:59+00:00",
     )
     second = replace(
         base.outcomes[0],
@@ -78,6 +79,7 @@ def _multi_spec(
         yes_token_id=f"{base.market_id}-august-31-yes",
         no_token_id=f"{base.market_id}-august-31-no",
         deadline_iso="2026-08-31T23:59:59+00:00",
+        gamma_deadline_iso="2026-08-31T23:59:59+00:00",
     )
     return RuleSpec.from_dict(
         replace(

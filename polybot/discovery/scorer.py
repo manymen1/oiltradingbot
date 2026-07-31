@@ -3,7 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from polybot.rules.contracts import RuleSpec
+from polybot.rules.contracts import (
+    RuleSpec,
+    VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY,
+)
 
 from .config import ScoringConfig
 from .types import MarketContext, SourcePlan
@@ -73,6 +76,7 @@ def grade_market(
 
     family = ""
     compiler_is_fixture = False
+    deadline_mismatch_names: list[str] = []
     if require_rule_spec:
         if rule_spec is None:
             return _finalize(
@@ -93,6 +97,21 @@ def grade_market(
                 group,
             )
         family = rule_spec.semantics.rule_family
+        if (
+            rule_spec.deadline_authority_policy
+            == VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+        ):
+            deadline_mismatch_names = sorted(
+                outcome.name
+                for outcome in context.outcomes
+                if (
+                    outcome.active
+                    and not outcome.closed
+                    and outcome.deadline_consistency == "MISMATCH"
+                )
+            )
+            if deadline_mismatch_names:
+                scores["rule_deadline_paper_override"] = 1.0
         scores["rule_spec_valid"] = 1.0
         scores["rule_spec_family_supported"] = float(
             family in (paper_families or set())
@@ -210,6 +229,11 @@ def grade_market(
         live_blockers.append(f"rule_family_not_live_promoted:{family}")
     if compiler_is_fixture:
         live_blockers.append("fixture_rule_spec_not_live_eligible")
+    if deadline_mismatch_names:
+        live_blockers.append(
+            "gamma_rule_deadline_mismatch_paper_only:"
+            + ",".join(deadline_mismatch_names)
+        )
 
     if analysis.model == "fixture" and not scoring.allow_fixture_analysis_live:
         # The offline heuristic analyzer is a test fixture, not a rule reader:
