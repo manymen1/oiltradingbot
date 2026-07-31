@@ -40,6 +40,15 @@ active `september_30` mismatch. "Supported" here means safe to compile and
 evaluate in paper mode; it does not mean the market has passed the later
 source-adapter, replay, or live-promotion phases.
 
+The first real two-pass canary, the US-Iran effective-ceasefire event, failed
+closed with `compiler_passes_disagree`. Both passes selected
+`DURATION_REQUIREMENT`, the 14-calendar-day reset predicate, the same
+exclusions, and the same source identities. They differed in equivalent
+deadline serialization and in assigning conflict-resolution clauses between
+qualifying conditions and the resolution policy. No RuleSpec was saved. This
+is evidence for canonical clause IDs and normalized instants in Phase 2; it is
+not a reason to relax exact agreement.
+
 ## Live Mapping
 
 | # | Parent event / selected leg | Required topology | Predicate family | Resolution-source policy | Immediate blocker |
