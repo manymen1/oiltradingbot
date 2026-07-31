@@ -341,6 +341,12 @@ def _source_health(
         }
     sources: list[dict[str, Any]] = []
     healthy_groups: set[str] = set()
+    policy = dict(plan.source_policy or {})
+    policy_ids = {
+        str(item)
+        for item in policy.get("requirement_ids", [])
+    }
+    healthy_requirement_ids: set[str] = set()
     blockers: list[str] = []
     for source in plan.source_records:
         endpoints = list(
@@ -363,7 +369,12 @@ def _source_health(
         }
         if semantic and healthy_endpoints:
             healthy_groups.add(source.independence_group)
-        if source.required and not healthy_endpoints:
+            healthy_requirement_ids.update(source.requirement_ids)
+        if (
+            source.required
+            and not healthy_endpoints
+            and not (set(source.requirement_ids) & policy_ids)
+        ):
             blockers.append(
                 f"required_source_unhealthy:{source.source_id}"
             )
@@ -373,10 +384,54 @@ def _source_health(
                 "domain": source.domain,
                 "roles": source.roles,
                 "required": source.required,
+                "requirement_ids": source.requirement_ids,
                 "endpoint_statuses": endpoint_states,
                 "healthy_endpoints": len(healthy_endpoints),
             }
         )
+    policy_type = str(policy.get("policy_type") or "")
+    quorum = int(policy.get("quorum") or 0)
+    healthy_policy_ids = healthy_requirement_ids & policy_ids
+    if not policy_type or not policy_ids or quorum < 1:
+        blockers.append("source_policy_missing_or_invalid")
+    elif policy_type == "ANY_OF":
+        if not healthy_policy_ids:
+            blockers.append("source_policy_any_of_unsatisfied")
+    elif policy_type == "ALL_OF":
+        missing = sorted(policy_ids - healthy_policy_ids)
+        if missing:
+            blockers.append(
+                "source_policy_all_of_unsatisfied:" + ",".join(missing)
+            )
+    elif policy_type == "QUORUM":
+        if len(healthy_policy_ids) < quorum:
+            blockers.append(
+                "source_policy_quorum_unsatisfied:"
+                f"{len(healthy_policy_ids)}<{quorum}"
+            )
+    elif policy_type in {
+        "PRIMARY_WITH_FALLBACK",
+        "CONDITIONAL_FALLBACK",
+    }:
+        primary = {
+            str(item)
+            for item in policy.get("primary_requirement_ids", [])
+        }
+        fallback = {
+            str(item)
+            for item in policy.get("fallback_requirement_ids", [])
+        }
+        if len(healthy_requirement_ids & primary) < quorum:
+            condition = str(policy.get("fallback_condition") or "")
+            if condition != "SOURCE_UNAVAILABLE":
+                blockers.append(
+                    "source_policy_fallback_condition_unverified:"
+                    + (condition or "missing")
+                )
+            elif len(healthy_requirement_ids & fallback) < quorum:
+                blockers.append("source_policy_fallback_unsatisfied")
+    else:
+        blockers.append(f"source_policy_unsupported:{policy_type}")
     required_groups = int(plan.minimum_independent_confirmations)
     if len(healthy_groups) < required_groups:
         blockers.append(
@@ -387,6 +442,9 @@ def _source_health(
         "ready": not blockers,
         "healthy_confirmation_groups": len(healthy_groups),
         "required_confirmation_groups": required_groups,
+        "source_policy_type": policy_type,
+        "healthy_policy_requirements": len(healthy_policy_ids),
+        "required_policy_requirements": len(policy_ids),
         "sources": sources,
         "blockers": blockers,
     }

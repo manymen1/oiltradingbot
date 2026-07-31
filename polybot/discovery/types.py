@@ -29,7 +29,7 @@ OUTCOME_TOPOLOGIES = {
     "TOP_K",
     "UNCLASSIFIED",
 }
-SOURCE_PLAN_SCHEMA_VERSION = 2
+SOURCE_PLAN_SCHEMA_VERSION = 3
 SOURCE_PLAN_CURRENT = "CURRENT"
 SOURCE_PLAN_LEGACY = "LEGACY_PRE_RULESPEC"
 
@@ -204,6 +204,7 @@ class PlannedSource:
     feed_urls: list[str] = field(default_factory=list)
     poll_urls: list[str] = field(default_factory=list)
     roles: list[str] = field(default_factory=list)
+    requirement_ids: list[str] = field(default_factory=list)
     timestamp_quality: str = "unknown"
     syndication_notes: str = ""
     required: bool = False
@@ -239,6 +240,7 @@ class SourcePlan:
     required_source_refs: list[str] = field(default_factory=list)
     missing_required_source_refs: list[str] = field(default_factory=list)
     minimum_independent_confirmations: int = 1
+    source_policy: dict[str, Any] = field(default_factory=dict)
     created_at: str = ""
     schema_version: int = SOURCE_PLAN_SCHEMA_VERSION
     semantic_status: str = SOURCE_PLAN_CURRENT

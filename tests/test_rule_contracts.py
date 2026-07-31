@@ -18,6 +18,9 @@ from polybot.rules.contracts import (
     EvidenceClaim,
     RuleSemantics,
     RuleSpec,
+    build_rule_clause_catalog,
+    rule_clause_id,
+    source_requirement_id,
 )
 from polybot.rules.store import CompilationPass, RuleStore
 
@@ -170,7 +173,7 @@ def test_rule_spec_is_strict_and_stably_hashed() -> None:
         compiler_model="anthropic:model-b",
         compiled_at="2026-07-25T00:01:00+00:00",
     )
-    assert first.schema_version == 2
+    assert first.schema_version == 3
     assert first.outcome_topology == "SINGLE_BINARY"
     assert first.outcomes[0].deadline_iso == context.deadline_iso
     assert (
@@ -182,6 +185,73 @@ def test_rule_spec_is_strict_and_stably_hashed() -> None:
     raw["unexpected"] = "trade YES"
     with pytest.raises(ValueError, match="unknown keys"):
         RuleSpec.from_dict(raw)
+
+    raw = first.as_dict()
+    raw["schema_version"] = 2
+    with pytest.raises(ValueError, match="unsupported RuleSpec schema_version 2"):
+        RuleSpec.from_dict(raw)
+
+
+def test_rule_clause_catalog_is_deterministic_verbatim_and_case_sensitive() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    first = build_rule_clause_catalog(context)
+    second = build_rule_clause_catalog(context)
+
+    assert first == second
+    assert first
+    assert all(item.text in context.rule_text for item in first)
+    assert rule_clause_id("Resolve YES.") != rule_clause_id("Resolve Yes.")
+
+    changed_text = context.rule_text + "\n\nA new exact condition applies."
+    changed_sha = hashlib.sha256(changed_text.encode("utf-8")).hexdigest()
+    changed = replace(
+        context,
+        rule_text=changed_text,
+        rule_text_sha256=changed_sha,
+        outcomes=[
+            replace(
+                context.outcomes[0],
+                rule_text=changed_text,
+                rule_text_sha256=changed_sha,
+            )
+        ],
+    )
+    assert build_rule_clause_catalog(changed) != first
+
+
+def test_source_policy_rejects_invalid_fallback_shapes_and_conditions() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    raw = fixture_semantics(context).as_dict()
+    second_id = source_requirement_id(
+        "official government",
+        ["CONFIRMATION"],
+        True,
+    )
+    raw["source_requirements"].append(
+        {
+            "requirement_id": second_id,
+            "source_ref": "official government",
+            "roles": ["CONFIRMATION"],
+            "required": True,
+            "rationale": "fallback authority",
+        }
+    )
+    first_id = raw["source_requirements"][0]["requirement_id"]
+    raw["source_policy"] = {
+        "policy_type": "CONDITIONAL_FALLBACK",
+        "requirement_ids": [first_id, second_id],
+        "quorum": 1,
+        "primary_requirement_ids": [first_id],
+        "fallback_requirement_ids": [second_id],
+        "fallback_condition": "WHEN_CONVENIENT",
+    }
+    with pytest.raises(ValueError, match="fallback_condition"):
+        RuleSemantics.from_dict(raw)
+
+    raw["source_policy"]["fallback_condition"] = "CONFLICT_UNRESOLVED"
+    raw["source_policy"]["fallback_requirement_ids"] = [first_id]
+    with pytest.raises(ValueError, match="branches overlap"):
+        RuleSemantics.from_dict(raw)
 
 
 def test_rule_spec_binding_rejects_instrument_mutation() -> None:
@@ -233,7 +303,16 @@ def test_family_specific_contract_validation_fails_closed() -> None:
     raw = fixture_semantics(context).as_dict()
     raw["rule_family"] = "SOURCE_LOCKED_ANNOUNCEMENT"
     raw["predicate"]["comparator"] = "ANNOUNCED"
-    raw["source_requirements"] = []
+    requirement = raw["source_requirements"][0]
+    requirement["roles"] = ["CONFIRMATION"]
+    requirement["requirement_id"] = source_requirement_id(
+        requirement["source_ref"],
+        requirement["roles"],
+        requirement["required"],
+    )
+    raw["source_policy"]["requirement_ids"] = [
+        requirement["requirement_id"]
+    ]
     with pytest.raises(ValueError, match="required SETTLEMENT"):
         RuleSemantics.from_dict(raw)
 
@@ -308,7 +387,9 @@ def test_store_retains_raw_passes_and_evidence_claims(tmp_path: Path) -> None:
         observed_value_upper="",
         observed_unit="",
         supporting_quote="Officials scheduled the round.",
-        clauses_satisfied=["senior representatives"],
+        clauses_satisfied=list(
+            spec.semantics.qualifying_clause_ids[:1]
+        ),
         clauses_violated=[],
         model="anthropic:test",
         extraction_passes=2,

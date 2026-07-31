@@ -241,8 +241,8 @@ rule_runner:
   exit_price_buffer: 0.01
 
 # Public, credential-free forward recorder attached to the generic paper
-# runner. It seeds every outcome book over REST, then maintains full depth
-# through the market WebSocket with heartbeat/reconnect handling. Articles,
+# runner. It starts market WebSocket shards immediately, then seeds outcome
+# books asynchronously over REST with generation-safe cancellation. Articles,
 # extraction latency, decision proofs, resolutions, and quote survival are
 # stored in one WAL database for content-addressed forward replays.
 forward_recorder:

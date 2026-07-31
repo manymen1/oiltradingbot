@@ -14,7 +14,11 @@ from polybot.rules.compiler import (
     compilation_prompt,
     fixture_semantics,
 )
-from polybot.rules.contracts import RuleSemantics
+from polybot.rules.contracts import (
+    RuleSemantics,
+    build_rule_clause_catalog,
+    source_requirement_id,
+)
 from polybot.rules.store import RuleStore
 from test_rule_contracts import _golden_rules, context_for_case
 
@@ -96,7 +100,13 @@ def test_two_pass_disagreement_fails_closed_and_retains_diagnostics(
     def runner(prompt: str) -> str:
         payload = json.loads(json.dumps(base))
         if "pass: 2 of 2" in prompt:
-            payload["qualifying_conditions"] = ["different interpretation"]
+            alternative = next(
+                item.clause_id
+                for item in build_rule_clause_catalog(context)
+                if item.clause_id
+                not in payload["qualifying_clause_ids"]
+            )
+            payload["qualifying_clause_ids"] = [alternative]
         return _envelope(payload)
 
     store = RuleStore(tmp_path / "rules.sqlite3")
@@ -115,6 +125,81 @@ def test_two_pass_disagreement_fails_closed_and_retains_diagnostics(
     )
     assert len(passes) == 2
     assert passes[0]["output_sha256"] != passes[1]["output_sha256"]
+
+
+def test_compiler_replaces_model_clause_prose_with_catalog_text(
+    tmp_path: Path,
+) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    base = fixture_semantics(context).as_dict()
+
+    def runner(prompt: str) -> str:
+        payload = json.loads(json.dumps(base))
+        payload["qualifying_conditions"] = [
+            "invented explanation from "
+            + ("pass two" if "pass: 2 of 2" in prompt else "pass one")
+        ]
+        payload["exclusions"] = [
+            "different invented exclusion " + prompt[-1:]
+        ]
+        payload["resolution_policy"]["terminal_yes"] = [
+            "invented terminal prose"
+        ]
+        return _envelope(payload)
+
+    result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=runner,
+    ).compile(context)
+
+    assert result.status == "COMPILED"
+    assert result.spec is not None
+    catalog = {
+        item.clause_id: item.text for item in result.spec.rule_clauses
+    }
+    assert result.spec.semantics.qualifying_conditions == [
+        catalog[item]
+        for item in result.spec.semantics.qualifying_clause_ids
+    ]
+    assert "invented explanation" not in json.dumps(
+        result.spec.semantics.as_dict()
+    )
+
+
+def test_compiler_rejects_invented_clause_id(tmp_path: Path) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    payload = fixture_semantics(context).as_dict()
+    payload["qualifying_clause_ids"] = ["clause_not_in_verbatim_rules"]
+
+    result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=lambda _prompt: _envelope(payload),
+    ).compile(context)
+
+    assert result.status == "INVALID"
+    assert "unknown rule clauses" in result.reason
+
+
+def test_source_policy_disagreement_fails_closed(tmp_path: Path) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    base = fixture_semantics(context).as_dict()
+
+    def runner(prompt: str) -> str:
+        payload = json.loads(json.dumps(base))
+        if "pass: 2 of 2" in prompt:
+            payload["source_policy"]["policy_type"] = "ALL_OF"
+        return _envelope(payload)
+
+    result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=runner,
+    ).compile(context)
+
+    assert result.status == "DISAGREEMENT"
+    assert result.spec is None
 
 
 def test_compiler_reserves_both_passes_atomically(tmp_path: Path) -> None:
@@ -302,12 +387,19 @@ def test_observed_real_market_critical_disagreements_remain_blocking(
     context = context_for_case(_golden_rules()[0], strong_analysis=True)
     left = fixture_semantics(context).normalized_dict()
     right = json.loads(json.dumps(left))
+    alternative = next(
+        item.clause_id
+        for item in build_rule_clause_catalog(context)
+        if item.clause_id not in left["qualifying_clause_ids"]
+    )
     if field == "qualifying_conditions":
-        right[field] = ["different qualifying condition"]
+        right["qualifying_clause_ids"] = [alternative]
     elif field == "exclusions":
-        right[field] = ["different exclusion"]
+        right["exclusion_clause_ids"] = [alternative]
     elif field == "terminal_yes":
-        right["resolution_policy"][field] = ["different terminal state"]
+        right["resolution_policy"]["terminal_yes_clause_ids"] = [
+            alternative
+        ]
     else:
         right["source_requirements"] = [
             {
@@ -331,12 +423,27 @@ def test_source_rationale_wording_is_noncritical_consensus(
     base = fixture_semantics(context).as_dict()
     base["source_requirements"] = [
         {
+            "requirement_id": source_requirement_id(
+                "example authority",
+                ["SETTLEMENT"],
+                True,
+            ),
             "source_ref": "example authority",
             "roles": ["SETTLEMENT"],
             "required": True,
             "rationale": "first explanatory wording",
         }
     ]
+    base["source_policy"] = {
+        "policy_type": "ANY_OF",
+        "requirement_ids": [
+            base["source_requirements"][0]["requirement_id"]
+        ],
+        "quorum": 1,
+        "primary_requirement_ids": [],
+        "fallback_requirement_ids": [],
+        "fallback_condition": "",
+    }
 
     def runner(prompt: str) -> str:
         payload = json.loads(json.dumps(base))

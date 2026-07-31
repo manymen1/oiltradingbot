@@ -11,6 +11,7 @@ from .contracts import (
     RuleSpec,
     RuleWindow,
     SourceRequirement,
+    SourcePolicy,
     TradeIntent,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "RuleSpec",
     "RuleWindow",
     "SourceRequirement",
+    "SourcePolicy",
     "TradeIntent",
 ]

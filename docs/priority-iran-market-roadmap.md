@@ -40,6 +40,25 @@ The first RuleSpec-v2 safety tranche is implemented:
   offsets representing the same instant agree; different instants remain
   consensus-critical.
 
+The follow-on RuleSpec-v3 clause/source tranche is also implemented:
+
+- Every active verbatim leg rule is split into a deterministic,
+  content-addressed `RuleClause` catalog. Compiler and evidence outputs cite
+  those immutable clause IDs; model-written clause prose is discarded and
+  rehydrated from the exact catalog text after two-pass agreement.
+- Source requirements have deterministic IDs and a closed structured policy:
+  `ANY_OF`, `ALL_OF`, `QUORUM`, `PRIMARY_WITH_FALLBACK`, or
+  `CONDITIONAL_FALLBACK`, with explicit fallback conditions.
+- SourcePlan schema v3 carries the exact RuleSpec policy and maps each planned
+  publisher to the requirements it can satisfy. Freshness checks reject
+  missing requirement mappings or policy drift.
+- Semantic coverage evaluates requirement health according to the policy.
+  Endpoint-unavailability fallback is automatic only when directly
+  observable; conflict-driven fallback remains blocked until evidence proves
+  its condition.
+- Existing RuleSpec/source-plan versions fail closed and must be recompiled;
+  raw book capture remains independent and uninterrupted.
+
 The initial date-only 2026-07-31 Gamma preflight appeared to support eleven of
 the thirteen events at this layer. Exact-instant replay corrected that result:
 all thirteen have at least one active Gamma deadline that conflicts with the
@@ -122,7 +141,7 @@ terms remain excluded, while words containing those character sequences do not.
 5. Version the context payload deliberately so old capture data is associated
    only through an explicit compatible migration.
 
-### Phase 2 — RuleSpec v2
+### Phase 2 — RuleSpec v3
 
 1. Separate `predicate_family` from `outcome_topology`.
 2. Add at least:

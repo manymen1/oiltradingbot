@@ -175,10 +175,14 @@ def _claim(
             observed_unit=unit,
             supporting_quote=f"supported quote {article_id}",
             clauses_satisfied=(
-                ["qualifying predicate"] if matches else []
+                list(spec.semantics.qualifying_clause_ids[:1])
+                if matches
+                else []
             ),
             clauses_violated=(
-                [] if matches else ["excluded activity"]
+                []
+                if matches
+                else list(spec.semantics.exclusion_clause_ids[:1])
             ),
             model="anthropic:test",
             extraction_passes=2,
@@ -275,7 +279,9 @@ def test_extractor_rejects_trade_fields_and_fabricated_quote(
         "observed_value_upper": "",
         "observed_unit": "",
         "supporting_quote": "Officials scheduled talks next month.",
-        "clauses_satisfied": ["qualifying parties"],
+        "clauses_satisfied": list(
+            spec.semantics.qualifying_clause_ids[:1]
+        ),
         "clauses_violated": [],
     }
     calls = {"count": 0}
@@ -312,6 +318,39 @@ def test_extractor_rejects_trade_fields_and_fabricated_quote(
     )
     assert result.status == "INVALID"
     assert "not present" in result.reason
+
+
+def test_extractor_rejects_invented_rule_clause_id(tmp_path: Path) -> None:
+    context, spec = _spec("OCCURRENCE_BEFORE_DEADLINE")
+    plan = build_source_plan(context, spec)
+    article = _article("article-1", "Officials scheduled talks next month.")
+    payload = {
+        "target_outcome": spec.outcomes[0].name,
+        "assertion": "SCHEDULED",
+        "predicate_matches": True,
+        "temporal_relation": "IN_WINDOW",
+        "event_at": "",
+        "observed_value": "",
+        "observed_value_upper": "",
+        "observed_unit": "",
+        "supporting_quote": article.raw_text,
+        "clauses_satisfied": ["clause_invented_by_model"],
+        "clauses_violated": [],
+    }
+
+    result = EvidenceExtractor(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=lambda _prompt: _envelope(payload),
+    ).extract(
+        context=context,
+        spec=spec,
+        source_plan=plan,
+        article=article,
+    )
+
+    assert result.status == "INVALID"
+    assert "unknown rule clause ids" in result.reason
 
 
 def test_extractor_requires_pass_agreement_and_atomic_budget(
@@ -843,7 +882,9 @@ def test_strict_official_envelope_uses_zero_call_deterministic_lane(
             "observed_value_upper": "",
             "observed_unit": "",
             "supporting_quote": quote,
-            "clauses_satisfied": ["official source announced predicate"],
+            "clauses_satisfied": list(
+                spec.semantics.qualifying_clause_ids[:1]
+            ),
             "clauses_violated": [],
         },
     }
@@ -974,7 +1015,9 @@ def test_official_envelope_with_bad_event_time_fails_closed(
                     "observed_value_upper": "",
                     "observed_unit": "",
                     "supporting_quote": quote,
-                    "clauses_satisfied": ["official predicate"],
+                    "clauses_satisfied": list(
+                        spec.semantics.qualifying_clause_ids[:1]
+                    ),
                     "clauses_violated": [],
                 },
             },
@@ -1071,7 +1114,9 @@ def test_terminal_decision_enters_once_and_writes_complete_proof(
         "supported quote a",
         "supported quote b",
     ]
-    assert proof.clauses_satisfied == ["qualifying predicate"]
+    assert proof.clauses_satisfied == list(
+        spec.semantics.qualifying_clause_ids[:1]
+    )
     assert proof.clauses_violated == []
     assert proof.executable_ask == 0.80
     assert proof.net_edge is not None and proof.net_edge > 0.05

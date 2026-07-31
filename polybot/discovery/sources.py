@@ -161,9 +161,16 @@ def _build_rule_spec_source_plan(
         if resolution_source.casefold() in existing_requirement_refs:
             continue
         from polybot.rules.contracts import SourceRequirement
+        from polybot.rules.contracts import source_requirement_id
 
+        requirement_id = source_requirement_id(
+            resolution_source,
+            ["SETTLEMENT"],
+            True,
+        )
         requirements.append(
             SourceRequirement(
+                requirement_id=requirement_id,
                 source_ref=resolution_source,
                 roles=["SETTLEMENT"],
                 required=True,
@@ -183,6 +190,7 @@ def _build_rule_spec_source_plan(
             mediator_actors=list(analysis.mediators if analysis else []),
             roles=requirement.roles,
             required=requirement.required,
+            requirement_id=requirement.requirement_id,
         )
         if requirement.required and not resolved:
             missing_required.append(requirement.source_ref)
@@ -287,6 +295,7 @@ def _build_rule_spec_source_plan(
         minimum_independent_confirmations=(
             semantics.resolution_policy.independent_confirmation_sources
         ),
+        source_policy=semantics.source_policy.as_dict(),
         created_at=datetime.now(timezone.utc).isoformat(),
         schema_version=SOURCE_PLAN_SCHEMA_VERSION,
         semantic_status=SOURCE_PLAN_CURRENT,
@@ -300,6 +309,7 @@ def _resolve_requirement(
     mediator_actors: list[str],
     roles: list[str],
     required: bool,
+    requirement_id: str,
 ) -> list[PlannedSource]:
     normalized = " ".join(source_ref.casefold().split())
     if normalized in {
@@ -309,7 +319,7 @@ def _resolve_requirement(
         "consensus of credible reporting",
     }:
         return [
-            _with_requirement(item, roles, required)
+            _with_requirement(item, roles, False, requirement_id)
             for item in publisher_sources()
             if item.source_tier in {"wire", "tier_one_press"}
         ]
@@ -319,7 +329,7 @@ def _resolve_requirement(
         "government",
     }:
         return [
-            _with_requirement(item, roles, required)
+            _with_requirement(item, roles, False, requirement_id)
             for item in actor_sources(actors)
         ]
     if normalized in {
@@ -328,26 +338,33 @@ def _resolve_requirement(
         "mediator",
     }:
         return [
-            _with_requirement(item, roles, required)
+            _with_requirement(item, roles, False, requirement_id)
             for item in actor_sources(mediator_actors)
         ]
-    return resolve_source_reference(
-        source_ref,
-        roles=roles,
-        required=required,
-    )
+    return [
+        _with_requirement(item, roles, required, requirement_id)
+        for item in resolve_source_reference(
+            source_ref,
+            roles=roles,
+            required=required,
+        )
+    ]
 
 
 def _with_requirement(
     item: PlannedSource,
     roles: list[str],
     required: bool,
+    requirement_id: str,
 ) -> PlannedSource:
     from dataclasses import replace
 
     return replace(
         item,
         roles=sorted(set(item.roles) | set(roles)),
+        requirement_ids=sorted(
+            set(item.requirement_ids) | {requirement_id}
+        ),
         required=item.required or required,
     )
 
@@ -369,6 +386,9 @@ def _merge_source_records(
             feed_urls=_ordered_unique(existing.feed_urls + item.feed_urls),
             poll_urls=_ordered_unique(existing.poll_urls + item.poll_urls),
             roles=sorted(set(existing.roles) | set(item.roles)),
+            requirement_ids=sorted(
+                set(existing.requirement_ids) | set(item.requirement_ids)
+            ),
             required=existing.required or item.required,
         )
     return sorted(
@@ -452,6 +472,7 @@ def source_plan_sha256(plan: SourcePlan) -> str:
         "minimum_independent_confirmations": (
             plan.minimum_independent_confirmations
         ),
+        "source_policy": plan.source_policy,
         "schema_version": plan.schema_version,
         "semantic_status": plan.semantic_status,
     }
@@ -481,12 +502,28 @@ def validate_source_plan_freshness(
         raise ValueError("source plan is stale for current rule text")
     if plan.rule_spec_sha256 != rule_spec.spec_sha256:
         raise ValueError("source plan is stale for current RuleSpec")
+    if plan.source_policy != rule_spec.semantics.source_policy.as_dict():
+        raise ValueError("source plan source policy does not match RuleSpec")
     if not plan.source_records:
         raise ValueError("source plan has no structured source records")
     if plan.missing_required_source_refs:
         raise ValueError(
             "source plan has unresolved required sources: "
             + ",".join(plan.missing_required_source_refs)
+        )
+    policy_ids = set(
+        rule_spec.semantics.source_policy.requirement_ids
+    )
+    resolved_policy_ids = {
+        requirement_id
+        for source in plan.source_records
+        for requirement_id in source.requirement_ids
+    }
+    missing_policy_ids = sorted(policy_ids - resolved_policy_ids)
+    if missing_policy_ids:
+        raise ValueError(
+            "source plan has unresolved policy requirements: "
+            + ",".join(missing_policy_ids)
         )
 
     feed_domains = {

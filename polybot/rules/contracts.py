@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable
@@ -9,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from polybot.core.fees import FEE_POLICY_VERSION, FeeScheduleSnapshot
 
-RULE_SPEC_SCHEMA_VERSION = 2
+RULE_SPEC_SCHEMA_VERSION = 3
 EVIDENCE_CLAIM_SCHEMA_VERSION = 1
 RULE_EVALUATION_SCHEMA_VERSION = 1
 TRADE_INTENT_SCHEMA_VERSION = 1
@@ -36,6 +37,19 @@ RULE_COMPARATORS = {
     "DURATION_AT_LEAST",
 }
 SOURCE_ROLES = {"SETTLEMENT", "CONFIRMATION", "CONTEXT"}
+SOURCE_POLICY_TYPES = {
+    "ANY_OF",
+    "ALL_OF",
+    "QUORUM",
+    "PRIMARY_WITH_FALLBACK",
+    "CONDITIONAL_FALLBACK",
+}
+SOURCE_FALLBACK_CONDITIONS = {
+    "SOURCE_UNAVAILABLE",
+    "CONFLICT_UNRESOLVED",
+    "PRIMARY_TEXT_UNAVAILABLE",
+    "RULE_SPECIFIED",
+}
 EVIDENCE_STATES = {
     "TERMINAL_YES",
     "TERMINAL_NO",
@@ -85,6 +99,63 @@ def canonical_json(value: Any) -> str:
 
 def sha256_json(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class RuleClause:
+    clause_id: str
+    text: str
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "RuleClause":
+        data = _object(raw, "rule_clause")
+        _known(data, cls.__dataclass_fields__, "rule_clause")
+        text = _text(data.get("text"), "rule_clause.text")
+        clause_id = _text(data.get("clause_id"), "rule_clause.clause_id")
+        expected = rule_clause_id(text)
+        if clause_id != expected:
+            raise ValueError(
+                f"rule_clause.clause_id mismatch: {clause_id!r} != {expected!r}"
+            )
+        return cls(clause_id=clause_id, text=text)
+
+
+def rule_clause_id(text: str) -> str:
+    normalized = " ".join(text.split())
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:20]
+    return f"clause_{digest}"
+
+
+def build_rule_clause_catalog(context: Any) -> list[RuleClause]:
+    """Split verbatim rules deterministically into content-addressed clauses."""
+
+    active_texts = {
+        str(item.rule_text).strip()
+        for item in context.outcomes
+        if item.active and not item.closed and str(item.rule_text).strip()
+    }
+    texts = sorted(active_texts) or [str(context.rule_text).strip()]
+    clauses: dict[str, RuleClause] = {}
+    for rule_text in texts:
+        for paragraph in re.split(r"\n\s*\n", rule_text.replace("\r", "\n")):
+            for line in (item.strip() for item in paragraph.splitlines()):
+                if not line:
+                    continue
+                pieces = re.split(
+                    r"(?<=[.!?])\s+(?=[\"'\u201c\u2018(]*[A-Z0-9])|"
+                    r";\s+(?=\(?[ivx0-9]+\))",
+                    line,
+                )
+                for piece in pieces:
+                    text = " ".join(piece.strip().split())
+                    if not text:
+                        continue
+                    clause_id = rule_clause_id(text)
+                    existing = clauses.get(clause_id)
+                    if existing is not None and existing.text != text:
+                        raise ValueError("rule clause id collision")
+                    clauses[clause_id] = RuleClause(clause_id, text)
+    return sorted(clauses.values(), key=lambda item: item.clause_id)
 
 
 @dataclass(frozen=True)
@@ -189,6 +260,7 @@ class RuleWindow:
 
 @dataclass(frozen=True)
 class SourceRequirement:
+    requirement_id: str
     source_ref: str
     roles: list[str]
     required: bool = False
@@ -204,10 +276,30 @@ class SourceRequirement:
                 _list(data.get("roles"), "source_requirement.roles", minimum=1)
             )
         ]
+        source_ref = _text(
+            data.get("source_ref"),
+            "source_requirement.source_ref",
+        )
+        unique_roles = _unique(roles, "source_requirement.roles")
+        required = _boolean(
+            data.get("required", False),
+            "source_requirement.required",
+        )
+        requirement_id = _text(
+            data.get("requirement_id"),
+            "source_requirement.requirement_id",
+        )
+        expected = source_requirement_id(source_ref, unique_roles, required)
+        if requirement_id != expected:
+            raise ValueError(
+                "source_requirement.requirement_id does not match its "
+                "source identity, roles, and required flag"
+            )
         return cls(
-            source_ref=_text(data.get("source_ref"), "source_requirement.source_ref"),
-            roles=_unique(roles, "source_requirement.roles"),
-            required=_boolean(data.get("required", False), "source_requirement.required"),
+            requirement_id=requirement_id,
+            source_ref=source_ref,
+            roles=unique_roles,
+            required=required,
             rationale=_text(
                 data.get("rationale", ""),
                 "source_requirement.rationale",
@@ -216,12 +308,124 @@ class SourceRequirement:
         )
 
 
+def source_requirement_id(
+    source_ref: str,
+    roles: Iterable[str],
+    required: bool,
+) -> str:
+    identity = {
+        "source_ref": " ".join(source_ref.casefold().split()),
+        "roles": sorted(set(roles)),
+        "required": bool(required),
+    }
+    return f"source_{sha256_json(identity)[:20]}"
+
+
+@dataclass(frozen=True)
+class SourcePolicy:
+    policy_type: str
+    requirement_ids: list[str]
+    quorum: int
+    primary_requirement_ids: list[str] = field(default_factory=list)
+    fallback_requirement_ids: list[str] = field(default_factory=list)
+    fallback_condition: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "SourcePolicy":
+        data = _object(raw, "source_policy")
+        _known(data, cls.__dataclass_fields__, "source_policy")
+        policy = cls(
+            policy_type=_choice(
+                data.get("policy_type"),
+                SOURCE_POLICY_TYPES,
+                "source_policy.policy_type",
+            ),
+            requirement_ids=_source_ids(
+                data.get("requirement_ids"),
+                "source_policy.requirement_ids",
+                minimum=1,
+            ),
+            quorum=_integer(
+                data.get("quorum"),
+                "source_policy.quorum",
+                minimum=1,
+                maximum=20,
+            ),
+            primary_requirement_ids=_source_ids(
+                data.get("primary_requirement_ids", []),
+                "source_policy.primary_requirement_ids",
+            ),
+            fallback_requirement_ids=_source_ids(
+                data.get("fallback_requirement_ids", []),
+                "source_policy.fallback_requirement_ids",
+            ),
+            fallback_condition=(
+                _choice(
+                    data.get("fallback_condition"),
+                    SOURCE_FALLBACK_CONDITIONS,
+                    "source_policy.fallback_condition",
+                )
+                if str(data.get("fallback_condition") or "").strip()
+                else ""
+            ),
+        )
+        policy._validate_shape()
+        return policy
+
+    def _validate_shape(self) -> None:
+        ids = set(self.requirement_ids)
+        primary = set(self.primary_requirement_ids)
+        fallback = set(self.fallback_requirement_ids)
+        if not primary.issubset(ids) or not fallback.issubset(ids):
+            raise ValueError("source policy branches must reference requirement_ids")
+        if primary & fallback:
+            raise ValueError("source policy primary and fallback branches overlap")
+        if self.quorum > len(ids):
+            raise ValueError("source policy quorum exceeds requirement count")
+        if self.policy_type == "ANY_OF":
+            if self.quorum != 1 or primary or fallback or self.fallback_condition:
+                raise ValueError("ANY_OF requires quorum=1 and no fallback branches")
+        elif self.policy_type == "ALL_OF":
+            if self.quorum != len(ids) or primary or fallback or self.fallback_condition:
+                raise ValueError("ALL_OF requires every requirement and no fallback")
+        elif self.policy_type == "QUORUM":
+            if primary or fallback or self.fallback_condition:
+                raise ValueError("QUORUM cannot define fallback branches")
+        else:
+            if not primary or not fallback or not self.fallback_condition:
+                raise ValueError(
+                    f"{self.policy_type} requires primary and fallback branches"
+                )
+            if ids != primary | fallback:
+                raise ValueError(
+                    "fallback policy requirement_ids must equal both branches"
+                )
+            if self.quorum > min(len(primary), len(fallback)):
+                raise ValueError(
+                    "fallback source policy quorum exceeds a branch size"
+                )
+            if (
+                self.policy_type == "PRIMARY_WITH_FALLBACK"
+                and self.fallback_condition != "SOURCE_UNAVAILABLE"
+            ):
+                raise ValueError(
+                    "PRIMARY_WITH_FALLBACK requires SOURCE_UNAVAILABLE"
+                )
+
+
 @dataclass(frozen=True)
 class ResolutionPolicy:
     cancellation_behavior: str
     postponement_behavior: str
     terminal_yes: list[str]
     terminal_no: list[str]
+    cancellation_clause_ids: list[str]
+    postponement_clause_ids: list[str]
+    terminal_yes_clause_ids: list[str]
+    terminal_no_clause_ids: list[str]
     terminal_yes_monotonic: bool
     terminal_no_monotonic: bool
     independent_confirmation_sources: int = 1
@@ -255,6 +459,24 @@ class ResolutionPolicy:
                 "resolution_policy.terminal_no",
                 minimum=1,
             ),
+            cancellation_clause_ids=_clause_ids(
+                data.get("cancellation_clause_ids", []),
+                "resolution_policy.cancellation_clause_ids",
+            ),
+            postponement_clause_ids=_clause_ids(
+                data.get("postponement_clause_ids", []),
+                "resolution_policy.postponement_clause_ids",
+            ),
+            terminal_yes_clause_ids=_clause_ids(
+                data.get("terminal_yes_clause_ids"),
+                "resolution_policy.terminal_yes_clause_ids",
+                minimum=1,
+            ),
+            terminal_no_clause_ids=_clause_ids(
+                data.get("terminal_no_clause_ids"),
+                "resolution_policy.terminal_no_clause_ids",
+                minimum=1,
+            ),
             terminal_yes_monotonic=_boolean(
                 data.get("terminal_yes_monotonic"),
                 "resolution_policy.terminal_yes_monotonic",
@@ -274,9 +496,13 @@ class RuleSemantics:
     window: RuleWindow
     qualifying_conditions: list[str]
     exclusions: list[str]
+    qualifying_clause_ids: list[str]
+    exclusion_clause_ids: list[str]
     source_requirements: list[SourceRequirement]
+    source_policy: SourcePolicy
     resolution_policy: ResolutionPolicy
     subjective_terms: list[str] = field(default_factory=list)
+    subjective_clause_ids: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -298,6 +524,12 @@ class RuleSemantics:
                 )
         for key in ("qualifying_conditions", "exclusions", "subjective_terms"):
             raw[key] = sorted({_normalize_text(item) for item in raw[key]})
+        for key in (
+            "qualifying_clause_ids",
+            "exclusion_clause_ids",
+            "subjective_clause_ids",
+        ):
+            raw[key] = sorted(set(raw[key]))
         raw["predicate"]["subjects"] = sorted(
             {_normalize_text(item) for item in raw["predicate"]["subjects"]}
         )
@@ -321,6 +553,23 @@ class RuleSemantics:
             raw["resolution_policy"][key] = sorted(
                 {_normalize_text(item) for item in raw["resolution_policy"][key]}
             )
+        for key in (
+            "cancellation_clause_ids",
+            "postponement_clause_ids",
+            "terminal_yes_clause_ids",
+            "terminal_no_clause_ids",
+        ):
+            raw["resolution_policy"][key] = sorted(
+                set(raw["resolution_policy"][key])
+            )
+        for key in (
+            "requirement_ids",
+            "primary_requirement_ids",
+            "fallback_requirement_ids",
+        ):
+            raw["source_policy"][key] = sorted(
+                set(raw["source_policy"][key])
+            )
         return raw
 
     @classmethod
@@ -338,6 +587,15 @@ class RuleSemantics:
                 minimum=1,
             ),
             exclusions=_text_list(data.get("exclusions", []), "exclusions"),
+            qualifying_clause_ids=_clause_ids(
+                data.get("qualifying_clause_ids"),
+                "qualifying_clause_ids",
+                minimum=1,
+            ),
+            exclusion_clause_ids=_clause_ids(
+                data.get("exclusion_clause_ids", []),
+                "exclusion_clause_ids",
+            ),
             source_requirements=[
                 SourceRequirement.from_dict(item)
                 for item in _list(
@@ -345,6 +603,7 @@ class RuleSemantics:
                     "source_requirements",
                 )
             ],
+            source_policy=SourcePolicy.from_dict(data.get("source_policy")),
             resolution_policy=ResolutionPolicy.from_dict(
                 data.get("resolution_policy")
             ),
@@ -352,7 +611,18 @@ class RuleSemantics:
                 data.get("subjective_terms", []),
                 "subjective_terms",
             ),
+            subjective_clause_ids=_clause_ids(
+                data.get("subjective_clause_ids", []),
+                "subjective_clause_ids",
+            ),
         )
+        requirement_ids = {
+            item.requirement_id for item in semantics.source_requirements
+        }
+        if set(semantics.source_policy.requirement_ids) != requirement_ids:
+            raise ValueError(
+                "source_policy must reference every source requirement exactly"
+            )
         semantics._validate_family()
         return semantics
 
@@ -393,10 +663,13 @@ class RuleSemantics:
             )
         if (
             self.rule_family == "SUBJECTIVE_DISCRETIONARY"
-            and not self.subjective_terms
+            and (
+                not self.subjective_terms
+                or not self.subjective_clause_ids
+            )
         ):
             raise ValueError(
-                "SUBJECTIVE_DISCRETIONARY requires subjective_terms"
+                "SUBJECTIVE_DISCRETIONARY requires bound subjective clauses"
             )
 
 
@@ -410,6 +683,7 @@ class RuleSpec:
     rule_text_sha256: str
     rule_version: int
     outcome_topology: str
+    rule_clauses: list[RuleClause]
     outcomes: list[OutcomeBinding]
     semantics: RuleSemantics
     compiler_model: str
@@ -437,6 +711,7 @@ class RuleSpec:
         compiler_model: str,
         compiled_at: str,
     ) -> "RuleSpec":
+        semantics = RuleSemantics.from_dict(semantics.as_dict())
         outcomes = [
             OutcomeBinding(
                 name=item.name,
@@ -492,12 +767,14 @@ class RuleSpec:
                 },
                 "outcome_topology",
             ),
+            rule_clauses=build_rule_clause_catalog(context),
             outcomes=outcomes,
             semantics=semantics,
             compiler_model=_text(compiler_model, "compiler_model"),
             compiled_at=_iso_datetime(compiled_at, "compiled_at"),
         )
         spec._validate_topology()
+        spec._validate_clause_bindings()
         return spec
 
     @classmethod
@@ -523,6 +800,18 @@ class RuleSpec:
         ]
         _unique(condition_ids, "outcome condition ids")
         _unique(token_ids, "outcome token ids")
+        rule_clauses = [
+            RuleClause.from_dict(item)
+            for item in _list(
+                data.get("rule_clauses"),
+                "rule_clauses",
+                minimum=1,
+            )
+        ]
+        _unique(
+            [item.clause_id for item in rule_clauses],
+            "rule clause ids",
+        )
         spec = cls(
             schema_version=schema,
             market_id=_text(data.get("market_id"), "market_id"),
@@ -555,12 +844,14 @@ class RuleSpec:
                 },
                 "outcome_topology",
             ),
+            rule_clauses=rule_clauses,
             outcomes=outcomes,
             semantics=RuleSemantics.from_dict(data.get("semantics")),
             compiler_model=_text(data.get("compiler_model"), "compiler_model"),
             compiled_at=_iso_datetime(data.get("compiled_at"), "compiled_at"),
         )
         spec._validate_topology()
+        spec._validate_clause_bindings()
         return spec
 
     def _validate_topology(self) -> None:
@@ -594,6 +885,25 @@ class RuleSpec:
                     + ",".join(missing)
                 )
 
+    def _validate_clause_bindings(self) -> None:
+        available = {item.clause_id for item in self.rule_clauses}
+        semantics = self.semantics
+        bound = {
+            *semantics.qualifying_clause_ids,
+            *semantics.exclusion_clause_ids,
+            *semantics.subjective_clause_ids,
+            *semantics.resolution_policy.cancellation_clause_ids,
+            *semantics.resolution_policy.postponement_clause_ids,
+            *semantics.resolution_policy.terminal_yes_clause_ids,
+            *semantics.resolution_policy.terminal_no_clause_ids,
+        }
+        unknown = sorted(bound - available)
+        if unknown:
+            raise ValueError(
+                "RuleSpec semantics reference unknown rule clauses: "
+                + ",".join(unknown)
+            )
+
     def validate_context_binding(self, context: Any) -> None:
         expected = RuleSpec.from_context(
             context,
@@ -609,6 +919,7 @@ class RuleSpec:
             "rule_text_sha256",
             "rule_version",
             "outcome_topology",
+            "rule_clauses",
             "outcomes",
         )
         mismatches = [
@@ -772,6 +1083,11 @@ class EvidenceClaim:
         outcome_names = {item.name for item in spec.outcomes}
         if self.target_outcome and self.target_outcome not in outcome_names:
             mismatches.append("target_outcome")
+        allowed_clause_ids = {item.clause_id for item in spec.rule_clauses}
+        if not set(self.clauses_satisfied).issubset(allowed_clause_ids):
+            mismatches.append("clauses_satisfied")
+        if not set(self.clauses_violated).issubset(allowed_clause_ids):
+            mismatches.append("clauses_violated")
         if spec.kind == "grouped" and not self.target_outcome and self.assertion not in {
             "NONE",
             "CONFLICTING",
@@ -1379,6 +1695,32 @@ def _text_list(
     ]
 
 
+def _source_ids(
+    value: Any,
+    name: str,
+    *,
+    minimum: int = 0,
+) -> list[str]:
+    ids = _unique(_text_list(value, name, minimum=minimum), name)
+    for item in ids:
+        if re.fullmatch(r"source_[0-9a-f]{20}", item) is None:
+            raise ValueError(f"{name} contains invalid source requirement id")
+    return ids
+
+
+def _clause_ids(
+    value: Any,
+    name: str,
+    *,
+    minimum: int = 0,
+) -> list[str]:
+    ids = _unique(_text_list(value, name, minimum=minimum), name)
+    for item in ids:
+        if re.fullmatch(r"clause_[0-9a-f]{20}", item) is None:
+            raise ValueError(f"{name} contains invalid rule clause id")
+    return ids
+
+
 def _unique(values: list[Any], name: str) -> list[Any]:
     if len(values) != len(set(values)):
         raise ValueError(f"{name} must be unique")
@@ -1416,6 +1758,7 @@ __all__ = [
     "EVIDENCE_STATES",
     "EvidenceClaim",
     "OutcomeBinding",
+    "RuleClause",
     "ResolutionPolicy",
     "RULE_FAMILIES",
     "RULE_EVALUATION_SCHEMA_VERSION",
@@ -1426,6 +1769,9 @@ __all__ = [
     "RuleSpec",
     "RuleWindow",
     "SOURCE_ROLES",
+    "SOURCE_FALLBACK_CONDITIONS",
+    "SOURCE_POLICY_TYPES",
+    "SourcePolicy",
     "SourceRequirement",
     "TEMPORAL_RELATIONS",
     "TRADE_ACTIONS",
@@ -1433,5 +1779,8 @@ __all__ = [
     "TRADE_SIDES",
     "TradeIntent",
     "canonical_json",
+    "build_rule_clause_catalog",
+    "rule_clause_id",
     "sha256_json",
+    "source_requirement_id",
 ]

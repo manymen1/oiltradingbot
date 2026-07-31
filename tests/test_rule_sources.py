@@ -20,7 +20,12 @@ from polybot.discovery.sources import (
 from polybot.discovery.store import DiscoveryStore
 from polybot.discovery.types import SOURCE_PLAN_LEGACY
 from polybot.rules.compiler import fixture_semantics
-from polybot.rules.contracts import RuleSpec, SourceRequirement
+from polybot.rules.contracts import (
+    RuleSpec,
+    SourcePolicy,
+    SourceRequirement,
+    source_requirement_id,
+)
 from test_rule_contracts import _golden_rules, context_for_case
 
 
@@ -42,12 +47,16 @@ def test_rule_spec_source_plan_includes_named_settlement_source() -> None:
     spec = _spec(context)
     plan = build_source_plan(context, spec)
     assert plan.rule_spec_sha256 == spec.spec_sha256
+    assert plan.source_policy == spec.semantics.source_policy.as_dict()
     reuters = [
         item for item in plan.source_records
         if item.organization_id == "reuters"
     ]
     assert reuters
     assert reuters[0].required is True
+    assert reuters[0].requirement_ids == [
+        spec.semantics.source_requirements[0].requirement_id
+    ]
     assert "SETTLEMENT" in reuters[0].roles
     assert reuters[0].poll_urls == ["https://reuters.com/"]
     assert "https://reuters.com/" in plan.poll_urls
@@ -58,16 +67,27 @@ def test_rule_spec_source_plan_includes_named_settlement_source() -> None:
 def test_unresolved_required_named_source_forces_monitor_only() -> None:
     context = context_for_case(_golden_rules()[0], strong_analysis=True)
     base = fixture_semantics(context)
+    requirement_id = source_requirement_id(
+        "Secret Gazette Print Edition",
+        ["SETTLEMENT"],
+        True,
+    )
     semantics = replace(
         base,
         source_requirements=[
             SourceRequirement(
+                requirement_id=requirement_id,
                 source_ref="Secret Gazette Print Edition",
                 roles=["SETTLEMENT"],
                 required=True,
                 rationale="sole resolution source named by the rules",
             )
         ],
+        source_policy=SourcePolicy(
+            policy_type="ANY_OF",
+            requirement_ids=[requirement_id],
+            quorum=1,
+        ),
     )
     spec = _spec(context, semantics)
     plan = build_source_plan(context, spec)
