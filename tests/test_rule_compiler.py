@@ -182,6 +182,35 @@ def test_compiler_rejects_invented_clause_id(tmp_path: Path) -> None:
     assert "unknown rule clauses" in result.reason
 
 
+def test_compiler_canonicalizes_only_long_unique_clause_prefixes(
+    tmp_path: Path,
+) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    payload = fixture_semantics(context).as_dict()
+    canonical = payload["qualifying_clause_ids"][0]
+    payload["qualifying_clause_ids"] = [canonical[:-2]]
+
+    result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=lambda _prompt: _envelope(payload),
+    ).compile(context)
+
+    assert result.status == "COMPILED"
+    assert result.spec is not None
+    assert result.spec.semantics.qualifying_clause_ids == [canonical]
+
+    too_short = fixture_semantics(context).as_dict()
+    too_short["qualifying_clause_ids"] = [canonical[:-3]]
+    blocked = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "short.sqlite3"),
+        cli_runner=lambda _prompt: _envelope(too_short),
+    ).compile(context)
+    assert blocked.status == "INVALID"
+    assert "unknown rule clauses" in blocked.reason
+
+
 def test_source_policy_disagreement_fails_closed(tmp_path: Path) -> None:
     context = context_for_case(_golden_rules()[0], strong_analysis=True)
     base = fixture_semantics(context).as_dict()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import hashlib
+import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -1123,15 +1124,42 @@ def _bind_semantic_payload(
     def bind_ids(value: Any, field: str) -> tuple[list[str], list[str]]:
         if not isinstance(value, list):
             raise ValueError(f"{field} must be a list")
-        ids = [str(item).strip() for item in value]
-        if len(ids) != len(set(ids)):
+        supplied_ids = [str(item).strip() for item in value]
+        if len(supplied_ids) != len(set(supplied_ids)):
             raise ValueError(f"{field} must be unique")
-        unknown = sorted(set(ids) - set(catalog))
+        ids: list[str] = []
+        unknown: list[str] = []
+        for supplied in supplied_ids:
+            if supplied in catalog:
+                ids.append(supplied)
+                continue
+            candidates = [
+                clause_id
+                for clause_id in catalog
+                if (
+                    re.fullmatch(r"clause_[0-9a-f]{18,19}", supplied)
+                    and clause_id.startswith(supplied)
+                )
+            ]
+            if len(candidates) == 1:
+                canonical = candidates[0]
+                ids.append(canonical)
+                log_event(
+                    "rule_compiler_clause_id_prefix_repaired",
+                    market_id=context.market_id,
+                    field=field,
+                    supplied_clause_id=supplied,
+                    canonical_clause_id=canonical,
+                )
+            else:
+                unknown.append(supplied)
         if unknown:
             raise ValueError(
                 f"{field} references unknown rule clauses: "
-                + ",".join(unknown)
+                + ",".join(sorted(unknown))
             )
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"{field} resolves to duplicate rule clauses")
         return ids, [catalog[item] for item in ids]
 
     qualifying_ids, qualifying = bind_ids(
@@ -1148,6 +1176,9 @@ def _bind_semantic_payload(
     )
     if not qualifying_ids:
         raise ValueError("qualifying_clause_ids must not be empty")
+    payload["qualifying_clause_ids"] = qualifying_ids
+    payload["exclusion_clause_ids"] = exclusion_ids
+    payload["subjective_clause_ids"] = subjective_ids
     payload["qualifying_conditions"] = qualifying
     payload["exclusions"] = exclusions
     payload["subjective_terms"] = subjective
@@ -1173,6 +1204,10 @@ def _bind_semantic_payload(
     )
     if not terminal_yes_ids or not terminal_no_ids:
         raise ValueError("terminal rule states require clause ids")
+    resolution["cancellation_clause_ids"] = cancellation_ids
+    resolution["postponement_clause_ids"] = postponement_ids
+    resolution["terminal_yes_clause_ids"] = terminal_yes_ids
+    resolution["terminal_no_clause_ids"] = terminal_no_ids
     resolution["cancellation_behavior"] = (
         " | ".join(cancellation)
         if cancellation_ids
