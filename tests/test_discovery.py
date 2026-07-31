@@ -268,6 +268,27 @@ def test_named_calendar_day_uses_rule_timezone() -> None:
     assert outcome.deadline_consistency == "MISMATCH"
 
 
+def test_parenthesized_timezone_name_is_preserved() -> None:
+    event = _binary_event(
+        description=(
+            "This market resolves Yes if the event occurs on the specified "
+            "date Arabia Standard Time (AST). Otherwise it resolves No."
+        )
+    )
+    event["title"] = "Will the event occur on July 31?"
+    market = event["markets"][0]
+    market["question"] = "Will the event occur on July 31?"
+    market["endDate"] = "2026-07-31T23:59:00Z"
+
+    context = context_from_event(event)
+
+    assert context is not None
+    outcome = context.outcomes[0]
+    assert outcome.rule_deadline_iso == "2026-07-31T23:59:00+03:00"
+    assert outcome.deadline_timezone == "Asia/Riyadh"
+    assert outcome.deadline_consistency == "MISMATCH"
+
+
 def test_malformed_fee_metadata_is_preserved_as_entry_blocker() -> None:
     event = _binary_event()
     market = event["markets"][0]

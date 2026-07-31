@@ -531,7 +531,7 @@ _RULE_DEADLINE_TIME = re.compile(
     r"(?:eastern\s+time\s*\((et)\)|(et)|"
     r"iran\s+standard\s+time\s*\((irst)\)|(irst)|"
     r"arabia\s+standard\s+time\s*\((ast)\)|(ast)|"
-    r"(utc))\b",
+    r"(utc))(?=\W|$)",
     re.IGNORECASE,
 )
 _RULE_EXPLICIT_DATE_TIME = re.compile(
@@ -541,7 +541,7 @@ _RULE_EXPLICIT_DATE_TIME = re.compile(
     r"(?:eastern\s+time\s*\((et)\)|(et)|"
     r"iran\s+standard\s+time\s*\((irst)\)|(irst)|"
     r"arabia\s+standard\s+time\s*\((ast)\)|(ast)|"
-    r"(utc))\b",
+    r"(utc))(?=\W|$)",
     re.IGNORECASE,
 )
 _DEADLINE_TIMEZONE = re.compile(
@@ -549,7 +549,7 @@ _DEADLINE_TIMEZONE = re.compile(
     r"(?:specified|listed|end)\s+date(?:\s*,)?\s*"
     r"(iran\s+standard\s+time\s*\(irst\)|irst(?:\s*\(utc\s*\+3:30\))?|"
     r"arabia\s+standard\s+time\s*\(ast\)|ast|"
-    r"eastern\s+time\s*\(et\)|et|utc)\b",
+    r"eastern\s+time\s*\(et\)|et|utc)(?=\W|$)",
     re.IGNORECASE,
 )
 _POST_DEADLINE_PATTERNS = (
