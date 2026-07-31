@@ -99,6 +99,20 @@ regression example for fail-closed deadline disagreement; the clause-placement
 variation still motivates canonical clause IDs and is not a reason to relax
 exact agreement.
 
+The second canary, the US announcement ending the Iranian blockade, initially
+failed structural validation because both model passes returned the same
+18-hex prefix of a 20-hex clause ID. Compiler-only binding now expands only an
+18- or 19-hex prefix that identifies exactly one catalog clause; shorter,
+ambiguous, invented, or duplicate-resolving IDs still fail. The retried passes
+then reached semantic comparison and failed closed with
+`compiler_passes_disagree`. One modeled the enumerated official US sources as
+six `ANY_OF` requirements and cited both qualifying terminal-Yes clauses; the
+other modeled one composite `ALL_OF` government-source requirement and cited
+only the post-announcement terminal clause. This is a source-policy and clause
+coverage disagreement, not formatting noise. No RuleSpec or SourcePlan was
+saved, and the canary remains non-executable pending an explicit reviewed-spec
+workflow.
+
 ## Live Mapping
 
 | # | Parent event / selected leg | Required topology | Predicate family | Resolution-source policy | Immediate blocker |
