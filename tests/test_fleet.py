@@ -215,7 +215,10 @@ def test_fleet_once_spawns_a_bot_per_eligible_market(tmp_path, monkeypatch) -> N
     assert [m for m, _f in notifier.messages if "bot started" in m]
 
 
-def test_fleet_once_runs_one_central_feed_cycle_before_spawning(tmp_path, monkeypatch) -> None:
+def test_fleet_bootstraps_central_feed_before_discovery_and_refreshes_after(
+    tmp_path,
+    monkeypatch,
+) -> None:
     _patch_roots(monkeypatch, tmp_path)
     config_path = _fleet_yaml(tmp_path)
     with config_path.open("a", encoding="utf-8") as handle:
@@ -224,12 +227,19 @@ def test_fleet_once_runs_one_central_feed_cycle_before_spawning(tmp_path, monkey
 central_feed:
   enabled: true
   db_path: {tmp_path / 'central.sqlite3'}
+  impact_feed_urls:
+    - https://publisher.example/rss
 """
         )
-    called: list[bool] = []
+    calls: list[str] = []
 
     def fake_poll_once(service, *, force=False):
-        called.append(True)
+        calls.append("feed")
+        service.store.set_active_feeds(
+            ["https://publisher.example/rss"],
+            impact_feed_urls=["https://publisher.example/rss"],
+            semantic_feed_urls=[],
+        )
         service.store.touch_heartbeat()
         assert force is True
         return {"feeds": 0, "polled": 0, "inserted": 0, "errors": 0, "pruned": 0}
@@ -239,19 +249,33 @@ central_feed:
         fake_poll_once,
     )
     spawner = _Spawner()
+    base_fetch = _events_fetch([_binary_event()])
+
+    def ordered_fetch(url, params):
+        if params.get("offset", 0) == 0:
+            calls.append("discovery")
+        return base_fetch(url, params)
+
     assert run_fleet_command(
         config_path,
         once=True,
-        events_fetch=_events_fetch([_binary_event()]),
+        events_fetch=ordered_fetch,
         quotes=_FakeQuotes(),
         notifier=_Notifier(),
         spawner=spawner,
     ) == 0
-    assert called == [True]
+    assert calls[0] == "feed"
+    assert "discovery" in calls[1:-1]
+    assert calls[-1] == "feed"
     from polybot.binary.config import load_binary_config
 
     generated = load_binary_config(next((tmp_path / "generated").glob("*.yaml")))
     assert generated.sources.central_feed_db == str(tmp_path / "central.sqlite3")
+    state = json.loads(
+        (tmp_path / "data" / "fleet_state.json").read_text(encoding="utf-8")
+    )
+    assert state["central_feed"]["enabled"] is True
+    assert state["central_feed"]["impact_feeds"] == 1
 
 
 def test_fleet_live_auto_ack_arms_and_passes_live_flag(tmp_path, monkeypatch) -> None:

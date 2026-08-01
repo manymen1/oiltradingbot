@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from polybot.core.config import ClassifierConfig  # noqa: F401
 from polybot.core.config_validation import (
@@ -338,6 +339,12 @@ class CentralFeedConfig:
     poll_seconds: float = 2.0
     max_workers: int = 12
     max_entries_per_feed: int = 50
+    # Publisher feeds whose raw announcements are useful for measuring market
+    # reaction even before discovery has produced a RuleSpec/SourcePlan. These
+    # rows are capture evidence only; semantic readers still require their
+    # own immutable source plans before they can classify or trade on them.
+    impact_feed_urls: list[str] = field(default_factory=list)
+    impact_poll_seconds: float = 30.0
     # Required named sources without a usable RSS/Atom endpoint are polled
     # through conditional-GET XML/JSON/HTML discovery adapters. They remain
     # centralized so adding markets cannot multiply publisher traffic.
@@ -828,6 +835,7 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
     require_bool(config.central_feed.enabled, "central_feed.enabled")
     for field_name in (
         "poll_seconds",
+        "impact_poll_seconds",
         "direct_poll_seconds",
         "direct_idle_max_seconds",
         "aggregator_poll_seconds",
@@ -854,6 +862,19 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
         "central_feed.max_entries_per_feed",
         minimum=1,
     )
+    require_string_list(
+        config.central_feed.impact_feed_urls,
+        "central_feed.impact_feed_urls",
+    )
+    impact_feed_urls = [url.strip() for url in config.central_feed.impact_feed_urls]
+    if len(set(impact_feed_urls)) != len(impact_feed_urls):
+        raise ValueError("central_feed.impact_feed_urls must not contain duplicates")
+    for index, url in enumerate(impact_feed_urls):
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or not parsed.hostname:
+            raise ValueError(
+                f"central_feed.impact_feed_urls[{index}] must be an https URL"
+            )
     require_bool(
         config.central_feed.direct_sources_enabled,
         "central_feed.direct_sources_enabled",

@@ -33,6 +33,9 @@ class CentralFeedBatch:
     cursors: dict[str, int]
 
 
+_FEED_ROLES = {"SEMANTIC", "IMPACT", "BOTH"}
+
+
 class CentralFeedStore:
     """WAL-backed fan-out store for one fetcher and many market readers.
 
@@ -68,10 +71,20 @@ class CentralFeedStore:
                     article_hash TEXT NOT NULL,
                     payload_json TEXT NOT NULL,
                     ingested_at TEXT NOT NULL,
+                    feed_role TEXT NOT NULL DEFAULT 'SEMANTIC',
                     UNIQUE(feed_url, article_hash)
                 )
                 """
             )
+            article_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(articles)")
+            }
+            if "feed_role" not in article_columns:
+                connection.execute(
+                    "ALTER TABLE articles ADD COLUMN feed_role TEXT NOT NULL "
+                    "DEFAULT 'SEMANTIC'"
+                )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_central_articles_feed_id ON articles(feed_url, id)"
             )
@@ -107,18 +120,43 @@ class CentralFeedStore:
                 (now,),
             )
 
-    def set_active_feeds(self, feed_urls: Iterable[str]) -> None:
-        payload = json.dumps(sorted(set(feed_urls)), separators=(",", ":"))
+    def set_active_feeds(
+        self,
+        feed_urls: Iterable[str],
+        *,
+        impact_feed_urls: Iterable[str] = (),
+        semantic_feed_urls: Iterable[str] | None = None,
+    ) -> None:
+        active = sorted(set(feed_urls))
+        impact = sorted(set(impact_feed_urls))
+        semantic = sorted(
+            set(active) - set(impact)
+            if semantic_feed_urls is None
+            else set(semantic_feed_urls)
+        )
         with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO metadata(key, value) VALUES('active_feeds', ?)
-                ON CONFLICT(key) DO UPDATE SET value=excluded.value
-                """,
-                (payload,),
-            )
+            for key, values in (
+                ("active_feeds", active),
+                ("impact_feeds", impact),
+                ("semantic_feeds", semantic),
+            ):
+                connection.execute(
+                    """
+                    INSERT INTO metadata(key, value) VALUES(?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value
+                    """,
+                    (key, json.dumps(values, separators=(",", ":"))),
+                )
 
-    def record_success(self, feed_url: str, articles: Iterable[Article]) -> int:
+    def record_success(
+        self,
+        feed_url: str,
+        articles: Iterable[Article],
+        *,
+        feed_role: str = "SEMANTIC",
+    ) -> int:
+        if feed_role not in _FEED_ROLES:
+            raise ValueError(f"unsupported central feed role: {feed_role}")
         now = _now()
         inserted = 0
         with self._connect() as connection:
@@ -126,17 +164,32 @@ class CentralFeedStore:
             for article in articles:
                 cursor = connection.execute(
                     """
-                    INSERT OR IGNORE INTO articles(feed_url, article_hash, payload_json, ingested_at)
-                    VALUES(?, ?, ?, ?)
+                    INSERT OR IGNORE INTO articles(
+                        feed_url, article_hash, payload_json, ingested_at, feed_role
+                    )
+                    VALUES(?, ?, ?, ?, ?)
                     """,
                     (
                         feed_url,
                         article.hash,
                         json.dumps(asdict(article), sort_keys=True, separators=(",", ":")),
                         now,
+                        feed_role,
                     ),
                 )
                 inserted += max(0, cursor.rowcount)
+                if cursor.rowcount == 0:
+                    connection.execute(
+                        """
+                        UPDATE articles
+                        SET feed_role = CASE
+                            WHEN feed_role = ? THEN feed_role
+                            ELSE 'BOTH'
+                        END
+                        WHERE feed_url = ? AND article_hash = ?
+                        """,
+                        (feed_role, feed_url, article.hash),
+                    )
             connection.execute(
                 """
                 INSERT INTO feeds(feed_url, last_polled_at, last_success_at, last_error, inserted_total)
@@ -199,6 +252,12 @@ class CentralFeedStore:
             active_row = connection.execute(
                 "SELECT value FROM metadata WHERE key='active_feeds'"
             ).fetchone()
+            impact_row = connection.execute(
+                "SELECT value FROM metadata WHERE key='impact_feeds'"
+            ).fetchone()
+            semantic_row = connection.execute(
+                "SELECT value FROM metadata WHERE key='semantic_feeds'"
+            ).fetchone()
             totals = connection.execute(
                 """
                 SELECT
@@ -208,7 +267,17 @@ class CentralFeedStore:
                 FROM feeds
                 """
             ).fetchone()
-            stored = connection.execute("SELECT COUNT(*) AS count FROM articles").fetchone()
+            stored = connection.execute(
+                """
+                SELECT
+                    COUNT(*) AS count,
+                    SUM(CASE WHEN feed_role IN ('IMPACT', 'BOTH') THEN 1 ELSE 0 END)
+                        AS impact_count,
+                    SUM(CASE WHEN feed_role IN ('SEMANTIC', 'BOTH') THEN 1 ELSE 0 END)
+                        AS semantic_count
+                FROM articles
+                """
+            ).fetchone()
             promotion = connection.execute(
                 """
                 SELECT
@@ -222,10 +291,18 @@ class CentralFeedStore:
             "path": str(self.path),
             "heartbeat": str(heartbeat_row["value"]) if heartbeat_row else None,
             "active_feeds": len(_json_list(active_row["value"])) if active_row else 0,
+            "impact_feeds": len(_json_list(impact_row["value"])) if impact_row else 0,
+            "semantic_feeds": (
+                len(_json_list(semantic_row["value"]))
+                if semantic_row
+                else len(_json_list(active_row["value"])) if active_row else 0
+            ),
             "known_feeds": int(totals["configured_feeds"] or 0),
             "feeds_in_error": int(totals["feeds_in_error"] or 0),
             "inserted_total": int(totals["inserted_total"] or 0),
             "stored_rows": int(stored["count"] or 0),
+            "impact_rows": int(stored["impact_count"] or 0),
+            "semantic_rows": int(stored["semantic_count"] or 0),
             "promotion_cached_rows": int(promotion["cached_rows"] or 0),
             "promotion_cache_hits": int(promotion["cache_hits"] or 0),
             "promotion_pending_rows": int(promotion["pending_rows"] or 0),
@@ -646,7 +723,9 @@ class CentralFeedService:
         *,
         store: CentralFeedStore,
         feed_urls_provider: Callable[[], Iterable[str]],
+        impact_feed_urls_provider: Callable[[], Iterable[str]] | None = None,
         poll_seconds: float,
+        impact_poll_seconds: float = 30.0,
         max_workers: int,
         max_entries_per_feed: int,
         retention_hours: float,
@@ -667,12 +746,15 @@ class CentralFeedService:
     ) -> None:
         self.store = store
         self.feed_urls_provider = feed_urls_provider
+        self._impact_provider_configured = impact_feed_urls_provider is not None
+        self.impact_feed_urls_provider = impact_feed_urls_provider or (lambda: ())
         self._direct_provider_configured = direct_urls_provider is not None
         self.direct_urls_provider = direct_urls_provider or (lambda: ())
         self.direct_priorities_provider = (
             direct_priorities_provider or (lambda: {})
         )
         self.poll_seconds = max(0.1, float(poll_seconds))
+        self.impact_poll_seconds = max(0.1, float(impact_poll_seconds))
         self.direct_poll_seconds = max(
             0.1,
             float(direct_poll_seconds),
@@ -707,6 +789,12 @@ class CentralFeedService:
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
             return
+        semantic_feed_urls, impact_feed_urls, direct_urls = self._subscriptions()
+        self.store.set_active_feeds(
+            semantic_feed_urls | impact_feed_urls | direct_urls,
+            impact_feed_urls=impact_feed_urls,
+            semantic_feed_urls=semantic_feed_urls,
+        )
         self.store.touch_heartbeat()
         self._stop.clear()
         self._thread = threading.Thread(
@@ -731,16 +819,8 @@ class CentralFeedService:
             self._stop.wait(self.poll_seconds)
 
     def poll_once(self, *, force: bool = False) -> dict[str, int]:
-        feed_urls = {
-            str(url).strip()
-            for url in self.feed_urls_provider()
-            if str(url).strip()
-        }
-        direct_urls = {
-            str(url).strip()
-            for url in self.direct_urls_provider()
-            if str(url).strip()
-        } - feed_urls
+        semantic_feed_urls, impact_feed_urls, direct_urls = self._subscriptions()
+        feed_urls = semantic_feed_urls | impact_feed_urls
         direct_priorities = {
             str(url): float(value)
             for url, value in self.direct_priorities_provider().items()
@@ -750,10 +830,16 @@ class CentralFeedService:
         }
         urls = sorted(feed_urls | direct_urls)
         self.store.touch_heartbeat()
-        self.store.set_active_feeds(urls)
+        self.store.set_active_feeds(
+            urls,
+            impact_feed_urls=impact_feed_urls,
+            semantic_feed_urls=semantic_feed_urls,
+        )
         if not urls:
             return self._summary({
                 "feeds": 0,
+                "semantic_feeds": 0,
+                "impact_feeds": 0,
                 "direct_sources": 0,
                 "polled": 0,
                 "direct_polled": 0,
@@ -816,6 +902,9 @@ class CentralFeedService:
                 interval = (
                     self.aggregator_poll_seconds
                     if domain in {"news.google.com", "bing.com", "www.bing.com"}
+                    else self.impact_poll_seconds
+                    if feed_url in impact_feed_urls
+                    and feed_url not in semantic_feed_urls
                     else self._direct_interval(feed_url)
                     if feed_url in direct_urls
                     else self.poll_seconds
@@ -833,6 +922,8 @@ class CentralFeedService:
         if not by_domain:
             return self._summary({
                 "feeds": len(feed_urls),
+                "semantic_feeds": len(semantic_feed_urls),
+                "impact_feeds": len(impact_feed_urls),
                 "direct_sources": len(direct_urls),
                 "polled": 0,
                 "direct_polled": 0,
@@ -877,6 +968,14 @@ class CentralFeedService:
                     inserted_now = self.store.record_success(
                         feed_url,
                         articles,
+                        feed_role=(
+                            "BOTH"
+                            if feed_url in impact_feed_urls
+                            and feed_url in semantic_feed_urls
+                            else "IMPACT"
+                            if feed_url in impact_feed_urls
+                            else "SEMANTIC"
+                        ),
                     )
                     inserted += inserted_now
                     if feed_url in direct_urls:
@@ -892,6 +991,8 @@ class CentralFeedService:
         pruned = self.store.prune(self.retention_hours)
         summary = {
             "feeds": len(feed_urls),
+            "semantic_feeds": len(semantic_feed_urls),
+            "impact_feeds": len(impact_feed_urls),
             "direct_sources": len(direct_urls),
             "polled": sum(len(domain_urls) for domain_urls in by_domain.values()),
             "direct_polled": sum(
@@ -907,6 +1008,24 @@ class CentralFeedService:
         log_event("central_feed_cycle_complete", **summary)
         return self._summary(summary)
 
+    def _subscriptions(self) -> tuple[set[str], set[str], set[str]]:
+        semantic_feed_urls = {
+            str(url).strip()
+            for url in self.feed_urls_provider()
+            if str(url).strip()
+        }
+        impact_feed_urls = {
+            str(url).strip()
+            for url in self.impact_feed_urls_provider()
+            if str(url).strip()
+        }
+        direct_urls = {
+            str(url).strip()
+            for url in self.direct_urls_provider()
+            if str(url).strip()
+        } - semantic_feed_urls - impact_feed_urls
+        return semantic_feed_urls, impact_feed_urls, direct_urls
+
     def _direct_interval(self, feed_url: str) -> float:
         streak = min(30, self._direct_idle_streak.get(feed_url, 0))
         return min(
@@ -915,6 +1034,9 @@ class CentralFeedService:
         )
 
     def _summary(self, value: dict[str, int]) -> dict[str, int]:
+        if not self._impact_provider_configured:
+            value.pop("semantic_feeds", None)
+            value.pop("impact_feeds", None)
         if not self._direct_provider_configured:
             value.pop("direct_sources", None)
             value.pop("direct_polled", None)

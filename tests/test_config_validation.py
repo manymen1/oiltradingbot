@@ -231,8 +231,35 @@ positions:
 
 
 def test_checked_in_active_configs_pass_strict_validation() -> None:
-    load_discovery_config(Path("configs/geopolitics/discovery.yaml"))
+    discovery = load_discovery_config(Path("configs/geopolitics/discovery.yaml"))
+    assert len(discovery.central_feed.impact_feed_urls) == 5
+    assert all(
+        url.startswith("https://")
+        for url in discovery.central_feed.impact_feed_urls
+    )
     load_binary_config(Path("configs/geopolitics/binary-entry.example.yaml"))
     load_location_config(Path("configs/geopolitics/qatar-sept30-yes-protection.yaml"))
     load_iran_config(Path("configs/geopolitics/iran-july17-yes-protection.yaml"))
     load_portfolio_config(Path("configs/geopolitics/positions.example.yaml"))
+
+
+@pytest.mark.parametrize(
+    ("urls", "message"),
+    [
+        (
+            "[https://publisher.example/rss, https://publisher.example/rss]",
+            "must not contain duplicates",
+        ),
+        ("[http://publisher.example/rss]", "must be an https URL"),
+    ],
+)
+def test_impact_feed_urls_fail_closed(tmp_path: Path, urls: str, message: str) -> None:
+    path = _write(
+        tmp_path,
+        f"""
+central_feed:
+  impact_feed_urls: {urls}
+""",
+    )
+    with pytest.raises(ValueError, match=message):
+        load_discovery_config(path)

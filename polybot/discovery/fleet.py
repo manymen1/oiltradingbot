@@ -145,6 +145,15 @@ def _publish_forward_books_status(
     status: dict[str, Any],
 ) -> None:
     """Publish recorder startup state without claiming a fresh fleet sync."""
+    _publish_startup_service_status(config, "forward_books", status)
+
+
+def _publish_startup_service_status(
+    config: DiscoveryConfig,
+    key: str,
+    status: dict[str, Any],
+) -> None:
+    """Publish one startup service block without claiming a fleet sync."""
     path = config.data_dir / "fleet_state.json"
     current: dict[str, Any] = {}
     if path.exists():
@@ -154,7 +163,14 @@ def _publish_forward_books_status(
                 current = raw
         except (OSError, json.JSONDecodeError):
             current = {}
-    _atomic_json_write(path, {**current, "forward_books": status})
+    _atomic_json_write(path, {**current, key: status})
+
+
+def _central_feed_disabled_status() -> dict[str, Any]:
+    return {
+        "enabled": False,
+        "reason": "central_feed.enabled=false",
+    }
 
 
 class FleetManager:
@@ -778,9 +794,13 @@ def run_fleet_command(
         central_service = CentralFeedService(
             store=CentralFeedStore(central_feed_db_path(config)),
             feed_urls_provider=active_feed_urls,
+            impact_feed_urls_provider=(
+                lambda: config.central_feed.impact_feed_urls
+            ),
             direct_urls_provider=active_direct_urls,
             direct_priorities_provider=active_direct_priorities,
             poll_seconds=config.central_feed.poll_seconds,
+            impact_poll_seconds=config.central_feed.impact_poll_seconds,
             max_workers=config.central_feed.max_workers,
             max_entries_per_feed=config.central_feed.max_entries_per_feed,
             direct_poll_seconds=config.central_feed.direct_poll_seconds,
@@ -837,6 +857,32 @@ def run_fleet_command(
         )
         _publish_forward_books_status(config, forward_books_status)
 
+        if central_service is None:
+            central_feed_status = _central_feed_disabled_status()
+        else:
+            try:
+                if once:
+                    central_service.poll_once(force=True)
+                else:
+                    central_service.start()
+                central_feed_status = {
+                    "enabled": True,
+                    **central_service.status(),
+                }
+            except Exception as exc:
+                log_event("central_feed_startup_error", error=str(exc))
+                central_feed_status = {
+                    "enabled": False,
+                    "reason": f"startup_error:{exc}",
+                    **central_service.status(),
+                }
+        log_event("central_feed_service_startup", **central_feed_status)
+        _publish_startup_service_status(
+            config,
+            "central_feed",
+            central_feed_status,
+        )
+
         while True:
             try:
                 _run_discovery_cycle(config_path, config, events_fetch=events_fetch, quotes=quotes, analyzer=analyzer, notifier=notifier, markets_fetch=markets_fetch)
@@ -871,7 +917,12 @@ def run_fleet_command(
             try:
                 summary = manager.sync(store.all_contexts())
                 if central_service is not None:
-                    summary["central_feed"] = central_service.status()
+                    summary["central_feed"] = {
+                        "enabled": True,
+                        **central_service.status(),
+                    }
+                else:
+                    summary["central_feed"] = _central_feed_disabled_status()
                 if forward_book_service is not None:
                     summary["forward_books"] = (
                         forward_book_service.status()

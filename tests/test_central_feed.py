@@ -74,6 +74,131 @@ def test_service_fetches_union_once_and_deduplicates_restart_rows(tmp_path) -> N
     assert status["inserted_total"] == 1
 
 
+def test_impact_feed_records_without_any_semantic_source_plan(tmp_path) -> None:
+    url = "https://publisher.example/rss"
+    store = CentralFeedStore(tmp_path / "central.sqlite3")
+    service = CentralFeedService(
+        store=store,
+        feed_urls_provider=lambda: [],
+        impact_feed_urls_provider=lambda: [url],
+        poll_seconds=2,
+        max_workers=1,
+        max_entries_per_feed=20,
+        retention_hours=72,
+        fetcher=lambda *args, **kwargs: [
+            _article("impact", "Ceasefire announced")
+        ],
+    )
+
+    assert service.poll_once(force=True) == {
+        "feeds": 1,
+        "semantic_feeds": 0,
+        "impact_feeds": 1,
+        "polled": 1,
+        "inserted": 1,
+        "errors": 0,
+        "pruned": 0,
+    }
+    status = store.status()
+    assert status["active_feeds"] == 1
+    assert status["semantic_feeds"] == 0
+    assert status["impact_feeds"] == 1
+    assert status["semantic_rows"] == 0
+    assert status["impact_rows"] == 1
+    with sqlite3.connect(store.path) as connection:
+        role = connection.execute(
+            "SELECT feed_role FROM articles"
+        ).fetchone()[0]
+    assert role == "IMPACT"
+
+
+def test_feed_used_for_capture_and_semantics_is_labeled_both(tmp_path) -> None:
+    url = "https://publisher.example/rss"
+    store = CentralFeedStore(tmp_path / "central.sqlite3")
+    service = CentralFeedService(
+        store=store,
+        feed_urls_provider=lambda: [url],
+        impact_feed_urls_provider=lambda: [url],
+        poll_seconds=2,
+        max_workers=1,
+        max_entries_per_feed=20,
+        retention_hours=72,
+        fetcher=lambda *args, **kwargs: [_article("shared", "Official update")],
+    )
+
+    summary = service.poll_once(force=True)
+    assert summary["feeds"] == 1
+    assert summary["semantic_feeds"] == 1
+    assert summary["impact_feeds"] == 1
+    status = store.status()
+    assert status["semantic_rows"] == 1
+    assert status["impact_rows"] == 1
+    with sqlite3.connect(store.path) as connection:
+        role = connection.execute(
+            "SELECT feed_role FROM articles"
+        ).fetchone()[0]
+    assert role == "BOTH"
+
+
+def test_impact_only_feed_uses_respectful_poll_interval(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+    url = "https://publisher.example/rss"
+    service = CentralFeedService(
+        store=CentralFeedStore(tmp_path / "central.sqlite3"),
+        feed_urls_provider=lambda: [],
+        impact_feed_urls_provider=lambda: [url],
+        poll_seconds=2,
+        impact_poll_seconds=30,
+        max_workers=1,
+        max_entries_per_feed=20,
+        retention_hours=72,
+        fetcher=lambda feed_url, *args, **kwargs: (
+            calls.append(feed_url) or []
+        ),
+    )
+
+    monkeypatch.setattr("polybot.core.central_feed.time.monotonic", lambda: 100.0)
+    assert service.poll_once(force=True)["polled"] == 1
+    monkeypatch.setattr("polybot.core.central_feed.time.monotonic", lambda: 102.0)
+    assert service.poll_once()["polled"] == 0
+    monkeypatch.setattr("polybot.core.central_feed.time.monotonic", lambda: 130.0)
+    assert service.poll_once()["polled"] == 1
+    assert calls == [url, url]
+
+
+def test_existing_central_feed_rows_migrate_as_semantic(tmp_path) -> None:
+    path = tmp_path / "central.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE articles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                feed_url TEXT NOT NULL,
+                article_hash TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                ingested_at TEXT NOT NULL,
+                UNIQUE(feed_url, article_hash)
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO articles(feed_url, article_hash, payload_json, ingested_at) "
+            "VALUES(?, ?, ?, ?)",
+            ("https://old.example/rss", "old", "{}", "2026-07-24T00:00:00Z"),
+        )
+
+    store = CentralFeedStore(path)
+    with sqlite3.connect(path) as connection:
+        role = connection.execute(
+            "SELECT feed_role FROM articles"
+        ).fetchone()[0]
+    assert role == "SEMANTIC"
+    assert store.status()["semantic_rows"] == 1
+
+
 def test_feed_health_distinguishes_healthy_error_and_unpolled(
     tmp_path,
 ) -> None:

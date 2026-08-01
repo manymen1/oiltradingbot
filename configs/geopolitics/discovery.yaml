@@ -115,6 +115,18 @@ central_feed:
   poll_seconds: 2.0
   max_workers: 12
   max_entries_per_feed: 50
+  # Always-on measurement feeds: capture raw publisher timestamps and stories
+  # before RuleSpecs/SourcePlans exist so reaction latency can be calibrated.
+  # IMPACT rows never grant settlement authority or make a market tradeable.
+  impact_feed_urls:
+    - "https://www.aljazeera.com/xml/rss/all.xml"
+    - "https://www.france24.com/en/middle-east/rss"
+    - "https://www.timesofisrael.com/feed/"
+    - "https://www.theguardian.com/world/middleeast/rss"
+    - "https://www.middleeasteye.net/rss"
+  # RSS publishers are announcement channels, not tick feeds. Thirty seconds
+  # is fast relative to observed market reaction and avoids HTTP 429 bans.
+  impact_poll_seconds: 30
   # Required settlement sources without a working feed use centralized
   # conditional-GET sitemap/JSON/listing discovery. This never grants a source
   # authority role; the immutable SourcePlan still controls that.
