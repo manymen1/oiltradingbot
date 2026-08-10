@@ -99,6 +99,16 @@ regression example for fail-closed deadline disagreement; the clause-placement
 variation still motivates canonical clause IDs and is not a reason to relax
 exact agreement.
 
+A subsequent evaluator audit found a deeper implementation requirement. The
+generic duration evaluator currently chooses the last breach and measurement
+from input order and treats the claim timestamp as the duration chronology.
+Even sorting those claims would be insufficient: a later-published article can
+describe an interval that occurred before a more recent qualifying action. The
+ceasefire market therefore requires an immutable action ledger plus explicit
+duration interval start/end instants and the rule's conflict-adjudication state.
+It remains blocked until replay proves reset, exclusion, dispute-window,
+per-leg cutoff, and post-cutoff-completion behavior.
+
 The second canary, the US announcement ending the Iranian blockade, initially
 failed structural validation because both model passes returned the same
 18-hex prefix of a 20-hex clause ID. Compiler-only binding now expands only an
@@ -238,7 +248,9 @@ terms remain excluded, while words containing those character sequences do not.
 2. Add independent daily-bin evaluation for markets 8 and 12.
 3. Add monotone-ladder consistency checks without inferring a terminal state
    merely from prices.
-4. Add resettable-duration state for market 1.
+4. Add resettable-duration state for market 1. Use event-time ordering and
+   explicit interval start/end evidence; never use claim list order or article
+   publication time as the continuity proof.
 5. Add source-data revision and missing-publication handling for IMF PortWatch.
 6. Add compound announcement-and-collection evaluation for market 13.
 7. Continue to emit `AMBIGUOUS` with blockers for conflicting or insufficient

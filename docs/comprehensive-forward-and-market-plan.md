@@ -37,9 +37,11 @@ risk review.
 - Fleet unit: `polybot-fleet.service`, paper-only, using the maintained config.
 - Recorder config: enabled, shared service, all-context recording, 200-context
   cap, 70 GiB warning, 80 GiB hard pause.
-- Host snapshot after restart: 200 selected contexts, 5,484 tokens, 28 shards;
-  book rows continued increasing promptly without waiting for discovery.
-- Recorder database snapshot: about 59.65 GiB, below the warning threshold.
+- Host snapshot at 2026-08-10 09:35 UTC: 200 selected contexts, 5,484
+  tokens, 28/28 connected shards, about 1,986 book events per minute; book
+  rows continued increasing promptly without waiting for discovery.
+- Recorder database snapshot: about 59.97 GiB, below the 70 GiB warning and
+  80 GiB hard-pause thresholds.
 - Unified baseline: Python suite, TypeScript suite, and TypeScript typecheck
   pass through `make test`.
 - Reviewed resolution canary: next US-Iran talks, current RuleSpec and
@@ -57,6 +59,21 @@ risk review.
 
 These are point-in-time observations. Fleet status and SQLite counts must be
 refreshed before every rollout decision.
+
+## Current Operating Assessment
+
+| Area | State | Interpretation | Required action |
+|---|---|---|---|
+| Shared capture | Healthy and streaming | The original empty-recorder blocker is removed | Preserve compatibility and storage tests; do not couple capture to RuleSpec readiness again |
+| REST seed | Asynchronous; 159/5,484 complete and 109 errors in the snapshot | Seed failures no longer delay WebSockets, but error causes need attribution | Classify errors by HTTP/status/exception, retry only transient classes, and expose per-class counts |
+| Discovery | Running in the snapshot | Recorder startup is correctly independent of the long cycle | Keep startup-before-discovery ordering regression coverage |
+| Fleet summary | Child snapshot stale from 2026-08-01 | Recorder health is current, but desired/running bot state is not trustworthy | Diagnose final fleet-sync publication after the current discovery cycle |
+| Semantic assets | 3 current RuleSpecs and 3 current SourcePlans | Only blockade, Cuba, and the closed peace-talks canary are semantically bound | Continue per-market reviewed/consensus work; never infer readiness from capture |
+| Execution | Paper-only; no live families | Safe operating posture | Keep `live_confirmation_families` empty throughout this roadmap |
+
+The REST seed errors and stale fleet child snapshot are operational follow-ups,
+not reasons to stop healthy WebSocket capture. They are reasons to keep status
+fail-loud and to block any promotion that relies on the affected state.
 
 ## System Flow
 
@@ -76,6 +93,103 @@ flowchart LR
     Q --> V
     V --> O["Paper decision and proof"]
 ```
+
+## Source Lanes: Speed, Authority, and Measured Impact
+
+Every source belongs to one or more lanes. The lanes are evaluated separately;
+being fast does not make a source authoritative, and being authoritative does
+not make its endpoint fast.
+
+| Lane | Purpose | Examples | May create terminal evidence? |
+|---|---|---|---|
+| A0 — exact settlement authority | Satisfy a named rule requirement | White House, State, Defense/War, CENTCOM, named Iranian/Israeli authorities, IMF PortWatch | Yes, but only for the exact requirement IDs and predicates in the RuleSpec |
+| A1 — independent credible confirmation | Establish consensus or the reporting branch of a rule | Reuters, AP, AFP and other separately owned publishers accepted by the SourcePlan | Only when the rule explicitly permits credible reporting and its exact quorum is met |
+| A2 — fast actor/regional alert | Discover a likely event before slower authority pages update | IRNA, Mehr, Oman FM, Anadolu and comparable actor/regional feeds | No by default; promote only if the RuleSpec explicitly grants that organization a role |
+| A3 — aggregator discovery | Find original articles and recover from feed gaps | Google News, Bing RSS and publisher mirrors | Never; resolve to the origin publisher and deduplicate there |
+
+Source ingestion order is optimized for time-to-awareness. Evidence authority
+is evaluated later from immutable source and requirement identities. A mirror
+of Reuters is still one Reuters observation; six US government endpoints are
+still one `government:united_states` independence group.
+
+### How much a source moves a market
+
+The system must answer this empirically in cents and executable dollars, not
+with an analyst guess. For each source event, calculate:
+
+- signed and absolute midpoint change at 250 ms, 1 s, 2 s, 5 s, and 10 s;
+- spread and depth change at the same horizons;
+- best executable entry after fee schedule, slippage, and decision latency;
+- quote survival and available size when the decision completes;
+- false-terminal loss and source-policy violation counts.
+
+The configured minimum evidence for exploitation is 20 terminal observations,
+100 human labels, 20 quote samples, 20 stressed-fill samples, and 5 resolved
+paper trades. The 95% conservative lower bound on net edge must remain positive.
+Until then, reported page moves and individual anecdotes are hypotheses only;
+the source stays exploration or alert-only.
+
+## Exact Resettable-Duration Design for the US-Iran Ceasefire Market
+
+The current generic duration evaluator is not sufficient for this market. It
+can compare a breach timestamp with a duration-claim timestamp, but an article
+published later does not prove that the duration it describes began after the
+latest breach. List order is also not a valid event ordering. The reviewed
+candidate stays blocked until the following event-ledger design exists.
+
+### Required immutable inputs
+
+- market creation instant and each leg's exact `11:59 PM America/New_York`
+  action cutoff;
+- qualifying-action occurrence time, first credible report time, attribution,
+  initiator, impact location, weapon class, and exclusion reason;
+- conflict state, resolution time, and the rule's three-full-calendar-day ET
+  adjudication deadline;
+- a duration interval with explicit start and end instants, source requirement
+  IDs, and coverage/authorization proof;
+- the derived first ET calendar day after the latest confirmed qualifying
+  action and the exact noon-ET completion instant on the fourteenth day.
+
+### State machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Observing
+    Observing --> ConflictPending: first credible report conflicts
+    ConflictPending --> ClockReset: action confirmed or totality adjudicates qualifying
+    ConflictPending --> Observing: action excluded or disproved
+    ClockReset --> ClockRunning: next ET calendar day begins
+    ClockRunning --> ConflictPending: possible qualifying action
+    ClockRunning --> ClockReset: qualifying action confirmed
+    ClockRunning --> TerminalYes: authorized interval reaches noon ET on day 14
+    Observing --> DeadlineReview: leg action cutoff passes
+    ClockRunning --> DeadlineReview: unresolved report could affect final interval
+    DeadlineReview --> TerminalYes: valid interval completes after an on-time start/reset
+    DeadlineReview --> TerminalNo: all allowed conflict windows close and no valid interval can complete
+```
+
+A strike after a completed valid interval cannot reverse terminal Yes. A strike
+before completion resets the clock. A threat, authorization, interception,
+surface-to-air strike, small-arms fire, ground incursion, cyber operation,
+naval/artillery fire, minor listed munition, maritime-only impact, or debris
+impact cannot reset it. Conflicting reports keep the state nonterminal until
+the rule's adjudication window closes. Silence, list order, publication time,
+or an opaque `DURATION_OBSERVED=14 days` claim cannot create terminal Yes.
+
+### Acceptance fixtures
+
+1. No qualifying action and a fully covered, authorized 14-day interval.
+2. Qualifying action on day 13 resets the clock.
+3. Earlier breach followed by a separately proven later 14-day interval.
+4. A late-published article describing a pre-breach interval remains blocked.
+5. Intercepted missile, debris, naval gunfire, and threat-only cases do not
+   reset the clock.
+6. Direct terrestrial impact, correct US attribution, and weapon class reset
+   every eligible ladder leg independently.
+7. Conflicting occurrence/attribution/timing enters the three-day ET state and
+   never resolves from a single contradicted statement.
+8. A period beginning by the leg cutoff may complete after it, exactly as the
+   rule permits; a period beginning after the cutoff cannot satisfy that leg.
 
 ## Market Work Queue
 
@@ -97,6 +211,57 @@ flowchart LR
 
 Priority is not authority. The queue controls engineering attention and bounded
 compiler attempts only.
+
+## Execution Board
+
+Work is delivered in the following dependency order. A package may begin in
+parallel only when it does not consume a not-yet-proven primitive from an
+earlier package.
+
+| Package | Markets / system | Main code surfaces | Required outputs | Exit gate |
+|---:|---|---|---|---|
+| 0 | Recorder operations | `polybot/rules/forward.py`, fleet status, service logs | REST seed error taxonomy; final fleet-sync freshness diagnosis; storage runway check | Streaming remains healthy, errors are attributable, and status never implies stale fleet children are current |
+| 1 | Blockade and Cuba | evidence extraction, replay, generic paper runner | Real-source labels, Cuba adversarial replay, compatible quote timelines, paper proofs | Zero false terminals/policy bypasses and configured minimum forward samples begin accumulating |
+| 2 | US-Iran duration and Israel-Iran ceasefire status | contracts, evidence claims, evaluators, replay | Action ledger, explicit duration intervals, ET/IRST calendar logic, conflict adjudication, shared strike-exclusion corpus | Every reset/status fixture passes per leg; compiler candidate repeats exactly or remains blocked |
+| 3 | Final nuclear deal | compiler clauses, compound document evidence, source policy | Same-instrument/two-signature and formal-adoption representations; authorized representative identities | Partial drafts, framework announcements, one-sided signatures, and later repudiation replay correctly |
+| 4 | Hamas disarm and talks location | structured source policy and exclusive topology | Official-OR-wide-consensus policy; 19-way exclusive binding including catch-alls | No flattening of alternative quorums; exactly one terminal location outcome can win |
+| 5 | Hormuz fees | compound predicates and evidence joins | Iranian announcement branch AND independent collection branch, both before each leg cutoff | Neither announcement-only nor isolated vessel demand can terminal; both branches can |
+| 6 | Shipping and Gulf-state daily markets | independent multi-outcome evaluator | Immutable per-date windows, target outcome enforcement, date-local proofs | Evidence for one date cannot affect another; every active leg has boundary fixtures |
+| 7 | Iran leader | categorical authority evaluator | Active-outcome filtering and de facto-control indicators | Symbolic/formal-only claims stay ambiguous; one effective controller or No Head of State resolves exclusively |
+| 8 | Bab el-Mandeb | Gamma deadline repair, IMF PortWatch adapter, numeric evaluator | Versioned raw series, 7-day average, revision ledger, publication cutoff, 14-day missing-data behavior | Fixture parity with PortWatch calculations and deterministic Yes/No under revisions/missing data |
+| 9 | Closed peace talks | replay and source-policy regression only | Historical terminal corpus for official-government versus credible-consensus paths | Remains non-entry and continuously guards semantic/source regressions |
+
+For each package, implementation follows the same vertical slice:
+
+1. Freeze the current `MarketContext` and verbatim rule/clause hashes.
+2. Add the minimum contract expressiveness without weakening older specs.
+3. Build canonical source identities and exact requirement topology.
+4. Add deterministic unit fixtures before importing a reviewed RuleSpec.
+5. Repeat the candidate hash, import with a substantive review, and build a
+   current SourcePlan.
+6. Run adversarial replay, then a one-shot paper cycle, then continuous soak.
+7. Join decisions to compatible capture rows and publish economics with sample
+   counts and confidence bounds.
+8. Keep the market blocked if any step fails; proceed to unrelated packages
+   instead of granting an exception.
+
+## Package-Level Verification Commands
+
+Use the narrowest test while iterating, then the unified gate before every
+commit intended for deployment:
+
+```bash
+TMPDIR=/tmp TEMP=/tmp .venv/bin/python -m pytest -q -s tests/test_rule_evidence.py
+TMPDIR=/tmp TEMP=/tmp .venv/bin/python -m pytest -q -s tests/test_rule_replay.py
+TMPDIR=/tmp TEMP=/tmp .venv/bin/python -m pytest -q -s tests/test_forward_recorder.py tests/test_fleet.py
+TMPDIR=/tmp TEMP=/tmp make test
+```
+
+Market-specific reviewed imports must additionally run consensus reporting,
+candidate preparation/repeat, deterministic preflight, replay, source-plan
+freshness, and a generic paper-runner cycle. The exact generated hashes are
+recorded in the review and operating log; they are never copied from a prior
+rule version.
 
 ## Source Strategy
 
