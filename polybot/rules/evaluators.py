@@ -132,12 +132,35 @@ def _enforce_terminal_source_policy(
         guarded.append(
             replace(
                 evaluation,
-                evidence_state="AMBIGUOUS",
+                evidence_state=(
+                    "STRONG_YES"
+                    if (
+                        evaluation.evidence_state == "TERMINAL_YES"
+                        and policy_is_incomplete_alternative(
+                            spec,
+                            blocker,
+                        )
+                    )
+                    else "AMBIGUOUS"
+                ),
                 terminal=False,
                 blockers=sorted({*evaluation.blockers, blocker}),
             )
         )
     return guarded
+
+
+def policy_is_incomplete_alternative(
+    spec: RuleSpec,
+    blocker: str,
+) -> bool:
+    return (
+        spec.semantics.source_policy.policy_type
+        == "ALTERNATIVE_QUORUM"
+        and blocker.startswith(
+            "source_policy_alternative_quorum_unsatisfied:"
+        )
+    )
 
 
 def _source_policy_blocker(
@@ -155,6 +178,47 @@ def _source_policy_blocker(
     if policy.policy_type == "ANY_OF":
         satisfied = bool(matched)
         needed = 1
+    elif policy.policy_type == "ALTERNATIVE_QUORUM":
+        progress: list[tuple[int, int, int, int]] = []
+        for branch in policy.branches:
+            branch_ids = set(branch.requirement_ids)
+            branch_claims = [
+                claim
+                for claim in claims
+                if set(claim.source_requirement_ids) & branch_ids
+            ]
+            matched_ids = {
+                requirement_id
+                for claim in branch_claims
+                for requirement_id in claim.source_requirement_ids
+                if requirement_id in branch_ids
+            }
+            independent = _independent_count(branch_claims)
+            if (
+                len(matched_ids) >= branch.requirement_quorum
+                and independent >= branch.minimum_independent_sources
+            ):
+                return ""
+            progress.append(
+                (
+                    len(matched_ids),
+                    branch.requirement_quorum,
+                    independent,
+                    branch.minimum_independent_sources,
+                )
+            )
+        best = max(
+            progress,
+            key=lambda item: (
+                item[0] / item[1],
+                item[2] / item[3],
+            ),
+            default=(0, 1, 0, 1),
+        )
+        return (
+            "source_policy_alternative_quorum_unsatisfied:"
+            f"requirements={best[0]}/{best[1]},sources={best[2]}/{best[3]}"
+        )
     elif policy.policy_type == "ALL_OF":
         satisfied = matched == allowed
         needed = len(allowed)

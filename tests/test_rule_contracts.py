@@ -12,12 +12,14 @@ import pytest
 from polybot.core.fees import explicit_zero_fee_schedule
 from polybot.discovery.context import FixtureRuleAnalyzer
 from polybot.discovery.types import MarketContext, OutcomeRecord, RuleAnalysis
-from polybot.rules.compiler import fixture_semantics
+from polybot.rules.compiler import _repair_semantic_payload, fixture_semantics
 from polybot.rules.contracts import (
     EVIDENCE_STATES,
     EvidenceClaim,
     RuleSemantics,
     RuleSpec,
+    SourcePolicy,
+    SourcePolicyBranch,
     build_rule_clause_catalog,
     rule_clause_id,
     source_requirement_id,
@@ -252,6 +254,149 @@ def test_source_policy_rejects_invalid_fallback_shapes_and_conditions() -> None:
     raw["source_policy"]["fallback_requirement_ids"] = [first_id]
     with pytest.raises(ValueError, match="branches overlap"):
         RuleSemantics.from_dict(raw)
+
+
+def test_mixed_consensus_source_path_supports_single_source_terminal() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    raw = fixture_semantics(context).as_dict()
+    clause_ids = list(raw["qualifying_clause_ids"][:1])
+    credible_id = source_requirement_id(
+        "consensus of credible reporting",
+        ["SETTLEMENT"],
+        True,
+    )
+    official_id = source_requirement_id(
+        "U.S. government",
+        ["SETTLEMENT"],
+        False,
+    )
+    raw["source_requirements"] = [
+        {
+            "requirement_id": credible_id,
+            "source_ref": "consensus of credible reporting",
+            "roles": ["SETTLEMENT"],
+            "required": True,
+            "rationale": "primary reporting path",
+            "clause_ids": clause_ids,
+        },
+        {
+            "requirement_id": official_id,
+            "source_ref": "U.S. government",
+            "roles": ["SETTLEMENT"],
+            "required": False,
+            "rationale": "official alternative",
+            "clause_ids": clause_ids,
+        },
+    ]
+    raw["resolution_policy"]["independent_confirmation_sources"] = 1
+    raw["source_policy"] = {
+        "policy_type": "ANY_OF",
+        "requirement_ids": [credible_id, official_id],
+        "quorum": 1,
+        "primary_requirement_ids": [],
+        "fallback_requirement_ids": [],
+        "fallback_condition": "",
+    }
+
+    # Existing immutable specs used ANY_OF for the same operational meaning:
+    # one approved credible publisher or one official source is terminal.
+    RuleSemantics.from_dict(raw)
+
+    raw["source_policy"] = SourcePolicy(
+        policy_type="ALTERNATIVE_QUORUM",
+        requirement_ids=[credible_id, official_id],
+        quorum=1,
+        branches=[
+            SourcePolicyBranch(
+                requirement_ids=[credible_id],
+                requirement_quorum=1,
+                minimum_independent_sources=1,
+            ),
+            SourcePolicyBranch(
+                requirement_ids=[official_id],
+                requirement_quorum=1,
+                minimum_independent_sources=1,
+            ),
+        ],
+    ).as_dict()
+    RuleSemantics.from_dict(raw)
+
+
+def test_compiler_canonicalizes_consensus_or_official_alternatives() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    raw = fixture_semantics(context).as_dict()
+    credible = raw["source_requirements"][0]
+    credible["source_ref"] = "consensus of credible reporting"
+    credible["requirement_id"] = "temporary_consensus"
+    official = {
+        **credible,
+        "requirement_id": "temporary_official",
+        "source_ref": "U.S. government",
+        "required": False,
+    }
+    raw["source_requirements"] = [credible, official]
+    raw["source_policy"] = {
+        "policy_type": "ANY_OF",
+        "requirement_ids": ["temporary_consensus", "temporary_official"],
+        "quorum": 1,
+        "primary_requirement_ids": [],
+        "fallback_requirement_ids": [],
+        "fallback_condition": "",
+    }
+    raw["resolution_policy"]["independent_confirmation_sources"] = 1
+
+    repaired, repairs = _repair_semantic_payload(raw)
+
+    assert repaired["source_policy"]["policy_type"] == "ALTERNATIVE_QUORUM"
+    assert repaired["source_policy"]["branches"] == [
+        {
+            "requirement_ids": ["temporary_consensus"],
+            "requirement_quorum": 1,
+            "minimum_independent_sources": 1,
+        },
+        {
+            "requirement_ids": ["temporary_official"],
+            "requirement_quorum": 1,
+            "minimum_independent_sources": 1,
+        },
+    ]
+    assert repaired["resolution_policy"]["independent_confirmation_sources"] == 1
+    assert "source_policy.any_of_consensus->alternative_quorum" in repairs
+
+
+def test_compiler_preserves_wide_consensus_independence() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    raw = fixture_semantics(context).as_dict()
+    credible = raw["source_requirements"][0]
+    credible["source_ref"] = "wide consensus of credible reporting"
+    credible["requirement_id"] = "temporary_wide_consensus"
+    official = {
+        **credible,
+        "requirement_id": "temporary_official",
+        "source_ref": "Hamas leadership",
+        "required": False,
+    }
+    raw["source_requirements"] = [credible, official]
+    raw["source_policy"] = {
+        "policy_type": "ANY_OF",
+        "requirement_ids": [
+            "temporary_wide_consensus",
+            "temporary_official",
+        ],
+        "quorum": 1,
+        "primary_requirement_ids": [],
+        "fallback_requirement_ids": [],
+        "fallback_condition": "",
+    }
+    raw["resolution_policy"]["independent_confirmation_sources"] = 1
+
+    repaired, _repairs = _repair_semantic_payload(raw)
+
+    assert repaired["source_policy"]["branches"][0] == {
+        "requirement_ids": ["temporary_wide_consensus"],
+        "requirement_quorum": 1,
+        "minimum_independent_sources": 2,
+    }
 
 
 def test_rule_spec_binding_rejects_instrument_mutation() -> None:

@@ -160,12 +160,18 @@ def _coverage_row(
     now: datetime,
 ) -> dict[str, Any]:
     blockers: list[str] = []
-    spec = rule_store.load_spec(
-        context.market_id,
-        context.rule_text_sha256,
-    )
+    spec_error = ""
+    try:
+        spec = rule_store.load_spec(
+            context.market_id,
+            context.rule_text_sha256,
+        )
+    except (TypeError, ValueError) as exc:
+        spec = None
+        spec_error = f"{type(exc).__name__}: {exc}"
+        blockers.append(f"current_rule_spec_invalid:{spec_error}")
     rule_ready = spec is not None
-    if not rule_ready:
+    if not rule_ready and not spec_error:
         blockers.append("current_rule_spec_missing")
 
     plan_status = plan.semantic_status if plan is not None else "MISSING"
@@ -272,6 +278,7 @@ def _coverage_row(
         "book_capture_ready": book_ready,
         "book_fresh": book_fresh,
         "rule_ready": rule_ready,
+        "rule_spec_error": spec_error,
         "rule_spec_sha256": spec.spec_sha256 if spec is not None else "",
         "rule_family": family,
         "source_plan_status": plan_status,
@@ -347,6 +354,7 @@ def _source_health(
         for item in policy.get("requirement_ids", [])
     }
     healthy_requirement_ids: set[str] = set()
+    healthy_requirement_groups: dict[str, set[str]] = {}
     blockers: list[str] = []
     for source in plan.source_records:
         endpoints = list(
@@ -370,6 +378,11 @@ def _source_health(
         if semantic and healthy_endpoints:
             healthy_groups.add(source.independence_group)
             healthy_requirement_ids.update(source.requirement_ids)
+            for requirement_id in source.requirement_ids:
+                healthy_requirement_groups.setdefault(
+                    requirement_id,
+                    set(),
+                ).add(source.independence_group)
         if (
             source.required
             and not healthy_endpoints
@@ -397,6 +410,44 @@ def _source_health(
     elif policy_type == "ANY_OF":
         if not healthy_policy_ids:
             blockers.append("source_policy_any_of_unsatisfied")
+    elif policy_type == "ALTERNATIVE_QUORUM":
+        branches = policy.get("branches", [])
+        branch_ready = False
+        if not isinstance(branches, list) or len(branches) < 2:
+            blockers.append("source_policy_alternative_quorum_invalid")
+        else:
+            for branch in branches:
+                if not isinstance(branch, dict):
+                    continue
+                branch_ids = {
+                    str(item)
+                    for item in branch.get("requirement_ids", [])
+                }
+                requirement_quorum = int(
+                    branch.get("requirement_quorum") or 0
+                )
+                source_minimum = int(
+                    branch.get("minimum_independent_sources") or 0
+                )
+                groups = {
+                    group
+                    for requirement_id in branch_ids
+                    for group in healthy_requirement_groups.get(
+                        requirement_id,
+                        set(),
+                    )
+                }
+                if (
+                    len(branch_ids & healthy_requirement_ids)
+                    >= requirement_quorum
+                    and len(groups) >= source_minimum
+                ):
+                    branch_ready = True
+                    break
+            if not branch_ready:
+                blockers.append(
+                    "source_policy_alternative_quorum_unsatisfied"
+                )
     elif policy_type == "ALL_OF":
         missing = sorted(policy_ids - healthy_policy_ids)
         if missing:

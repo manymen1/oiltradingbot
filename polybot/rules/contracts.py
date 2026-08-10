@@ -39,6 +39,7 @@ RULE_COMPARATORS = {
 SOURCE_ROLES = {"SETTLEMENT", "CONFIRMATION", "CONTEXT"}
 SOURCE_POLICY_TYPES = {
     "ANY_OF",
+    "ALTERNATIVE_QUORUM",
     "ALL_OF",
     "QUORUM",
     "PRIMARY_WITH_FALLBACK",
@@ -363,6 +364,42 @@ def source_requirement_id(
 
 
 @dataclass(frozen=True)
+class SourcePolicyBranch:
+    requirement_ids: list[str]
+    requirement_quorum: int
+    minimum_independent_sources: int
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "SourcePolicyBranch":
+        data = _object(raw, "source_policy_branch")
+        _known(data, cls.__dataclass_fields__, "source_policy_branch")
+        branch = cls(
+            requirement_ids=_source_ids(
+                data.get("requirement_ids"),
+                "source_policy_branch.requirement_ids",
+                minimum=1,
+            ),
+            requirement_quorum=_integer(
+                data.get("requirement_quorum"),
+                "source_policy_branch.requirement_quorum",
+                minimum=1,
+                maximum=20,
+            ),
+            minimum_independent_sources=_integer(
+                data.get("minimum_independent_sources"),
+                "source_policy_branch.minimum_independent_sources",
+                minimum=1,
+                maximum=20,
+            ),
+        )
+        if branch.requirement_quorum > len(branch.requirement_ids):
+            raise ValueError(
+                "source policy branch quorum exceeds requirement count"
+            )
+        return branch
+
+
+@dataclass(frozen=True)
 class SourcePolicy:
     policy_type: str
     requirement_ids: list[str]
@@ -370,9 +407,13 @@ class SourcePolicy:
     primary_requirement_ids: list[str] = field(default_factory=list)
     fallback_requirement_ids: list[str] = field(default_factory=list)
     fallback_condition: str = ""
+    branches: list[SourcePolicyBranch] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        if not self.branches:
+            payload.pop("branches")
+        return payload
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "SourcePolicy":
@@ -412,6 +453,13 @@ class SourcePolicy:
                 if str(data.get("fallback_condition") or "").strip()
                 else ""
             ),
+            branches=[
+                SourcePolicyBranch.from_dict(item)
+                for item in _list(
+                    data.get("branches", []),
+                    "source_policy.branches",
+                )
+            ],
         )
         policy._validate_shape()
         return policy
@@ -420,6 +468,7 @@ class SourcePolicy:
         ids = set(self.requirement_ids)
         primary = set(self.primary_requirement_ids)
         fallback = set(self.fallback_requirement_ids)
+        branches = list(self.branches)
         if not primary.issubset(ids) or not fallback.issubset(ids):
             raise ValueError("source policy branches must reference requirement_ids")
         if primary & fallback:
@@ -427,16 +476,53 @@ class SourcePolicy:
         if self.quorum > len(ids):
             raise ValueError("source policy quorum exceeds requirement count")
         if self.policy_type == "ANY_OF":
-            if self.quorum != 1 or primary or fallback or self.fallback_condition:
+            if (
+                self.quorum != 1
+                or primary
+                or fallback
+                or self.fallback_condition
+                or branches
+            ):
                 raise ValueError("ANY_OF requires quorum=1 and no fallback branches")
+        elif self.policy_type == "ALTERNATIVE_QUORUM":
+            if (
+                self.quorum != 1
+                or primary
+                or fallback
+                or self.fallback_condition
+                or len(branches) < 2
+            ):
+                raise ValueError(
+                    "ALTERNATIVE_QUORUM requires at least two branches, "
+                    "quorum=1, and no fallback branch"
+                )
+            branch_ids = [
+                requirement_id
+                for branch in branches
+                for requirement_id in branch.requirement_ids
+            ]
+            if len(branch_ids) != len(set(branch_ids)):
+                raise ValueError(
+                    "ALTERNATIVE_QUORUM branches must not overlap"
+                )
+            if set(branch_ids) != ids:
+                raise ValueError(
+                    "ALTERNATIVE_QUORUM branches must cover every requirement"
+                )
         elif self.policy_type == "ALL_OF":
-            if self.quorum != len(ids) or primary or fallback or self.fallback_condition:
+            if (
+                self.quorum != len(ids)
+                or primary
+                or fallback
+                or self.fallback_condition
+                or branches
+            ):
                 raise ValueError("ALL_OF requires every requirement and no fallback")
         elif self.policy_type == "QUORUM":
-            if primary or fallback or self.fallback_condition:
+            if primary or fallback or self.fallback_condition or branches:
                 raise ValueError("QUORUM cannot define fallback branches")
         else:
-            if not primary or not fallback or not self.fallback_condition:
+            if branches or not primary or not fallback or not self.fallback_condition:
                 raise ValueError(
                     f"{self.policy_type} requires primary and fallback branches"
                 )
@@ -546,7 +632,10 @@ class RuleSemantics:
     subjective_clause_ids: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        if not self.source_policy.branches:
+            payload["source_policy"].pop("branches")
+        return payload
 
     def normalized_dict(self) -> dict[str, Any]:
         raw = self.as_dict()
@@ -612,6 +701,22 @@ class RuleSemantics:
             raw["source_policy"][key] = sorted(
                 set(raw["source_policy"][key])
             )
+        raw["source_policy"]["branches"] = sorted(
+            (
+                {
+                    **branch,
+                    "requirement_ids": sorted(
+                        set(branch["requirement_ids"])
+                    ),
+                }
+                for branch in raw["source_policy"].get("branches", [])
+            ),
+            key=lambda branch: (
+                branch["requirement_ids"],
+                branch["requirement_quorum"],
+                branch["minimum_independent_sources"],
+            ),
+        )
         return raw
 
     @classmethod
@@ -733,7 +838,10 @@ class RuleSpec:
     compiled_at: str
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        if not self.semantics.source_policy.branches:
+            payload["semantics"]["source_policy"].pop("branches", None)
+        return payload
 
     def execution_dict(self) -> dict[str, Any]:
         raw = self.as_dict()
@@ -1945,6 +2053,7 @@ __all__ = [
     "SOURCE_POLICY_TYPES",
     "STRICT_DEADLINE_AUTHORITY",
     "SourcePolicy",
+    "SourcePolicyBranch",
     "SourceRequirement",
     "TEMPORAL_RELATIONS",
     "TRADE_ACTIONS",

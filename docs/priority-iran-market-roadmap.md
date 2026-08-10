@@ -150,6 +150,15 @@ Trump” and “U.S. government” to canonical US-government identities; the la
 can no longer be misparsed as a synthetic `u.s` domain. This canary remains
 paper-only because its rule family is not promoted, its rules are
 discretionary, and Gamma's deadline differs from the exact verbatim-rule clock.
+The source policy intentionally treats the first qualifying report from one
+approved credible publisher as terminal; a qualifying Trump or U.S.-government
+claim is also terminal. A deterministic adversarial replay confirms that
+artillery, interception, naval shelling, and territorial-sea reports remain
+nonterminal before one Reuters ground-impact report produces the sole paper
+entry, with zero false-terminal and settlement-source violations. Mirrored
+copies retain the origin publisher identity and do not add authority. Current
+execution readiness is still blocked by stale live books and missing fee
+schedules for the three active legs, not by rule or SourcePlan readiness.
 
 The blockade review exercise also exposed and fixed a deterministic source
 registry gap. Its six named US-government alternatives now resolve to the

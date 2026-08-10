@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import replace
 from pathlib import Path
 
@@ -980,6 +981,61 @@ def test_inspect_and_validate_rule_cli_roundtrip(
     validated = json.loads(capsys.readouterr().out)
     assert validated["valid"] is True
     assert validated["spec_sha256"] == inspected["spec_sha256"]
+
+
+def test_invalid_stored_spec_is_localized_in_coverage_and_inspection(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = _config(tmp_path)
+    config = load_discovery_config(config_path)
+    discovery_store = DiscoveryStore(config.data_dir)
+    invalid_context, healthy_context = [
+        context_for_case(case, strong_analysis=True)
+        for case in _golden_rules()[:2]
+    ]
+    rule_store = RuleStore(rule_store_db_path(config))
+    for context in (invalid_context, healthy_context):
+        discovery_store.save_context(context)
+        rule_store.save_spec(
+            RuleSpec.from_context(
+                context,
+                fixture_semantics(context),
+                compiler_model="anthropic:test",
+                compiled_at="2026-07-25T00:00:00+00:00",
+            )
+        )
+
+    with sqlite3.connect(rule_store_db_path(config)) as connection:
+        row = connection.execute(
+            "SELECT spec_json FROM rule_specs WHERE market_id=?",
+            (invalid_context.market_id,),
+        ).fetchone()
+        assert row is not None
+        raw = json.loads(str(row[0]))
+        raw["semantics"]["predicate"]["comparator"] = "INVALID"
+        connection.execute(
+            "UPDATE rule_specs SET spec_json=? WHERE market_id=?",
+            (json.dumps(raw), invalid_context.market_id),
+        )
+
+    assert inspect_rule_command(config_path, healthy_context.market_id) == 0
+    healthy = json.loads(capsys.readouterr().out)
+    assert healthy["spec_error"] == ""
+    assert healthy["semantic_readiness"]["rule_ready"] is True
+
+    assert inspect_rule_command(config_path, invalid_context.market_id) == 0
+    invalid = json.loads(capsys.readouterr().out)
+    assert invalid["spec"] is None
+    assert "predicate.comparator" in invalid["spec_error"]
+    assert invalid["semantic_readiness"]["rule_ready"] is False
+    assert "predicate.comparator" in invalid["semantic_readiness"][
+        "rule_spec_error"
+    ]
+    assert any(
+        blocker.startswith("current_rule_spec_invalid:ValueError:")
+        for blocker in invalid["semantic_readiness"]["blockers"]
+    )
 
 
 def test_rule_compiler_config_rejects_unsafe_family_promotions(

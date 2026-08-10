@@ -219,7 +219,10 @@ _SEMANTIC_SCHEMA: dict[str, Any] = {
                         "requirement count, no branches). QUORUM: any N of "
                         "them. PRIMARY_WITH_FALLBACK / CONDITIONAL_FALLBACK: "
                         "both branches and a fallback_condition are required, "
-                        "and requirement_ids must equal their union."
+                        "and requirement_ids must equal their union. "
+                        "ALTERNATIVE_QUORUM: one of two or more branches may "
+                        "satisfy the rule, and each branch carries its own "
+                        "requirement quorum and independent-source minimum."
                     ),
                 },
                 "requirement_ids": {
@@ -251,6 +254,34 @@ _SEMANTIC_SCHEMA: dict[str, Any] = {
                 "fallback_condition": {
                     "type": "string",
                     "enum": ["", *sorted(SOURCE_FALLBACK_CONDITIONS)],
+                },
+                "branches": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "requirement_ids": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "requirement_quorum": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20,
+                            },
+                            "minimum_independent_sources": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20,
+                            },
+                        },
+                        "required": [
+                            "requirement_ids",
+                            "requirement_quorum",
+                            "minimum_independent_sources",
+                        ],
+                        "additionalProperties": False,
+                    },
                 },
             },
             "required": [
@@ -1284,6 +1315,83 @@ def _repair_semantic_payload(
             if source_policy.get("fallback_condition"):
                 source_policy["fallback_condition"] = ""
                 repairs.append("source_policy.fallback_condition:cleared")
+            if source_policy.get("branches"):
+                source_policy["branches"] = []
+                repairs.append("source_policy.branches:cleared")
+
+        requirements = payload.get("source_requirements")
+        consensus_ids: list[str] = []
+        consensus_minimums: dict[str, int] = {}
+        other_ids: list[str] = []
+        resolution_policy = payload.get("resolution_policy")
+        configured_independence = (
+            int(
+                resolution_policy.get(
+                    "independent_confirmation_sources",
+                    1,
+                )
+            )
+            if isinstance(resolution_policy, dict)
+            and isinstance(
+                resolution_policy.get(
+                    "independent_confirmation_sources"
+                ),
+                int,
+            )
+            else 1
+        )
+        if isinstance(requirements, list):
+            for requirement in requirements:
+                if not isinstance(requirement, dict):
+                    continue
+                requirement_id = str(
+                    requirement.get("requirement_id") or ""
+                ).strip()
+                source_ref = " ".join(
+                    str(requirement.get("source_ref") or "")
+                    .casefold()
+                    .split()
+                )
+                if "consensus" in source_ref and "report" in source_ref:
+                    consensus_ids.append(requirement_id)
+                    consensus_minimums[requirement_id] = max(
+                        configured_independence,
+                        2 if "wide consensus" in source_ref else 1,
+                    )
+                else:
+                    other_ids.append(requirement_id)
+        if consensus_ids and other_ids and policy_type == "ANY_OF":
+            source_policy.update(
+                {
+                    "policy_type": "ALTERNATIVE_QUORUM",
+                    "quorum": 1,
+                    "primary_requirement_ids": [],
+                    "fallback_requirement_ids": [],
+                    "fallback_condition": "",
+                    "branches": [
+                        *[
+                            {
+                                "requirement_ids": [requirement_id],
+                                "requirement_quorum": 1,
+                                "minimum_independent_sources": (
+                                    consensus_minimums[requirement_id]
+                                ),
+                            }
+                            for requirement_id in consensus_ids
+                        ],
+                        {
+                            "requirement_ids": other_ids,
+                            "requirement_quorum": 1,
+                            "minimum_independent_sources": 1,
+                        },
+                    ],
+                }
+            )
+            if isinstance(resolution_policy, dict):
+                resolution_policy["independent_confirmation_sources"] = 1
+            repairs.append(
+                "source_policy.any_of_consensus->alternative_quorum"
+            )
     return payload, repairs
 
 
@@ -1480,6 +1588,27 @@ def _bind_semantic_payload(
         except KeyError as exc:
             raise ValueError(
                 f"source_policy.{field} references unknown requirement id"
+            ) from exc
+    branches = source_policy.get("branches", [])
+    if not isinstance(branches, list):
+        raise ValueError("source_policy.branches must be a list")
+    for index, branch in enumerate(branches):
+        if not isinstance(branch, dict):
+            raise ValueError(
+                f"source_policy.branches[{index}] must be an object"
+            )
+        value = branch.get("requirement_ids")
+        if not isinstance(value, list):
+            raise ValueError(
+                f"source_policy.branches[{index}].requirement_ids must be a list"
+            )
+        try:
+            branch["requirement_ids"] = [
+                id_map[str(item).strip()] for item in value
+            ]
+        except KeyError as exc:
+            raise ValueError(
+                f"source_policy.branches[{index}] references unknown requirement id"
             ) from exc
     if set(source_policy["requirement_ids"]) != canonical_ids:
         raise ValueError(

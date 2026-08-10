@@ -48,7 +48,10 @@ risk review.
   SourcePlan, now correctly `CLOSED`.
 - Active paper canary: US strike on Cuba, current RuleSpec and SourcePlan,
   `PAPER_ELIGIBLE`; one cycle yielded zero executions and explicit ambiguous
-  proofs.
+  proofs. Its adversarial replay rejects artillery, interception, naval
+  shelling, and territorial-sea cases, then permits the first qualifying
+  Reuters report to create the sole paper entry with zero source-policy
+  violations.
 - Official-announcement paper canary: US blockade announcement, reviewed
   RuleSpec `25837ae13fa6dc7b684afa6b06397bdff0d59912dde97f6105be937542214545`,
   fresh SourcePlan, and `PAPER_ELIGIBLE`; one cycle produced 17 ambiguous
@@ -111,6 +114,16 @@ Source ingestion order is optimized for time-to-awareness. Evidence authority
 is evaluated later from immutable source and requirement identities. A mirror
 of Reuters is still one Reuters observation; six US government endpoints are
 still one `government:united_states` independence group.
+
+For the Cuba canary, the operator interpretation is deliberately low latency:
+one qualifying report from one approved credible publisher is terminal, and a
+qualifying Trump or U.S.-government claim is an alternative terminal path.
+Additional publishers corroborate the event but are not required before the
+paper decision. Syndicated copies remain the same origin observation; they do
+not manufacture extra authority. Predicate and exclusion checks still run
+before source policy, so an official report about an intercepted missile,
+artillery, naval shelling, cyber activity, or a non-terrestrial impact cannot
+terminal the market.
 
 ### How much a source moves a market
 
@@ -198,7 +211,7 @@ or an opaque `DURATION_OBSERVED=14 days` claim cannot create terminal Yes.
 | 1 | US announces end of Iranian blockade | `PAPER_ELIGIBLE`, reviewed spec/plan current; adversarial replay passed | White House, State, Defense/War, CENTCOM | Collect forward paper evidence and labeled real-source observations |
 | 2 | US-Iran effective ceasefire | Rule compiler disagreement | US and Iranian government/military; credible reporting only where rules permit | Review 14-day reset state, qualifying strikes, conflict fallback, and exact ET deadline |
 | 3 | US-Iran final nuclear deal | Rule compiler disagreement | US/Iran governments or authorized representatives | Review written-instrument predicate and per-leg rule deadlines |
-| 4 | US military action against Cuba | `PAPER_ELIGIBLE` | Credible-reporting consensus, Donald Trump, or US government | Add replay fixtures for claimed and independently reported strikes; collect forward paper evidence |
+| 4 | US military action against Cuba | `PAPER_ELIGIBLE`; single-source/exclusion replay passed | One approved credible publisher, Donald Trump, or US government | Repair/refresh fee schedules and book freshness, then collect forward paper evidence and labels |
 | 5 | Hamas disarm by Dec 31 | Rule compiler disagreement | Hamas leadership; wide credible consensus only under the rule's alternative path | Implement safe nested/alternative quorum or keep fallback blocked |
 | 6 | Location of next US-Iran talks | Invalid first compile | US/Iran official information plus credible consensus | Review 19-way exclusive topology and correct invalid fallback quorum |
 | 7 | Iran successfully targets shipping | Rule compiler disagreement | Credible-reporting consensus | Review every daily outcome independently; prohibit cross-date inference |
@@ -221,7 +234,7 @@ earlier package.
 | Package | Markets / system | Main code surfaces | Required outputs | Exit gate |
 |---:|---|---|---|---|
 | 0 | Recorder operations | `polybot/rules/forward.py`, fleet status, service logs | REST seed error taxonomy; final fleet-sync freshness diagnosis; storage runway check | Streaming remains healthy, errors are attributable, and status never implies stale fleet children are current |
-| 1 | Blockade and Cuba | evidence extraction, replay, generic paper runner | Real-source labels, Cuba adversarial replay, compatible quote timelines, paper proofs | Zero false terminals/policy bypasses and configured minimum forward samples begin accumulating |
+| 1 | Blockade and Cuba | evidence extraction, replay, generic paper runner | Real-source labels, compatible quote timelines, paper proofs; both adversarial replays now pass | Zero false terminals/policy bypasses and configured minimum forward samples begin accumulating |
 | 2 | US-Iran duration and Israel-Iran ceasefire status | contracts, evidence claims, evaluators, replay | Action ledger, explicit duration intervals, ET/IRST calendar logic, conflict adjudication, shared strike-exclusion corpus | Every reset/status fixture passes per leg; compiler candidate repeats exactly or remains blocked |
 | 3 | Final nuclear deal | compiler clauses, compound document evidence, source policy | Same-instrument/two-signature and formal-adoption representations; authorized representative identities | Partial drafts, framework announcements, one-sided signatures, and later repudiation replay correctly |
 | 4 | Hamas disarm and talks location | structured source policy and exclusive topology | Official-OR-wide-consensus policy; 19-way exclusive binding including catch-alls | No flattening of alternative quorums; exactly one terminal location outcome can win |

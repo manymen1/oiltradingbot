@@ -160,6 +160,129 @@ logs_dir: {tmp_path / 'logs'}
     return config_path, context, spec
 
 
+def _setup_cuba_strike(tmp_path: Path) -> tuple[Path, object, RuleSpec]:
+    rule_text = """This market will resolve to \"Yes\" if a US-initiated drone, missile, or air strike on the soil of Cuba is announced or credibly reported to have occurred by the listed date ET.
+
+For the purposes of this market, a qualifying \"strike\" is defined as the use of aerial bombs, drones, or missiles launched by any United States operatives that physically impact ground territory within Cuba. A strike on terrestrial territory, including rivers, lakes, and ports, counts, but territorial sea does not. Missiles or drones that are intercepted before impact and surface-to-air missile strikes will not be sufficient. Artillery fire, small arms fire, ground incursions, naval shelling, and cyberattacks will not qualify.
+
+Any strike during the timeframe claimed by either Donald Trump or the U.S. government will qualify. The primary resolution source will be a consensus of credible reporting. Otherwise this market resolves No."""
+    case = {
+        "id": "us-strike-on-cuba-by",
+        "kind": "binary",
+        "question": "US military action against Cuba by...?",
+        "rule_text": rule_text,
+        "resolution_source": "consensus of credible reporting",
+        "expected_family": "OCCURRENCE_BEFORE_DEADLINE",
+        "expected_comparator": "OCCURRED",
+    }
+    context = replace(
+        context_for_case(case, strong_analysis=True),
+        state="PAPER_ELIGIBLE",
+    )
+    base = RuleSpec.from_context(
+        context,
+        fixture_semantics(context),
+        compiler_model="fixture",
+        compiled_at="2026-07-25T00:00:00+00:00",
+    )
+    consensus_id = source_requirement_id(
+        "consensus of credible reporting",
+        ["SETTLEMENT"],
+        True,
+    )
+    trump_id = source_requirement_id(
+        "donald trump",
+        ["SETTLEMENT"],
+        False,
+    )
+    government_id = source_requirement_id(
+        "u.s. government",
+        ["SETTLEMENT"],
+        False,
+    )
+    consensus_clauses = [
+        item.clause_id
+        for item in base.rule_clauses
+        if "resolution source" in item.text.casefold()
+    ]
+    official_clauses = [
+        item.clause_id
+        for item in base.rule_clauses
+        if "claimed by either" in item.text.casefold()
+    ]
+    semantics = replace(
+        base.semantics,
+        source_requirements=[
+            SourceRequirement(
+                requirement_id=consensus_id,
+                source_ref="consensus of credible reporting",
+                roles=["SETTLEMENT"],
+                required=True,
+                rationale="one approved credible publisher is terminal",
+                clause_ids=consensus_clauses,
+            ),
+            SourceRequirement(
+                requirement_id=trump_id,
+                source_ref="donald trump",
+                roles=["SETTLEMENT"],
+                required=False,
+                rationale="explicit official alternative",
+                clause_ids=official_clauses,
+            ),
+            SourceRequirement(
+                requirement_id=government_id,
+                source_ref="u.s. government",
+                roles=["SETTLEMENT"],
+                required=False,
+                rationale="explicit official alternative",
+                clause_ids=official_clauses,
+            ),
+        ],
+        source_policy=SourcePolicy(
+            policy_type="ANY_OF",
+            requirement_ids=[consensus_id, trump_id, government_id],
+            quorum=1,
+        ),
+        resolution_policy=replace(
+            base.semantics.resolution_policy,
+            independent_confirmation_sources=1,
+        ),
+    )
+    spec = RuleSpec.from_context(
+        context,
+        semantics,
+        compiler_model="reviewed:test",
+        compiled_at="2026-07-25T00:00:00+00:00",
+    )
+    plan = build_source_plan(context, spec)
+    assert not plan.missing_required_source_refs
+    data_dir = tmp_path / "data"
+    store = DiscoveryStore(data_dir)
+    store.save_context(context)
+    store.save_source_plan(plan)
+    RuleStore(data_dir / "rules.sqlite3").save_spec(spec)
+    config_path = tmp_path / "discovery.yaml"
+    config_path.write_text(
+        f"""
+classifier:
+  provider: rule_based
+rule_compiler:
+  enabled: true
+rule_runner:
+  enabled: true
+  extraction_passes: 2
+  paper_fee_bps: 0
+  paper_slippage_bps: 25
+fleet:
+  position_mode: alert_only
+data_dir: {data_dir}
+logs_dir: {tmp_path / 'logs'}
+""",
+        encoding="utf-8",
+    )
+    return config_path, context, spec
+
+
 def _book(
     at: str,
     outcome: str,
@@ -354,6 +477,66 @@ def test_blockade_replay_rejects_near_misses_before_official_announcement(
     assert len(executed) == 1
     assert executed[0]["trigger"] == "ARTICLE"
     assert executed[0]["at"] == "2026-07-25T10:00:05+00:00"
+    assert result["decisions"]["executed_entries"] == 1
+    assert result["safety"]["false_terminal_actions"] == 0
+    assert result["safety"]["settlement_source_violations"] == 0
+
+
+def test_cuba_replay_uses_first_credible_source_but_rejects_exclusions(
+    tmp_path: Path,
+) -> None:
+    config_path, context, spec = _setup_cuba_strike(tmp_path)
+    outcome = spec.outcomes[0].name
+    events = [
+        _book(
+            "2026-07-25T10:00:00+00:00",
+            outcome,
+            yes_bid=0.68,
+            yes_ask=0.70,
+        ),
+        _article(
+            "2026-07-25T10:00:01+00:00",
+            "artillery",
+            "whitehouse.gov",
+            "The U.S. government confirmed artillery fire near Cuba.",
+        ),
+        _article(
+            "2026-07-25T10:00:02+00:00",
+            "intercepted",
+            "reuters.com",
+            "Reuters reported that a U.S. missile was intercepted before impact.",
+        ),
+        _article(
+            "2026-07-25T10:00:03+00:00",
+            "naval",
+            "reuters.com",
+            "Reuters reported naval shelling in Cuban territorial sea.",
+        ),
+        _article(
+            "2026-07-25T10:00:04+00:00",
+            "qualifying-reuters",
+            "reuters.com",
+            "Reuters credibly reported that a U.S. missile physically impacted Cuban ground territory.",
+        ),
+        {
+            "type": "RESOLUTION",
+            "at": "2026-12-31T23:59:59-05:00",
+            "outcome": outcome,
+            "resolved_yes": True,
+        },
+    ]
+    timeline = tmp_path / "cuba-strike-timeline.jsonl"
+    timeline.write_text(
+        "\n".join(json.dumps(item, sort_keys=True) for item in events),
+        encoding="utf-8",
+    )
+
+    result = replay_rule_market(config_path, context.market_id, timeline)
+
+    executed = [cycle for cycle in result["cycles"] if cycle.get("executed")]
+    assert len(executed) == 1
+    assert executed[0]["trigger"] == "ARTICLE"
+    assert executed[0]["at"] == "2026-07-25T10:00:04+00:00"
     assert result["decisions"]["executed_entries"] == 1
     assert result["safety"]["false_terminal_actions"] == 0
     assert result["safety"]["settlement_source_violations"] == 0

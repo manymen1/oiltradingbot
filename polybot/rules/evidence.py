@@ -685,6 +685,18 @@ def fixture_fact(
             "fabricated communication",
             "hacked communication",
             "impersonated communication",
+            # Cuba-strike resolution exclusions. These are deliberately
+            # literal so a rule-based replay cannot turn a non-qualifying
+            # military action into a strike merely because an official or
+            # credible publisher reported it.
+            "artillery fire",
+            "small arms fire",
+            "ground incursion",
+            "naval shelling",
+            "cyberattack",
+            "intercepted before impact",
+            "surface-to-air missile",
+            "territorial sea",
         )
     ):
         assertion = "EXCLUDED_ACTIVITY"
@@ -750,6 +762,8 @@ def fixture_fact(
             "formally announced",
             "signed the final",
             "sworn in",
+            "physically impacted cuban ground territory",
+            "air strike on the soil of cuba occurred",
         )
     ):
         assertion = "PREDICATE_SATISFIED"

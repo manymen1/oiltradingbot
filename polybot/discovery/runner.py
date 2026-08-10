@@ -628,7 +628,12 @@ def inspect_rule_command(config_path: Path, market_id: str) -> int:
     from polybot.rules.store import RuleStore
 
     rule_store = RuleStore(rule_store_db_path(config))
-    spec = rule_store.load_spec(market_id, context.rule_text_sha256)
+    spec_error = ""
+    try:
+        spec = rule_store.load_spec(market_id, context.rule_text_sha256)
+    except (TypeError, ValueError) as exc:
+        spec = None
+        spec_error = f"{type(exc).__name__}: {exc}"
     from .coverage import build_semantic_coverage
 
     readiness = next(
@@ -644,6 +649,7 @@ def inspect_rule_command(config_path: Path, market_id: str) -> int:
         "current_rule_text_sha256": context.rule_text_sha256,
         "spec_sha256": spec.spec_sha256 if spec else None,
         "spec": spec.as_dict() if spec else None,
+        "spec_error": spec_error,
         "passes": rule_store.compilation_passes(
             market_id,
             context.rule_text_sha256,

@@ -24,6 +24,7 @@ from polybot.rules.contracts import (
     EvidenceClaim,
     RuleSpec,
     SourcePolicy,
+    SourcePolicyBranch,
     SourceRequirement,
     source_requirement_id,
 )
@@ -574,6 +575,106 @@ def test_all_of_source_policy_requires_every_mapped_requirement() -> None:
     assert "source_policy_unsatisfied:1/2" in partial.blockers
     assert complete.evidence_state == "TERMINAL_YES"
     assert complete.terminal is True
+
+
+def test_alternative_quorum_accepts_one_credible_or_official_source() -> None:
+    _context, base = _spec("OCCURRENCE_BEFORE_DEADLINE")
+    credible = SourceRequirement(
+        requirement_id=source_requirement_id(
+            "consensus of credible reporting",
+            ["SETTLEMENT"],
+            True,
+        ),
+        source_ref="consensus of credible reporting",
+        roles=["SETTLEMENT"],
+        required=True,
+        rationale="credible reporting branch",
+        clause_ids=list(base.semantics.qualifying_clause_ids[:1]),
+    )
+    official = SourceRequirement(
+        requirement_id=source_requirement_id(
+            "U.S. government",
+            ["SETTLEMENT"],
+            False,
+        ),
+        source_ref="U.S. government",
+        roles=["SETTLEMENT"],
+        required=False,
+        rationale="official claim branch",
+        clause_ids=list(base.semantics.qualifying_clause_ids[:1]),
+    )
+    semantics = replace(
+        base.semantics,
+        source_requirements=[credible, official],
+        source_policy=SourcePolicy(
+            policy_type="ALTERNATIVE_QUORUM",
+            requirement_ids=[
+                credible.requirement_id,
+                official.requirement_id,
+            ],
+            quorum=1,
+            branches=[
+                SourcePolicyBranch(
+                    requirement_ids=[credible.requirement_id],
+                    requirement_quorum=1,
+                    minimum_independent_sources=1,
+                ),
+                SourcePolicyBranch(
+                    requirement_ids=[official.requirement_id],
+                    requirement_quorum=1,
+                    minimum_independent_sources=1,
+                ),
+            ],
+        ),
+        resolution_policy=replace(
+            base.semantics.resolution_policy,
+            independent_confirmation_sources=1,
+        ),
+    )
+    spec = RuleSpec.from_dict(replace(base, semantics=semantics).as_dict())
+    reuters = _claim(
+        spec,
+        article_id="reuters",
+        assertion="PREDICATE_SATISFIED",
+        group="reuters",
+        requirement_ids=[credible.requirement_id],
+    )
+    mirror = replace(
+        _claim(
+            spec,
+            article_id="reuters-mirror",
+            assertion="PREDICATE_SATISFIED",
+            group="reuters",
+            requirement_ids=[credible.requirement_id],
+        ),
+        source_domain="finance.yahoo.com",
+    )
+    one_publisher = evaluate_rule(spec, [reuters, mirror])[0]
+    assert one_publisher.evidence_state == "TERMINAL_YES"
+    assert one_publisher.terminal is True
+
+    ap = _claim(
+        spec,
+        article_id="ap",
+        assertion="PREDICATE_SATISFIED",
+        group="associated_press",
+        requirement_ids=[credible.requirement_id],
+    )
+    corroborated = evaluate_rule(spec, [reuters, mirror, ap])[0]
+    assert corroborated.evidence_state == "TERMINAL_YES"
+    assert corroborated.terminal is True
+
+    government = _claim(
+        spec,
+        article_id="white-house",
+        assertion="PREDICATE_SATISFIED",
+        group="government:united_states",
+        roles=["SETTLEMENT", "CONFIRMATION"],
+        requirement_ids=[official.requirement_id],
+    )
+    official_path = evaluate_rule(spec, [government])[0]
+    assert official_path.evidence_state == "TERMINAL_YES"
+    assert official_path.terminal is True
 
 
 def test_terminal_evidence_requires_timestamp_and_foreclosure_source() -> None:
