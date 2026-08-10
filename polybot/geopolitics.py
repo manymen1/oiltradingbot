@@ -132,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     rotate_forward_parser = sub.add_parser("rotate-forward-recorder")
     rotate_forward_parser.add_argument("--config", required=True)
     rotate_forward_parser.add_argument("--archive-dir")
+    rotate_forward_parser.add_argument("--full-check", action="store_true")
     plan_sources_parser = sub.add_parser("plan-sources")
     plan_sources_parser.add_argument("--config", required=True)
     plan_sources_parser.add_argument("--market")
@@ -382,6 +383,7 @@ def main(argv: list[str] | None = None) -> int:
             archive_dir=(
                 Path(args.archive_dir) if args.archive_dir else None
             ),
+            full_check=args.full_check,
         )
     if args.command == "plan-sources":
         from .discovery.runner import plan_sources_command

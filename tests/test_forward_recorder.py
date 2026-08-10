@@ -830,11 +830,13 @@ def test_rotation_refuses_active_store_then_archives_without_deletion(
     manifest = rotate_forward_recorder(
         config_path,
         archive_dir=tmp_path / "archive",
+        full_check=True,
     )
     archive_path = Path(manifest["archive_path"])
     assert archive_path.exists()
     assert Path(manifest["manifest_path"]).exists()
     assert manifest["quick_check"] == "ok"
+    assert manifest["verification_mode"] == "full_quick_check"
     assert manifest["archived_bytes"] > 0
 
     archived = ForwardRecorderStore(archive_path)

@@ -3414,6 +3414,7 @@ def rotate_forward_recorder(
     config_path: Path,
     *,
     archive_dir: Path | None = None,
+    full_check: bool = False,
 ) -> dict[str, Any]:
     """Checkpoint and atomically archive an inactive recorder database.
 
@@ -3454,13 +3455,58 @@ def rotate_forward_recorder(
                 raise RuntimeError(
                     "forward recorder WAL checkpoint remained busy"
                 )
-            quick_check = str(
-                connection.execute("PRAGMA quick_check").fetchone()[0]
-            )
-            if quick_check != "ok":
+            required_tables = {
+                "bindings",
+                "sessions",
+                "operational_events",
+                "book_events",
+                "trade_prints",
+                "articles",
+                "extractions",
+                "decision_proofs",
+                "quote_anchors",
+                "quote_samples",
+                "resolutions",
+                "rest_seed_failures",
+            }
+            tables = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_schema WHERE type='table'"
+                ).fetchall()
+            }
+            missing_tables = sorted(required_tables - tables)
+            if missing_tables:
                 raise RuntimeError(
-                    f"forward recorder quick_check failed: {quick_check}"
+                    "forward recorder structural check missing tables: "
+                    + ",".join(missing_tables)
                 )
+            page_count = int(
+                connection.execute("PRAGMA page_count").fetchone()[0]
+            )
+            freelist_count = int(
+                connection.execute("PRAGMA freelist_count").fetchone()[0]
+            )
+            book_high_watermark = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(id), 0) FROM book_events"
+                ).fetchone()[0]
+            )
+            operational_high_watermark = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(id), 0) FROM operational_events"
+                ).fetchone()[0]
+            )
+            quick_check = "not_run"
+            if full_check:
+                quick_check = str(
+                    connection.execute("PRAGMA quick_check").fetchone()[0]
+                )
+                if quick_check != "ok":
+                    raise RuntimeError(
+                        "forward recorder quick_check failed: "
+                        f"{quick_check}"
+                    )
 
         rotated_at = _now()
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -3496,6 +3542,17 @@ def rotate_forward_recorder(
             "archived_sidecars": archived_sidecars,
             "archived_bytes": archived_bytes,
             "quick_check": quick_check,
+            "verification_mode": (
+                "full_quick_check"
+                if full_check
+                else "checkpoint_and_structural"
+            ),
+            "page_count": page_count,
+            "freelist_count": freelist_count,
+            "book_event_high_watermark": book_high_watermark,
+            "operational_event_high_watermark": (
+                operational_high_watermark
+            ),
             "wal_checkpoint": list(checkpoint),
             "recovery": (
                 "Set forward_recorder.db_path to archive_path in a copy of "
@@ -3522,12 +3579,14 @@ def rotate_forward_recorder_command(
     config_path: Path,
     *,
     archive_dir: Path | None = None,
+    full_check: bool = False,
 ) -> int:
     print(
         json.dumps(
             rotate_forward_recorder(
                 config_path,
                 archive_dir=archive_dir,
+                full_check=full_check,
             ),
             indent=2,
             sort_keys=True,
