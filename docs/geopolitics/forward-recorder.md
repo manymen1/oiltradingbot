@@ -244,9 +244,10 @@ The command refuses an active recorder, checkpoints WAL, validates the SQLite
 schema and critical table/page high-water marks, atomically moves the database
 and any sidecars into
 `data/discovery/forward_recorder_archive/`, writes a recovery manifest, and
-creates a fresh database at the configured path. It never deletes the archived
-segment. To inspect it, point `forward_recorder.db_path` in a copied config at
-the manifest's `archive_path`.
+creates a fresh database at the configured path. Active REST-404 cooldowns are
+carried into the new segment so rotation cannot trigger a retry storm. It never
+deletes the archived segment. To inspect it, point `forward_recorder.db_path`
+in a copied config at the manifest's `archive_path`.
 
 For a scheduled maintenance window where a full-file scan is acceptable, use
 `bin/geo rotate-forward-recorder --config ... --full-check`. On the current

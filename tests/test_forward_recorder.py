@@ -819,6 +819,13 @@ def test_rotation_refuses_active_store_then_archives_without_deletion(
     database_path = forward_recorder_db_path(config)
     store = ForwardRecorderStore(database_path)
     binding = store.ensure_book_binding(context, config.forward_recorder)
+    token_id = context.outcomes[0].yes_token_id
+    store.record_rest_seed_not_found(
+        token_id,
+        failed_at="2026-07-25T00:00:00+00:00",
+        retry_after="2099-07-26T00:00:00+00:00",
+        error="404 Client Error",
+    )
 
     with pytest.raises(RuntimeError, match="recorder is active"):
         rotate_forward_recorder(
@@ -838,12 +845,14 @@ def test_rotation_refuses_active_store_then_archives_without_deletion(
     assert manifest["quick_check"] == "ok"
     assert manifest["verification_mode"] == "full_quick_check"
     assert manifest["archived_bytes"] > 0
+    assert manifest["rest_seed_failures_carried"] == 1
 
     archived = ForwardRecorderStore(archive_path)
     assert archived.latest_book_binding(context.market_id) == binding
     archived.close()
     fresh = ForwardRecorderStore(database_path)
     assert fresh.latest_book_binding(context.market_id) is None
+    assert fresh.rest_seed_failure_tokens([token_id]) == {token_id}
     fresh.close()
 
 

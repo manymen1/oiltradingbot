@@ -3558,6 +3558,7 @@ def rotate_forward_recorder(
                 "Set forward_recorder.db_path to archive_path in a copy of "
                 "the config to inspect or build timelines from this segment."
             ),
+            "rest_seed_failures_carried": 0,
         }
         manifest_path = archive_path.with_suffix(
             f"{archive_path.suffix}.manifest.json"
@@ -3571,6 +3572,32 @@ def rotate_forward_recorder(
             lock_handle.close()
 
     fresh_store = ForwardRecorderStore(database_path)
+    with sqlite3.connect(
+        f"file:{archive_path}?mode=ro",
+        uri=True,
+        timeout=30.0,
+    ) as archived_connection:
+        failure_rows = archived_connection.execute(
+            """
+            SELECT token_id, status_code, failure_count, first_failed_at,
+                   last_failed_at, retry_after, last_error
+            FROM rest_seed_failures WHERE retry_after>?
+            """,
+            (rotated_at,),
+        ).fetchall()
+    if failure_rows:
+        with fresh_store._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO rest_seed_failures(
+                    token_id, status_code, failure_count, first_failed_at,
+                    last_failed_at, retry_after, last_error
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                failure_rows,
+            )
+    manifest["rest_seed_failures_carried"] = len(failure_rows)
+    _atomic_json_write(Path(str(manifest["manifest_path"])), manifest)
     fresh_store.close()
     return manifest
 
