@@ -13,10 +13,12 @@ signing key, order client, or live-order method.
 `make paper` starts one fleet-wide public-book service before it starts the
 generic paper workers. The service:
 
-- resolves every current `RuleSpec` and source-plan binding;
+- creates immutable book-capture bindings directly from persisted market
+  contexts and token IDs, without waiting for a `RuleSpec` or source plan;
 - divides the active token universe into bounded WebSocket shards;
-- seeds full depth from the public REST book in parallel;
 - subscribes to the public market stream;
+- seeds full depth from the public REST book asynchronously after sockets
+  start, with persisted 404 cooldowns and generation-safe cancellation;
 - sends the required application-level `PING` every 10 seconds;
 - reconnects with bounded exponential backoff;
 - reconstructs full depth from `book` and `price_change` messages;
@@ -60,6 +62,10 @@ The store contains:
 - executable quote anchors;
 - public market-stream and Gamma-finalized resolutions;
 - connection, reconnect, REST-seed, and runner-cycle events.
+
+Derived `best_bid_ask` notifications are counted but not duplicated into the
+operational-event log. Authoritative `book` snapshots and `price_change`
+updates remain in the book-event timeline.
 
 An article ID cannot be reused with different bytes. A proof, binding, or
 resolution cannot be silently overwritten. Conflicting final resolutions
@@ -205,7 +211,12 @@ forward_recorder:
   shared_book_service: true
   max_tokens_per_connection: 200
   rest_seed_workers: 8
+  rest_seed_not_found_retry_seconds: 86400
   max_book_levels: 20
+  record_all_contexts: true
+  max_recorded_markets: 200
+  storage_warning_gib: 70
+  storage_hard_limit_gib: 80
   quote_survival_horizons_ms: [100, 250, 500, 1000, 2000, 5000, 10000]
   max_sample_lag_ms: 250
 ```
@@ -214,3 +225,24 @@ Unknown configuration fields, duplicate or unsorted horizons, non-WebSocket
 URLs, unsafe bounds, and recorder-without-runner configurations are rejected.
 Direct-source and deterministic-extraction settings are documented in
 `fast-source-lane.md`.
+
+## Storage operations
+
+Live status reports database size, observed GiB/day growth, hours remaining to
+the warning and hard limits, dropped writes, and the count of intentionally
+ignored derived BBO notifications. At the hard limit, sockets remain up but
+new database writes pause and status fails loudly.
+
+Rotation is offline and recoverable. Stop every recorder process first, then
+run:
+
+```bash
+make rotate-forward-recorder
+```
+
+The command refuses an active recorder, checkpoints WAL, runs SQLite
+`quick_check`, atomically moves the database and any sidecars into
+`data/discovery/forward_recorder_archive/`, writes a recovery manifest, and
+creates a fresh database at the configured path. It never deletes the archived
+segment. To inspect it, point `forward_recorder.db_path` in a copied config at
+the manifest's `archive_path`.

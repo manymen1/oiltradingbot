@@ -1538,9 +1538,16 @@ def _run_discovery_cycle(
     analyzer,
     notifier,
     markets_fetch=None,
+    stage_callback: Callable[[str], None] | None = None,
 ) -> None:
+    def stage(name: str) -> None:
+        log_event("discovery_cycle_stage", stage=name)
+        if stage_callback is not None:
+            stage_callback(name)
+
     store = DiscoveryStore(config.data_dir)
     previous = _pipeline_state(config)
+    stage("DISCOVER_MARKETS")
     discover_markets_command(config_path, events_fetch=events_fetch)
     # Migrate the already-monitored semantic universe in bounded batches.
     # Existing plans keep a deferred market in this queue even after the
@@ -1568,6 +1575,7 @@ def _run_discovery_cycle(
         }
     # The descriptive pre-pass supplies RuleAnalysis and prioritization, but
     # cannot authorize execution. Only the strict post-plan pass does that.
+    stage("GRADE_DESCRIPTIVE")
     grade_markets_command(
         config_path,
         analyzer=analyzer,
@@ -1575,15 +1583,18 @@ def _run_discovery_cycle(
         market_ids=semantic_candidate_ids,
     )
     if config.rule_compiler.enabled:
+        stage("COMPILE_RULES")
         compile_rules_command(
             config_path,
             market_ids=semantic_candidate_ids or set(),
         )
+        stage("PLAN_SOURCES")
         plan_sources_command(
             config_path,
             market_ids=semantic_candidate_ids or set(),
         )
         # Eligibility is computed only after both semantic assets exist.
+        stage("GRADE_SEMANTIC")
         grade_markets_command(
             config_path,
             analyzer=analyzer,
@@ -1591,9 +1602,11 @@ def _run_discovery_cycle(
             market_ids=semantic_candidate_ids or set(),
         )
     else:
+        stage("PLAN_SOURCES")
         plan_sources_command(config_path)
 
     if config.profit_priority.enabled:
+        stage("PROFIT_PRIORITY")
         from .profit_priority import build_priority_snapshot
 
         priority = build_priority_snapshot(config, store)
@@ -1610,6 +1623,7 @@ def _run_discovery_cycle(
     # the calibration report proves they beat the market.
     from .estimator import refresh_estimates
 
+    stage("REFRESH_ESTIMATES")
     estimates = refresh_estimates(
         store.all_contexts(),
         forecast_data_root=config.opportunity.forecast_data_root,
@@ -1623,12 +1637,14 @@ def _run_discovery_cycle(
             skipped_fresh=estimates.get("skipped_fresh", 0),
         )
 
+    stage("SCAN_OPPORTUNITIES")
     scan_opportunities_command(config_path, quotes=quotes)
 
     # Resolved markets feed the calibration loop automatically -- every
     # resolution makes the probability sources measurably scoreable.
     from .calibration import CalibrationLog, capture_resolutions
 
+    stage("CAPTURE_RESOLUTIONS")
     resolutions = capture_resolutions(store, CalibrationLog(config.data_dir), markets_fetch=markets_fetch)
     if config.forward_recorder.enabled and resolutions["recorded"]:
         from polybot.rules.forward import record_forward_resolutions
@@ -1637,6 +1653,7 @@ def _run_discovery_cycle(
     for item in resolutions["recorded"]:
         notifier.notify("Discovery: outcome resolved; calibration log updated", **item)
 
+    stage("FINALIZE")
     contexts = store.all_contexts()
     live_now = sorted(c.market_id for c in contexts if c.state == "LIVE_CONFIRMATION_ELIGIBLE")
     executable_now = sorted(

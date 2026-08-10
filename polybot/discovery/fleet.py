@@ -173,6 +173,8 @@ def _publish_discovery_cycle_status(
     started_at: str,
     completed_at: str | None = None,
     error: str = "",
+    stage: str = "",
+    stage_started_at: str | None = None,
 ) -> dict[str, Any]:
     """Publish cycle progress without pretending fleet reconciliation ran."""
     path = config.data_dir / "fleet_state.json"
@@ -190,6 +192,8 @@ def _publish_discovery_cycle_status(
         "state": state,
         "started_at": started_at,
         "completed_at": completed_at,
+        "stage": stage,
+        "stage_started_at": stage_started_at,
         "last_completed_at": (
             completed_at
             if state == "COMPLETE" and completed_at
@@ -920,13 +924,43 @@ def run_fleet_command(
 
         while True:
             cycle_started_at = datetime.now(timezone.utc).isoformat()
+            current_stage = "STARTING"
+            current_stage_started_at = cycle_started_at
             discovery_cycle_status = _publish_discovery_cycle_status(
                 config,
                 state="RUNNING",
                 started_at=cycle_started_at,
+                stage=current_stage,
+                stage_started_at=current_stage_started_at,
             )
+
+            def publish_discovery_stage(stage: str) -> None:
+                nonlocal discovery_cycle_status
+                nonlocal current_stage
+                nonlocal current_stage_started_at
+                current_stage = stage
+                current_stage_started_at = datetime.now(
+                    timezone.utc
+                ).isoformat()
+                discovery_cycle_status = _publish_discovery_cycle_status(
+                    config,
+                    state="RUNNING",
+                    started_at=cycle_started_at,
+                    stage=current_stage,
+                    stage_started_at=current_stage_started_at,
+                )
+
             try:
-                _run_discovery_cycle(config_path, config, events_fetch=events_fetch, quotes=quotes, analyzer=analyzer, notifier=notifier, markets_fetch=markets_fetch)
+                _run_discovery_cycle(
+                    config_path,
+                    config,
+                    events_fetch=events_fetch,
+                    quotes=quotes,
+                    analyzer=analyzer,
+                    notifier=notifier,
+                    markets_fetch=markets_fetch,
+                    stage_callback=publish_discovery_stage,
+                )
             except Exception as exc:
                 log_event("fleet_discovery_cycle_error", error=str(exc))
                 discovery_cycle_status = _publish_discovery_cycle_status(
@@ -935,6 +969,8 @@ def run_fleet_command(
                     started_at=cycle_started_at,
                     completed_at=datetime.now(timezone.utc).isoformat(),
                     error=str(exc),
+                    stage=current_stage,
+                    stage_started_at=current_stage_started_at,
                 )
             else:
                 discovery_cycle_status = _publish_discovery_cycle_status(
@@ -942,6 +978,8 @@ def run_fleet_command(
                     state="COMPLETE",
                     started_at=cycle_started_at,
                     completed_at=datetime.now(timezone.utc).isoformat(),
+                    stage="COMPLETE",
+                    stage_started_at=datetime.now(timezone.utc).isoformat(),
                 )
             cycle_contexts = store.all_contexts()
             desired_contexts = manager.desired_markets(cycle_contexts)

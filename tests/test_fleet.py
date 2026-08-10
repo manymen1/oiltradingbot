@@ -706,13 +706,22 @@ forward_recorder:
         FakeForwardBooks,
     )
 
-    def fake_cycle(*_args, **_kwargs):
+    def fake_cycle(*_args, **kwargs):
         state = json.loads(
             (tmp_path / "data" / "fleet_state.json").read_text(
                 encoding="utf-8"
             )
         )
         assert state["discovery_cycle"]["state"] == "RUNNING"
+        assert state["discovery_cycle"]["stage"] == "STARTING"
+        kwargs["stage_callback"]("COMPILE_RULES")
+        staged = json.loads(
+            (tmp_path / "data" / "fleet_state.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert staged["discovery_cycle"]["stage"] == "COMPILE_RULES"
+        assert staged["discovery_cycle"]["stage_started_at"]
         calls.append("discovery")
 
     monkeypatch.setattr(
@@ -738,6 +747,7 @@ forward_recorder:
     )
     assert state["forward_books"]["enabled"] is True
     assert state["discovery_cycle"]["state"] == "COMPLETE"
+    assert state["discovery_cycle"]["stage"] == "COMPLETE"
     assert state["discovery_cycle"]["last_completed_at"]
 
 

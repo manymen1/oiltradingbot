@@ -506,6 +506,10 @@ class ForwardRecorderConfig:
     shared_book_service: bool = True
     max_tokens_per_connection: int = 200
     rest_seed_workers: int = 8
+    # A CLOB 404 means the token currently has no REST book. Persist a
+    # cooldown so service refreshes/restarts do not repeatedly hammer the
+    # same unavailable token while WebSocket capture continues normally.
+    rest_seed_not_found_retry_seconds: float = 86_400.0
     max_book_levels: int = 20
     quote_survival_horizons_ms: list[int] = field(
         default_factory=_default_quote_survival_horizons_ms
@@ -1292,6 +1296,12 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
         "forward_recorder.rest_seed_workers",
         minimum=1,
         maximum=64,
+    )
+    require_number(
+        recorder.rest_seed_not_found_retry_seconds,
+        "forward_recorder.rest_seed_not_found_retry_seconds",
+        minimum=0,
+        minimum_exclusive=True,
     )
     require_integer(
         recorder.max_book_levels,

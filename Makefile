@@ -134,6 +134,9 @@ build-forward-timeline: ## build content-addressed forward replay input (MARKET=
 	@test -n "$(MARKET)" || (echo "usage: make build-forward-timeline MARKET=<market_id> [OUT=file.jsonl]"; exit 1)
 	$(GEO) build-forward-timeline --config $(CONFIG) --market "$(MARKET)" $(if $(OUT),--out "$(OUT)",)
 
+rotate-forward-recorder: ## offline checkpoint and recoverable archive rotation
+	$(GEO) rotate-forward-recorder --config $(CONFIG) $(if $(ARCHIVE_DIR),--archive-dir "$(ARCHIVE_DIR)",)
+
 reconcile: ## ledger hygiene: free dead position slots, roll stale buckets
 	$(GEO) reconcile-ledger --config $(CONFIG)
 

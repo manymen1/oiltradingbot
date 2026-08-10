@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -52,7 +53,26 @@ class ForwardRecorderStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._rotation_lock = self.rotation_lock_path(path).open("a+")
+        fcntl.flock(self._rotation_lock.fileno(), fcntl.LOCK_SH)
         self._initialize()
+
+    @staticmethod
+    def rotation_lock_path(path: Path) -> Path:
+        return path.with_name(f"{path.name}.rotation.lock")
+
+    def close(self) -> None:
+        lock = getattr(self, "_rotation_lock", None)
+        if lock is None or lock.closed:
+            return
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        lock.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except (OSError, ValueError):
+            pass
 
     def _connect(self, *, read_only: bool = False) -> sqlite3.Connection:
         if read_only:
@@ -237,6 +257,18 @@ class ForwardRecorderStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_forward_resolution_binding
                     ON resolutions(binding_sha256, observed_at);
+
+                CREATE TABLE IF NOT EXISTS rest_seed_failures (
+                    token_id TEXT PRIMARY KEY,
+                    status_code INTEGER NOT NULL,
+                    failure_count INTEGER NOT NULL,
+                    first_failed_at TEXT NOT NULL,
+                    last_failed_at TEXT NOT NULL,
+                    retry_after TEXT NOT NULL,
+                    last_error TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_forward_rest_seed_retry
+                    ON rest_seed_failures(retry_after);
                 """
             )
             _ensure_sqlite_column(
@@ -481,27 +513,28 @@ class ForwardRecorderStore:
             ).fetchone()
             books = connection.execute(
                 """
-                SELECT COUNT(*) AS n, MAX(received_at) AS latest
-                FROM book_events e
-                JOIN bindings b ON b.binding_sha256=e.binding_sha256
-                WHERE b.binding_kind=?
-                """,
-                (BOOK_CAPTURE_BINDING,),
+                SELECT COALESCE(MAX(id), 0) AS n,
+                       (SELECT received_at FROM book_events
+                        ORDER BY id DESC LIMIT 1) AS latest
+                FROM book_events
+                """
             ).fetchone()
             trades = connection.execute(
                 """
-                SELECT COUNT(*) AS n FROM trade_prints t
-                JOIN bindings b ON b.binding_sha256=t.binding_sha256
-                WHERE b.binding_kind=?
-                """,
-                (BOOK_CAPTURE_BINDING,),
+                SELECT COALESCE(MAX(id), 0) AS n FROM trade_prints
+                """
             ).fetchone()
         database_size_bytes = self.database_size_bytes()
         return {
             "capture_bindings": int(bindings["n"] or 0),
             "active_capture_sessions": int(sessions["n"] or 0),
             "book_events": int(books["n"] or 0),
+            # MAX(rowid) is an O(1) append-only high-water mark. INSERT OR
+            # IGNORE can leave small gaps, so label it explicitly instead of
+            # making every 10-second health publication scan millions of rows.
+            "book_events_count_mode": "rowid_high_watermark",
             "trade_prints": int(trades["n"] or 0),
+            "trade_prints_count_mode": "rowid_high_watermark",
             "latest_book_received_at": str(books["latest"] or ""),
             "database_size_bytes": database_size_bytes,
             "database_size_gib": round(
@@ -509,6 +542,93 @@ class ForwardRecorderStore:
                 3,
             ),
         }
+
+    def suppressed_rest_seed_tokens(
+        self,
+        token_ids: Iterable[str],
+        *,
+        at: str,
+    ) -> set[str]:
+        """Return tokens still inside a persisted REST-not-found cooldown."""
+        tokens = sorted({str(token_id) for token_id in token_ids if token_id})
+        if not tokens:
+            return set()
+        suppressed: set[str] = set()
+        with self._connect(read_only=True) as connection:
+            for index in range(0, len(tokens), 500):
+                chunk = tokens[index : index + 500]
+                placeholders = ",".join("?" for _ in chunk)
+                rows = connection.execute(
+                    f"""
+                    SELECT token_id FROM rest_seed_failures
+                    WHERE token_id IN ({placeholders})
+                      AND status_code=404 AND retry_after>?
+                    """,
+                    (*chunk, at),
+                ).fetchall()
+                suppressed.update(str(row["token_id"]) for row in rows)
+        return suppressed
+
+    def rest_seed_failure_tokens(
+        self,
+        token_ids: Iterable[str],
+    ) -> set[str]:
+        """Return tokens with any persisted REST seed failure record."""
+        tokens = sorted({str(token_id) for token_id in token_ids if token_id})
+        if not tokens:
+            return set()
+        failures: set[str] = set()
+        with self._connect(read_only=True) as connection:
+            for index in range(0, len(tokens), 500):
+                chunk = tokens[index : index + 500]
+                placeholders = ",".join("?" for _ in chunk)
+                rows = connection.execute(
+                    f"""
+                    SELECT token_id FROM rest_seed_failures
+                    WHERE token_id IN ({placeholders})
+                    """,
+                    chunk,
+                ).fetchall()
+                failures.update(str(row["token_id"]) for row in rows)
+        return failures
+
+    def record_rest_seed_not_found(
+        self,
+        token_id: str,
+        *,
+        failed_at: str,
+        retry_after: str,
+        error: str,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO rest_seed_failures(
+                    token_id, status_code, failure_count, first_failed_at,
+                    last_failed_at, retry_after, last_error
+                ) VALUES(?, 404, 1, ?, ?, ?, ?)
+                ON CONFLICT(token_id) DO UPDATE SET
+                    status_code=404,
+                    failure_count=rest_seed_failures.failure_count + 1,
+                    last_failed_at=excluded.last_failed_at,
+                    retry_after=excluded.retry_after,
+                    last_error=excluded.last_error
+                """,
+                (
+                    token_id,
+                    failed_at,
+                    failed_at,
+                    retry_after,
+                    error[:500],
+                ),
+            )
+
+    def clear_rest_seed_failure(self, token_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM rest_seed_failures WHERE token_id=?",
+                (token_id,),
+            )
 
     def database_size_bytes(self) -> int:
         """Return main database plus live WAL/SHM bytes without opening it."""
@@ -1921,13 +2041,16 @@ class ForwardBookService:
         self._seed_total = 0
         self._seed_completed = 0
         self._seed_errors = 0
+        self._seed_not_found = 0
+        self._seed_skipped_not_found = 0
         self._seed_in_progress = False
         self._seed_max_pending = 0
+        self._derived_bbo_events_ignored = 0
         self._storage_errors = 0
         self._storage_dropped_events = 0
         self._storage_warning = False
         self._storage_paused = False
-        self._storage_size_bytes = 0
+        self._storage_size_bytes = self.store.database_size_bytes()
         self._last_storage_check_monotonic = 0.0
         self._status_path = (
             config.data_dir / "forward_books_status.json"
@@ -1935,6 +2058,10 @@ class ForwardBookService:
         self._status_stop = threading.Event()
         self._status_thread: threading.Thread | None = None
         self._service_started_monotonic = time.monotonic()
+        self._storage_baseline_monotonic = self._service_started_monotonic
+        self._storage_baseline_size_bytes = self._storage_size_bytes
+        self._storage_growth_bytes_per_second = 0.0
+        self._storage_forecast_observation_seconds = 0.0
         self._sync_started_monotonic = self._service_started_monotonic
         self._book_events_at_sync = 0
         self._last_health_signature: tuple[str, ...] = ()
@@ -2037,6 +2164,8 @@ class ForwardBookService:
                     self._seed_total = len(tokens)
                     self._seed_completed = 0
                     self._seed_errors = 0
+                    self._seed_not_found = 0
+                    self._seed_skipped_not_found = 0
                     self._seed_in_progress = bool(tokens)
                 self._seed_books(
                     caches,
@@ -2094,7 +2223,14 @@ class ForwardBookService:
                 "rest_seed_total": self._seed_total,
                 "rest_seed_completed": self._seed_completed,
                 "rest_seed_errors": self._seed_errors,
+                "rest_seed_not_found": self._seed_not_found,
+                "rest_seed_skipped_not_found": (
+                    self._seed_skipped_not_found
+                ),
                 "rest_seed_max_pending": self._seed_max_pending,
+                "derived_bbo_events_ignored": (
+                    self._derived_bbo_events_ignored
+                ),
                 "storage_errors": self._storage_errors,
                 "storage_dropped_events": self._storage_dropped_events,
                 "storage_warning": self._storage_warning,
@@ -2105,12 +2241,38 @@ class ForwardBookService:
                 "storage_hard_limit_gib": (
                     self.recorder_config.storage_hard_limit_gib
                 ),
+                "storage_growth_bytes_per_second": round(
+                    self._storage_growth_bytes_per_second,
+                    3,
+                ),
+                "storage_growth_gib_per_day": round(
+                    self._storage_growth_bytes_per_second
+                    * 86_400.0
+                    / (1024**3),
+                    3,
+                ),
+                "storage_forecast_observation_seconds": round(
+                    self._storage_forecast_observation_seconds,
+                    3,
+                ),
                 "streaming": self._streaming,
                 "last_sync_at": self._last_sync_at,
             }
             sync_started = self._sync_started_monotonic
             service_started = self._service_started_monotonic
             book_events_at_sync = self._book_events_at_sync
+            storage_rate = self._storage_growth_bytes_per_second
+            storage_size = self._storage_size_bytes
+        status["storage_hours_to_warning"] = _hours_to_storage_limit(
+            current_bytes=storage_size,
+            growth_bytes_per_second=storage_rate,
+            limit_gib=self.recorder_config.storage_warning_gib,
+        )
+        status["storage_hours_to_hard_limit"] = _hours_to_storage_limit(
+            current_bytes=storage_size,
+            growth_bytes_per_second=storage_rate,
+            limit_gib=self.recorder_config.storage_hard_limit_gib,
+        )
         elapsed = max(0.0, now_monotonic - sync_started)
         events_since_sync = max(
             0,
@@ -2339,6 +2501,8 @@ class ForwardBookService:
             self._seed_total = jobs
             self._seed_completed = 0
             self._seed_errors = 0
+            self._seed_not_found = 0
+            self._seed_skipped_not_found = 0
             self._seed_in_progress = bool(jobs)
             self._seed_max_pending = 0
         if not jobs:
@@ -2361,11 +2525,42 @@ class ForwardBookService:
         generation: int,
         cancel: threading.Event,
     ) -> None:
-        jobs: list[tuple[BookCache, str]] = [
+        all_jobs: list[tuple[BookCache, str]] = [
             (cache, token_id)
             for cache in caches
             for token_id in cache.token_ids
         ]
+        if not all_jobs:
+            with self._lock:
+                if generation == self._generation:
+                    self._seed_in_progress = False
+            return
+        token_ids = [token_id for _cache, token_id in all_jobs]
+        at = _now()
+        try:
+            suppressed = self.store.suppressed_rest_seed_tokens(
+                token_ids,
+                at=at,
+            )
+            known_failures = self.store.rest_seed_failure_tokens(token_ids)
+        except sqlite3.Error as exc:
+            suppressed = set()
+            known_failures = set()
+            self._note_storage_error(
+                event_type="rest_seed_failure_lookup",
+                token_id="",
+                error=exc,
+            )
+        jobs = [
+            (cache, token_id)
+            for cache, token_id in all_jobs
+            if token_id not in suppressed
+        ]
+        with self._lock:
+            if generation != self._generation:
+                return
+            self._seed_skipped_not_found = len(suppressed)
+            self._seed_completed += len(suppressed)
         if not jobs:
             with self._lock:
                 if generation == self._generation:
@@ -2412,11 +2607,52 @@ class ForwardBookService:
                     token_id = pending.pop(future)
                     try:
                         future.result()
+                        with self._lock:
+                            if generation != self._generation:
+                                return
+                        if token_id in known_failures:
+                            try:
+                                self.store.clear_rest_seed_failure(token_id)
+                            except sqlite3.Error as storage_exc:
+                                self._note_storage_error(
+                                    event_type=(
+                                        "rest_seed_failure_clear_failed"
+                                    ),
+                                    token_id=token_id,
+                                    error=storage_exc,
+                                )
                     except Exception as exc:
+                        not_found = _is_http_not_found(exc)
                         with self._lock:
                             if generation != self._generation:
                                 return
                             self._seed_errors += 1
+                            if not_found:
+                                self._seed_not_found += 1
+                        if not_found:
+                            failed_at = _now()
+                            retry_after = (
+                                datetime.now(timezone.utc)
+                                + timedelta(
+                                    seconds=self.recorder_config
+                                    .rest_seed_not_found_retry_seconds
+                                )
+                            ).isoformat()
+                            try:
+                                self.store.record_rest_seed_not_found(
+                                    token_id,
+                                    failed_at=failed_at,
+                                    retry_after=retry_after,
+                                    error=str(exc),
+                                )
+                            except sqlite3.Error as storage_exc:
+                                self._note_storage_error(
+                                    event_type=(
+                                        "rest_seed_not_found_persist_failed"
+                                    ),
+                                    token_id=token_id,
+                                    error=storage_exc,
+                                )
                         self._record_token_operational(
                             token_id,
                             event_type="rest_seed_error",
@@ -2503,6 +2739,14 @@ class ForwardBookService:
                     token_id=token_id,
                     error=exc,
                 )
+            return
+        if event_type == "best_bid_ask":
+            # This message is a derived BBO notification. The authoritative
+            # book snapshot and price-change stream are already recorded, so
+            # persisting it as generic operational telemetry creates a very
+            # high-volume duplicate with no replay or liveness consumer.
+            with self._lock:
+                self._derived_bbo_events_ignored += 1
             return
         if (
             token_id
@@ -2653,7 +2897,28 @@ class ForwardBookService:
         paused = hard_limit > 0 and gib >= hard_limit
         with self._lock:
             previous_paused = self._storage_paused
+            if database_size_bytes < self._storage_baseline_size_bytes:
+                self._storage_baseline_size_bytes = database_size_bytes
+                self._storage_baseline_monotonic = now_monotonic
+                growth_rate = 0.0
+                observation_seconds = 0.0
+            else:
+                observation_seconds = max(
+                    0.0,
+                    now_monotonic - self._storage_baseline_monotonic,
+                )
+                growth_rate = (
+                    (
+                        database_size_bytes
+                        - self._storage_baseline_size_bytes
+                    )
+                    / observation_seconds
+                    if observation_seconds >= 1.0
+                    else 0.0
+                )
             self._storage_size_bytes = database_size_bytes
+            self._storage_growth_bytes_per_second = max(0.0, growth_rate)
+            self._storage_forecast_observation_seconds = observation_seconds
             self._storage_warning = warning
             self._storage_paused = paused
             self._last_storage_check_monotonic = now_monotonic
@@ -3145,6 +3410,132 @@ def forward_completeness_command(
     return 0
 
 
+def rotate_forward_recorder(
+    config_path: Path,
+    *,
+    archive_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Checkpoint and atomically archive an inactive recorder database.
+
+    Every ForwardRecorderStore holds a shared lock for its lifetime. Rotation
+    takes the exclusive form non-blockingly, so it fails instead of racing an
+    active fleet, status process, or paper runner.
+    """
+    config = load_discovery_config(config_path)
+    database_path = forward_recorder_db_path(config)
+    if not database_path.exists():
+        raise ValueError(f"forward recorder database does not exist: {database_path}")
+    destination_dir = archive_dir or (
+        database_path.parent / "forward_recorder_archive"
+    )
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = ForwardRecorderStore.rotation_lock_path(database_path)
+    lock_handle = lock_path.open("a+")
+    try:
+        try:
+            fcntl.flock(
+                lock_handle.fileno(),
+                fcntl.LOCK_EX | fcntl.LOCK_NB,
+            )
+        except BlockingIOError as exc:
+            raise RuntimeError(
+                "forward recorder is active; stop every recorder process "
+                "before rotation"
+            ) from exc
+
+        with sqlite3.connect(database_path, timeout=30.0) as connection:
+            checkpoint = tuple(
+                int(value)
+                for value in connection.execute(
+                    "PRAGMA wal_checkpoint(TRUNCATE)"
+                ).fetchone()
+            )
+            if checkpoint[0] != 0:
+                raise RuntimeError(
+                    "forward recorder WAL checkpoint remained busy"
+                )
+            quick_check = str(
+                connection.execute("PRAGMA quick_check").fetchone()[0]
+            )
+            if quick_check != "ok":
+                raise RuntimeError(
+                    f"forward recorder quick_check failed: {quick_check}"
+                )
+
+        rotated_at = _now()
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        archive_path = destination_dir / (
+            f"{database_path.stem}-{stamp}-{uuid.uuid4().hex[:8]}"
+            f"{database_path.suffix}"
+        )
+        archived_bytes = sum(
+            candidate.stat().st_size
+            for candidate in (
+                database_path,
+                Path(f"{database_path}-wal"),
+                Path(f"{database_path}-shm"),
+            )
+            if candidate.exists()
+        )
+        os.replace(database_path, archive_path)
+        archived_sidecars: list[str] = []
+        for suffix in ("-wal", "-shm"):
+            source = Path(f"{database_path}{suffix}")
+            if source.exists():
+                destination = Path(f"{archive_path}{suffix}")
+                os.replace(source, destination)
+                archived_sidecars.append(str(destination))
+
+        # Reserve the original path while the exclusive rotation lock is
+        # still held. The normal store initializer creates the schema below.
+        sqlite3.connect(database_path).close()
+        manifest = {
+            "rotated_at": rotated_at,
+            "source_path": str(database_path),
+            "archive_path": str(archive_path),
+            "archived_sidecars": archived_sidecars,
+            "archived_bytes": archived_bytes,
+            "quick_check": quick_check,
+            "wal_checkpoint": list(checkpoint),
+            "recovery": (
+                "Set forward_recorder.db_path to archive_path in a copy of "
+                "the config to inspect or build timelines from this segment."
+            ),
+        }
+        manifest_path = archive_path.with_suffix(
+            f"{archive_path.suffix}.manifest.json"
+        )
+        manifest["manifest_path"] = str(manifest_path)
+        _atomic_json_write(manifest_path, manifest)
+    finally:
+        try:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            lock_handle.close()
+
+    fresh_store = ForwardRecorderStore(database_path)
+    fresh_store.close()
+    return manifest
+
+
+def rotate_forward_recorder_command(
+    config_path: Path,
+    *,
+    archive_dir: Path | None = None,
+) -> int:
+    print(
+        json.dumps(
+            rotate_forward_recorder(
+                config_path,
+                archive_dir=archive_dir,
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def build_forward_timeline(
     config_path: Path,
     market_id: str,
@@ -3591,6 +3982,28 @@ def _parse_at(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def _is_http_not_found(error: Exception) -> bool:
+    response = getattr(error, "response", None)
+    status_code = getattr(response, "status_code", None)
+    return status_code == 404 or "404 Client Error" in str(error)
+
+
+def _hours_to_storage_limit(
+    *,
+    current_bytes: int,
+    growth_bytes_per_second: float,
+    limit_gib: float,
+) -> float | None:
+    if limit_gib <= 0:
+        return None
+    remaining = limit_gib * (1024**3) - current_bytes
+    if remaining <= 0:
+        return 0.0
+    if growth_bytes_per_second <= 0:
+        return None
+    return round(remaining / growth_bytes_per_second / 3600.0, 3)
+
+
 def _timestamp_age_seconds(value: str) -> float | None:
     if not value:
         return None
@@ -3666,4 +4079,6 @@ __all__ = [
     "forward_completeness_command",
     "forward_completeness_report",
     "record_forward_resolutions",
+    "rotate_forward_recorder",
+    "rotate_forward_recorder_command",
 ]

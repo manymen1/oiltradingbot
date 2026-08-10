@@ -129,6 +129,9 @@ def main(argv: list[str] | None = None) -> int:
     forward_timeline_parser.add_argument("--config", required=True)
     forward_timeline_parser.add_argument("--market", required=True)
     forward_timeline_parser.add_argument("--out")
+    rotate_forward_parser = sub.add_parser("rotate-forward-recorder")
+    rotate_forward_parser.add_argument("--config", required=True)
+    rotate_forward_parser.add_argument("--archive-dir")
     plan_sources_parser = sub.add_parser("plan-sources")
     plan_sources_parser.add_argument("--config", required=True)
     plan_sources_parser.add_argument("--market")
@@ -370,6 +373,15 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.config),
             args.market,
             out=Path(args.out) if args.out else None,
+        )
+    if args.command == "rotate-forward-recorder":
+        from .rules.forward import rotate_forward_recorder_command
+
+        return rotate_forward_recorder_command(
+            Path(args.config),
+            archive_dir=(
+                Path(args.archive_dir) if args.archive_dir else None
+            ),
         )
     if args.command == "plan-sources":
         from .discovery.runner import plan_sources_command

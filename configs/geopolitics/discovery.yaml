@@ -303,6 +303,9 @@ forward_recorder:
   shared_book_service: true
   max_tokens_per_connection: 200
   rest_seed_workers: 8
+  # Do not retry tokens whose REST book returns 404 on every fleet refresh.
+  # WebSocket subscriptions remain active throughout this cooldown.
+  rest_seed_not_found_retry_seconds: 86400
   max_book_levels: 20
   # Record books for every open market, not just the monitored/tradeable set.
   # Order books cannot be rebuilt after the fact, so a market left unrecorded

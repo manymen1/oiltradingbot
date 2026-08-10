@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -30,6 +31,7 @@ from polybot.rules.forward import (
     build_forward_timeline,
     forward_completeness_report,
     record_forward_resolutions,
+    rotate_forward_recorder,
 )
 from polybot.rules.replay import load_rule_replay_timeline
 from polybot.rules.store import RuleStore
@@ -663,9 +665,10 @@ def test_operational_rows_drop_book_state_and_foreign_shard_tokens(
     assert set(rows["ws_pong"]["token_ids"]) == owned
     assert not set(rows["ws_pong"]["token_ids"]) & set(foreign)
 
-    # Book state is not duplicated out of book_events.
-    assert "snapshot" not in rows["best_bid_ask"]
-    assert rows["best_bid_ask"]["event"]["best_ask"] == "0.80"
+    # Derived BBO notifications are redundant with the authoritative book and
+    # price-change stream, so they are counted but not stored a second time.
+    assert "best_bid_ask" not in rows
+    assert service.status()["derived_bbo_events_ignored"] == 1
 
     # Liveness still resolves from the narrowed row, and a token this
     # binding does not own still does not read as available.
@@ -806,6 +809,40 @@ def test_service_startup_closes_orphaned_capture_sessions(
             "SELECT close_reason FROM sessions WHERE session_id='orphan'"
         ).fetchone()
     assert row["close_reason"] == "service_startup_orphan_recovery"
+
+
+def test_rotation_refuses_active_store_then_archives_without_deletion(
+    tmp_path: Path,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    database_path = forward_recorder_db_path(config)
+    store = ForwardRecorderStore(database_path)
+    binding = store.ensure_book_binding(context, config.forward_recorder)
+
+    with pytest.raises(RuntimeError, match="recorder is active"):
+        rotate_forward_recorder(
+            config_path,
+            archive_dir=tmp_path / "archive",
+        )
+
+    store.close()
+    manifest = rotate_forward_recorder(
+        config_path,
+        archive_dir=tmp_path / "archive",
+    )
+    archive_path = Path(manifest["archive_path"])
+    assert archive_path.exists()
+    assert Path(manifest["manifest_path"]).exists()
+    assert manifest["quick_check"] == "ok"
+    assert manifest["archived_bytes"] > 0
+
+    archived = ForwardRecorderStore(archive_path)
+    assert archived.latest_book_binding(context.market_id) == binding
+    archived.close()
+    fresh = ForwardRecorderStore(database_path)
+    assert fresh.latest_book_binding(context.market_id) is None
+    fresh.close()
 
 
 def test_websocket_starts_before_rest_seed_and_shutdown_discards_old_seed(
@@ -1075,6 +1112,64 @@ def test_rest_seed_keeps_only_a_bounded_future_window(
     service.stop()
 
 
+def test_rest_seed_persists_not_found_cooldown_across_service_restart(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    calls: list[str] = []
+
+    class MissingBookCache:
+        def __init__(self, token_ids, **_kwargs):
+            self.token_ids = list(token_ids)
+
+        def add_listener(self, _listener):
+            return None
+
+        def start_ws(self):
+            return None
+
+        def stop_ws(self):
+            return None
+
+        def connection_state(self):
+            return {"connected": True, "reconnects": 0}
+
+        def rest_snapshot(self, token_id):
+            calls.append(token_id)
+            response = SimpleNamespace(status_code=404)
+            error = RuntimeError("404 Client Error: Not Found")
+            error.response = response
+            raise error
+
+    monkeypatch.setattr(
+        "polybot.rules.forward.BookCache",
+        MissingBookCache,
+    )
+    first = ForwardBookService(config)
+    first.sync([context])
+    assert first._seed_thread is not None
+    first._seed_thread.join(timeout=2)
+    first_status = first.status()
+    assert first_status["rest_seed_errors"] == 2
+    assert first_status["rest_seed_not_found"] == 2
+    assert first_status["rest_seed_skipped_not_found"] == 0
+    first.stop()
+
+    second = ForwardBookService(config)
+    second.sync([context])
+    assert second._seed_thread is not None
+    second._seed_thread.join(timeout=2)
+    second_status = second.status()
+    assert len(calls) == 2
+    assert second_status["rest_seed_total"] == 2
+    assert second_status["rest_seed_completed"] == 2
+    assert second_status["rest_seed_errors"] == 0
+    assert second_status["rest_seed_skipped_not_found"] == 2
+    second.stop()
+
+
 def test_live_status_snapshot_contains_connection_and_seed_metrics(
     tmp_path: Path,
     monkeypatch,
@@ -1128,6 +1223,46 @@ def test_live_status_snapshot_contains_connection_and_seed_metrics(
     assert raw["storage_paused"] is False
     assert raw["storage_dropped_events"] == 0
     assert raw["published_at"]
+    service.stop()
+
+
+def test_storage_status_forecasts_warning_and_hard_limit(
+    tmp_path: Path,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    config = replace(
+        config,
+        forward_recorder=replace(
+            config.forward_recorder,
+            rest_seed=False,
+            storage_warning_gib=2.0,
+            storage_hard_limit_gib=3.0,
+        ),
+    )
+    service = ForwardBookService(config)
+    service.poll_once([context])
+    current = service.store.database_size_bytes()
+    with service._lock:
+        service._storage_baseline_monotonic = time.monotonic() - 3_600.0
+        service._storage_baseline_size_bytes = max(
+            0,
+            current - 1024**3,
+        )
+    service._refresh_storage_pressure(
+        database_size_bytes=current,
+        force=True,
+    )
+
+    status = service.status()
+    assert status["storage_growth_gib_per_day"] > 0.0
+    assert status["storage_forecast_observation_seconds"] >= 3_599.0
+    assert status["storage_hours_to_warning"] is not None
+    assert status["storage_hours_to_hard_limit"] is not None
+    assert (
+        status["storage_hours_to_warning"]
+        < status["storage_hours_to_hard_limit"]
+    )
     service.stop()
 
 
@@ -1433,6 +1568,25 @@ forward_recorder:
         match="storage_warning_gib",
     ):
         load_discovery_config(bad_storage)
+
+    bad_retry = tmp_path / "bad-retry.yaml"
+    bad_retry.write_text(
+        """
+rule_compiler:
+  enabled: true
+rule_runner:
+  enabled: true
+forward_recorder:
+  enabled: true
+  rest_seed_not_found_retry_seconds: 0
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValueError,
+        match="rest_seed_not_found_retry_seconds",
+    ):
+        load_discovery_config(bad_retry)
 
     assert (
         ForwardRecorderConfig().quote_survival_horizons_ms
