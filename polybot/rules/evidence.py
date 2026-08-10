@@ -517,6 +517,14 @@ def normalize_fact(
             ) from exc
     elif spec.kind == "binary" and len(spec.outcomes) == 1:
         target = spec.outcomes[0].name
+    elif spec.outcome_topology == "MONOTONE_DEADLINE_LADDER":
+        # An empty target on a ladder is not missing data: it is a
+        # deliberate event-level claim that the evaluator fans out to every
+        # leg the announcement could have qualified (see
+        # _ladder_claim_applies_to_leg in evaluators.py), instead of forcing
+        # the extractor to invent a single leg for a claim that plainly
+        # applies to several.
+        pass
     elif assertion not in {"NONE", "CONFLICTING", "EXCLUDED_ACTIVITY"}:
         raise ValueError("grouped evidence requires a target_outcome")
 

@@ -8,6 +8,7 @@ import pytest
 from polybot.core.budget import ClassifierBudgetStore
 from polybot.core.config import ClassifierConfig
 from polybot.rules.compiler import (
+    _SEMANTIC_SCHEMA,
     RuleCompiler,
     _critical_consensus_payload,
     _repair_semantic_payload,
@@ -443,6 +444,243 @@ def test_observed_real_market_critical_disagreements_remain_blocking(
         _critical_consensus_payload(left)
         != _critical_consensus_payload(right)
     ), market_id
+
+
+def test_compilation_prompt_and_schema_state_source_rules() -> None:
+    """The prompt lost its anti-paraphrase sentence mid-edit and the schema
+    shipped decision-critical enums with no meaning at all."""
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    prompt = compilation_prompt(context, pass_index=1)
+
+    assert "Copy exact rule conditions and terminal criteria" in prompt
+    assert "Copy exact rule Select" not in prompt
+    assert "one source requirement per distinct organisation" in prompt
+    assert "ANY_OF uses quorum 1" in prompt
+
+    sources = _SEMANTIC_SCHEMA["properties"]["source_requirements"]
+    item = sources["items"]
+    assert "clause_ids" in item["required"]
+    assert "SETTLEMENT" in item["properties"]["roles"]["description"]
+    assert "indispensable" in item["properties"]["required"]["description"]
+    assert item["properties"]["roles"]["minItems"] == 1
+    for field in ("rule_family", "source_policy"):
+        assert _SEMANTIC_SCHEMA["properties"][field]["description"]
+
+
+def test_source_clause_ids_bind_to_catalog_and_reject_inventions(
+    tmp_path: Path,
+) -> None:
+    """Source policy is only auditable if it names the clause that authorized
+    it, so those ids get the same catalog treatment as every other clause."""
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    catalog = build_rule_clause_catalog(context)
+    real_clause = catalog[0].clause_id
+    base = fixture_semantics(context).as_dict()
+
+    def runner_with(clause_id: str):
+        def runner(_prompt: str) -> str:
+            payload = json.loads(json.dumps(base))
+            for item in payload["source_requirements"]:
+                item["clause_ids"] = [clause_id]
+            return _envelope(payload)
+
+        return runner
+
+    result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "bound.sqlite3"),
+        cli_runner=runner_with(real_clause),
+    ).compile(context)
+    assert result.status == "COMPILED"
+    assert result.spec is not None
+    assert result.spec.semantics.source_requirements[0].clause_ids == [
+        real_clause
+    ]
+
+    invented = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "invented.sqlite3"),
+        cli_runner=runner_with("clause_" + "f" * 20),
+    ).compile(context)
+    assert invented.status == "INVALID"
+    assert invented.spec is None
+
+
+def test_source_policy_quorum_is_derived_not_guessed() -> None:
+    """ANY_OF/ALL_OF fully determine quorum and forbid branches."""
+    any_of, repairs = _repair_semantic_payload(
+        {
+            "source_policy": {
+                "policy_type": "ANY_OF",
+                "requirement_ids": ["a", "b", "c"],
+                "quorum": 3,
+                "primary_requirement_ids": ["a"],
+                "fallback_requirement_ids": ["b"],
+                "fallback_condition": "SOURCE_UNAVAILABLE",
+            }
+        }
+    )
+    assert any_of["source_policy"]["quorum"] == 1
+    assert any_of["source_policy"]["primary_requirement_ids"] == []
+    assert any_of["source_policy"]["fallback_condition"] == ""
+    assert any("source_policy.quorum:3->1" in item for item in repairs)
+
+    all_of, _ = _repair_semantic_payload(
+        {
+            "source_policy": {
+                "policy_type": "ALL_OF",
+                "requirement_ids": ["a", "b", "c"],
+                "quorum": 1,
+                "primary_requirement_ids": [],
+                "fallback_requirement_ids": [],
+                "fallback_condition": "",
+            }
+        }
+    )
+    assert all_of["source_policy"]["quorum"] == 3
+
+    # A genuine quorum policy is left alone.
+    untouched, quorum_repairs = _repair_semantic_payload(
+        {
+            "source_policy": {
+                "policy_type": "QUORUM",
+                "requirement_ids": ["a", "b", "c"],
+                "quorum": 2,
+                "primary_requirement_ids": [],
+                "fallback_requirement_ids": [],
+                "fallback_condition": "",
+            }
+        }
+    )
+    assert untouched["source_policy"]["quorum"] == 2
+    assert quorum_repairs == []
+
+
+def _requirement(source_ref: str, clause_id: str, *, required: bool = True):
+    return {
+        "requirement_id": f"tmp-{source_ref}",
+        "source_ref": source_ref,
+        "clause_ids": [clause_id],
+        "roles": ["CONFIRMATION", "SETTLEMENT"],
+        "required": required,
+        "rationale": "why",
+    }
+
+
+def test_consensus_ignores_source_granularity_but_not_source_meaning() -> None:
+    """The blockade market disagreed only because one pass split a single
+    authorizing clause into six named publishers and the other did not."""
+    clause = "clause_" + "a" * 20
+    other_clause = "clause_" + "b" * 20
+    split = {
+        "source_requirements": [
+            _requirement(name, clause)
+            for name in ("white house", "state", "defense", "centcom")
+        ],
+        "source_policy": {"policy_type": "ANY_OF", "quorum": 1},
+    }
+    folded = {
+        "source_requirements": [_requirement("us government", clause)],
+        "source_policy": {"policy_type": "ANY_OF", "quorum": 1},
+    }
+    assert _critical_consensus_payload(split) == _critical_consensus_payload(
+        folded
+    )
+
+    # Same clause, but one pass makes the source dispensable: a real conflict.
+    optional = {
+        "source_requirements": [
+            _requirement("us government", clause, required=False)
+        ],
+        "source_policy": {"policy_type": "ANY_OF", "quorum": 1},
+    }
+    assert _critical_consensus_payload(folded) != _critical_consensus_payload(
+        optional
+    )
+
+    # A different authorizing clause is also a real conflict.
+    elsewhere = {
+        "source_requirements": [_requirement("us government", other_clause)],
+        "source_policy": {"policy_type": "ANY_OF", "quorum": 1},
+    }
+    assert _critical_consensus_payload(folded) != _critical_consensus_payload(
+        elsewhere
+    )
+
+
+def test_unbound_sources_fall_back_to_prose_identity() -> None:
+    """Passes predating clause binding carry no clause ids. Collapsing them
+    on roles/required alone would make two different outlets compare equal."""
+    def unbound(source_ref: str) -> dict:
+        return {
+            "source_requirements": [
+                {
+                    "requirement_id": "tmp",
+                    "source_ref": source_ref,
+                    "clause_ids": [],
+                    "roles": ["SETTLEMENT"],
+                    "required": True,
+                    "rationale": "why",
+                }
+            ]
+        }
+
+    assert _critical_consensus_payload(
+        unbound("associated press")
+    ) != _critical_consensus_payload(unbound("reuters"))
+    # Wording-only variance still agrees.
+    assert _critical_consensus_payload(
+        unbound("Associated  Press")
+    ) == _critical_consensus_payload(unbound("associated press"))
+
+
+def test_predicate_prose_is_noncritical_but_thresholds_still_gate(
+    tmp_path: Path,
+) -> None:
+    """Paraphrase of the question must not block; a threshold must."""
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    base = fixture_semantics(context).as_dict()
+
+    def runner_prose(prompt: str) -> str:
+        payload = json.loads(json.dumps(base))
+        if "pass: 2 of 2" in prompt:
+            predicate = payload["predicate"]
+            predicate["object"] = "the " + predicate["object"]
+            predicate["action"] = predicate["action"] + ", formally"
+        return _envelope(payload)
+
+    result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules-prose.sqlite3"),
+        cli_runner=runner_prose,
+    ).compile(context)
+    assert result.status == "COMPILED"
+    assert result.spec is not None
+
+    numeric_case = next(
+        item
+        for item in _golden_rules()
+        if item["expected_family"] == "NUMERIC_THRESHOLD"
+    )
+    numeric_context = context_for_case(numeric_case, strong_analysis=True)
+    numeric_base = fixture_semantics(numeric_context).as_dict()
+    assert numeric_base["rule_family"] == "NUMERIC_THRESHOLD"
+
+    def runner_threshold(prompt: str) -> str:
+        payload = json.loads(json.dumps(numeric_base))
+        if "pass: 2 of 2" in prompt:
+            payload["predicate"]["value"] = str(
+                int(payload["predicate"]["value"] or 0) + 1
+            )
+        return _envelope(payload)
+
+    numeric_result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules-threshold.sqlite3"),
+        cli_runner=runner_threshold,
+    ).compile(numeric_context)
+    assert numeric_result.status == "DISAGREEMENT"
+    assert numeric_result.spec is None
 
 
 def test_source_rationale_wording_is_noncritical_consensus(

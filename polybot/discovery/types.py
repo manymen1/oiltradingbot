@@ -58,6 +58,11 @@ class OutcomeRecord:
     # events cannot safely reuse the parent event deadline/rules for every
     # leg.
     deadline_iso: str = ""
+    # Gamma's per-market createdAt. Grouped ladders add legs after the event
+    # is first listed (e.g. a later deadline appended weeks in), so an
+    # announcement predating a leg's own creation cannot qualify it even
+    # though it predates that leg's deadline.
+    start_iso: str = ""
     rule_text: str = ""
     rule_text_sha256: str = ""
     resolution_source: str = ""

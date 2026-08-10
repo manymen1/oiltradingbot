@@ -603,6 +603,85 @@ def test_shared_book_service_shards_and_routes_depth_without_network(
     service.stop()
 
 
+def test_operational_rows_drop_book_state_and_foreign_shard_tokens(
+    tmp_path: Path,
+) -> None:
+    """Operational rows are liveness evidence, not a second copy of the book.
+
+    Socket-lifecycle events arrive carrying the whole shard subscription and
+    are written once per binding, so an unnarrowed list is stored once per
+    binding per pong. Book-bearing events likewise duplicated the snapshot
+    already held in book_events.
+    """
+    config_path, context, spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    config = replace(
+        config,
+        forward_recorder=replace(config.forward_recorder, rest_seed=False),
+    )
+    service = ForwardBookService(config)
+    service.poll_once([context])
+    outcome = spec.outcomes[0]
+    owned = {outcome.yes_token_id, outcome.no_token_id}
+    foreign = [f"foreign-shard-token-{index}" for index in range(50)]
+
+    service._on_stream_event(
+        {
+            "event_type": "ws_pong",
+            "received_at": "2026-07-25T00:00:01+00:00",
+            "source_at": "",
+            "token_ids": sorted(owned) + foreign,
+        },
+        generation=service._generation,
+    )
+    service._on_stream_event(
+        {
+            "event_type": "best_bid_ask",
+            "token_id": outcome.yes_token_id,
+            "received_at": "2026-07-25T00:00:02+00:00",
+            "source_at": "2026-07-25T00:00:02+00:00",
+            "event": {"best_bid": "0.78", "best_ask": "0.80"},
+            "snapshot": {"bids": [[0.78, 100]], "asks": [[0.80, 100]]},
+        },
+        generation=service._generation,
+    )
+
+    binding = service.store.latest_book_binding(context.market_id)
+    assert binding is not None
+    with sqlite3.connect(forward_recorder_db_path(config)) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = {
+            str(row["event_type"]): json.loads(str(row["payload_json"]))
+            for row in connection.execute(
+                "SELECT event_type, payload_json FROM operational_events"
+                " WHERE binding_sha256=?",
+                (binding,),
+            )
+        }
+
+    # The pong keeps only the tokens this binding actually owns.
+    assert set(rows["ws_pong"]["token_ids"]) == owned
+    assert not set(rows["ws_pong"]["token_ids"]) & set(foreign)
+
+    # Book state is not duplicated out of book_events.
+    assert "snapshot" not in rows["best_bid_ask"]
+    assert rows["best_bid_ask"]["event"]["best_ask"] == "0.80"
+
+    # Liveness still resolves from the narrowed row, and a token this
+    # binding does not own still does not read as available.
+    assert service.store.stream_available(
+        binding_sha256=binding,
+        token_id=outcome.yes_token_id,
+        at="2026-07-25T00:00:05+00:00",
+    )
+    assert not service.store.stream_available(
+        binding_sha256=binding,
+        token_id=foreign[0],
+        at="2026-07-25T00:00:05+00:00",
+    )
+    service.stop()
+
+
 def test_shared_book_service_records_ungraded_context_without_semantic_assets(
     tmp_path: Path,
 ) -> None:

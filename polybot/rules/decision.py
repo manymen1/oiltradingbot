@@ -212,6 +212,24 @@ class ConfirmationDecisionEngine:
             )
         if desired_shares > 0:
             return self._hold(evaluation, binding.name, desired_side, now)
+        context_outcome = next(
+            (
+                item
+                for item in self.context.outcomes
+                if item.name == binding.name
+            ),
+            None,
+        )
+        if context_outcome is not None and (
+            context_outcome.closed or not context_outcome.active
+        ):
+            # A closed leg is retained on the spec so replay can still score
+            # it, but it must never originate a brand-new paper position.
+            return self._no_action(
+                evaluation,
+                ["outcome_closed_for_new_execution"],
+                now,
+            )
         if desired_entry_disabled:
             return self._no_action(
                 evaluation,

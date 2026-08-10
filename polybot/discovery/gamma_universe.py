@@ -421,6 +421,7 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
             else ""
         )
         outcome_deadline = str(raw.get("endDate") or "")
+        outcome_start = str(raw.get("createdAt") or "")
         (
             rule_deadline,
             deadline_timezone,
@@ -442,6 +443,7 @@ def context_from_event(event: dict[str, Any]) -> MarketContext | None:
                 yes_token_id=meta.yes_token_id,
                 no_token_id=meta.no_token_id,
                 deadline_iso=outcome_deadline,
+                start_iso=outcome_start,
                 rule_text=outcome_rule_text,
                 rule_text_sha256=outcome_rule_sha256,
                 resolution_source=meta.resolution_source.strip(),

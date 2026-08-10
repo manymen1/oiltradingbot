@@ -91,6 +91,9 @@ validate-rule: ## strictly validate an exported RuleSpec JSON (SPEC=path)
 	@test -n "$(SPEC)" || (echo "usage: make validate-rule SPEC=<file.json>"; exit 1)
 	$(GEO) validate-rule --spec "$(SPEC)"
 
+consensus-report: ## why compiler passes agree or disagree, per market (optional MARKET=id)
+	$(GEO) consensus-report --config $(CONFIG) $(if $(MARKET),--market "$(MARKET)")
+
 prepare-rule-review: ## export one stored compiler pass for review (MARKET=id PASS_SHA256=hash OUT=file)
 	@test -n "$(MARKET)" || (echo "usage: make prepare-rule-review MARKET=<market_id> PASS_SHA256=<hash> OUT=<file.json>"; exit 1)
 	@test -n "$(PASS_SHA256)" || (echo "usage: make prepare-rule-review MARKET=<market_id> PASS_SHA256=<hash> OUT=<file.json>"; exit 1)

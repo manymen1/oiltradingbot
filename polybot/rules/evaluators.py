@@ -8,6 +8,7 @@ from .contracts import (
     EVIDENCE_STATES,
     RULE_EVALUATION_SCHEMA_VERSION,
     EvidenceClaim,
+    OutcomeBinding,
     RuleEvaluation,
     RuleSpec,
 )
@@ -842,6 +843,17 @@ def _claims_for_outcome(
     claims: list[EvidenceClaim],
     outcome: str,
 ) -> list[EvidenceClaim]:
+    if spec.outcome_topology == "MONOTONE_DEADLINE_LADDER":
+        binding = next(item for item in spec.outcomes if item.name == outcome)
+        return [
+            claim
+            for claim in claims
+            if claim.target_outcome == outcome
+            or (
+                not claim.target_outcome
+                and _ladder_claim_applies_to_leg(claim, binding)
+            )
+        ]
     return [
         claim
         for claim in claims
@@ -853,6 +865,24 @@ def _claims_for_outcome(
             )
         )
     ]
+
+
+def _ladder_claim_applies_to_leg(
+    claim: EvidenceClaim,
+    outcome: OutcomeBinding,
+) -> bool:
+    """One event-level claim (no target_outcome) propagates deterministically
+    to every ladder leg it could have qualified: the leg must already have
+    existed when the announcement happened. The upper deadline bound is
+    enforced separately by _claim_matches_outcome_window."""
+
+    announced_at = _stamp(claim.event_at) or _stamp(claim.published_at)
+    if announced_at is None:
+        return False
+    leg_start = _stamp(outcome.start_iso)
+    if leg_start is not None and announced_at < leg_start:
+        return False
+    return True
 
 
 def _claim_matches_outcome_window(

@@ -2492,16 +2492,30 @@ class ForwardBookService:
                     error=exc,
                 )
             return
-        payload = record
+        # Operational rows are liveness/telemetry evidence, not book state.
+        # Every snapshot already lands in book_events, so carrying one here
+        # stored full book state a second time on each non-book event.
+        payload = {
+            key: value for key, value in record.items() if key != "snapshot"
+        }
         observed_at = str(record.get("received_at") or _now())
         event_tokens = record.get("token_ids")
         if isinstance(event_tokens, list):
-            target_bindings = {
-                binding
-                for item in event_tokens
-                for binding in bindings_by_token.get(str(item), [])
-            }
+            # Socket-lifecycle events (ws_pong/ws_open/ws_close/ws_error)
+            # carry the entire shard subscription list, and this row is
+            # written once per binding. Narrowing each row to the tokens its
+            # own binding owns leaves _stream_available answering identically
+            # -- a binding only ever asks about its own tokens, and it always
+            # receives its own row for any event covering them -- while
+            # dropping a list that dominates the payload.
+            tokens_by_binding: dict[str, list[str]] = {}
+            for item in event_tokens:
+                token = str(item)
+                for binding in bindings_by_token.get(token, []):
+                    tokens_by_binding.setdefault(binding, []).append(token)
+            target_bindings = set(tokens_by_binding)
         else:
+            tokens_by_binding = {}
             target_bindings = set(sessions)
         try:
             with self._write_lock:
@@ -2511,7 +2525,14 @@ class ForwardBookService:
                         binding_sha256=binding,
                         event_type=event_type or "market_stream_event",
                         observed_at=observed_at,
-                        payload=payload,
+                        payload=(
+                            {
+                                **payload,
+                                "token_ids": tokens_by_binding[binding],
+                            }
+                            if tokens_by_binding
+                            else payload
+                        ),
                     )
         except sqlite3.Error as exc:
             self._note_storage_error(

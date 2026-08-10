@@ -396,6 +396,79 @@ def test_reviewed_rule_allowlist_is_explicit_and_scoped(tmp_path: Path) -> None:
         )
 
 
+def test_prepare_review_surfaces_the_competing_pass_and_its_diff(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    """A market reaches review because its passes disagreed, so the operator
+    must be able to see the reading that was not exported."""
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    config_path = _config(
+        tmp_path,
+        priority_market_ids=[context.market_id],
+        reviewed_rule_market_ids=[context.market_id],
+    )
+    config = load_discovery_config(config_path)
+    DiscoveryStore(config.data_dir).save_context(context)
+    rule_store = RuleStore(rule_store_db_path(config))
+
+    selected = fixture_semantics(context).as_dict()
+    competing = json.loads(json.dumps(selected))
+    competing["source_requirements"] = [
+        {
+            **item,
+            "required": not item["required"],
+        }
+        for item in competing["source_requirements"]
+    ]
+    for index, payload in enumerate((selected, competing), start=1):
+        rule_store.save_pass(
+            CompilationPass(
+                market_id=context.market_id,
+                rule_text_sha256=context.rule_text_sha256,
+                pass_index=index,
+                model="codex_cli:test",
+                raw_output=json.dumps(payload),
+                normalized_output=payload,
+            )
+        )
+    rule_store.save_pass(
+        CompilationPass(
+            market_id=context.market_id,
+            rule_text_sha256=context.rule_text_sha256,
+            pass_index=1,
+            model="codex_cli:test",
+            raw_output="",
+            normalized_output=None,
+            error="RuntimeError: codex CLI exited 1: 401 Unauthorized",
+        )
+    )
+
+    assert (
+        prepare_rule_review_command(
+            config_path,
+            context.market_id,
+            sha256_json(selected),
+            out=tmp_path / "candidate.json",
+        )
+        == 0
+    )
+    prepared = json.loads(capsys.readouterr().out)
+    alternates = prepared["alternate_passes"]
+
+    usable = [item for item in alternates if item["usable"]]
+    assert len(usable) == 1
+    assert usable[0]["output_sha256"] == sha256_json(competing)
+    assert "source_requirements" in usable[0]["differing_fields"]
+
+    # A pass that never produced semantics is reported, not silently dropped,
+    # and carries no diff to compare against.
+    failed = [item for item in alternates if not item["usable"]]
+    assert len(failed) == 1
+    assert "401 Unauthorized" in failed[0]["error"]
+    assert "differing_fields" not in failed[0]
+
+
 def test_reviewed_rule_import_is_hash_confirmed_bound_and_audited(
     tmp_path: Path,
     capsys,

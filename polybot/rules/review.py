@@ -16,6 +16,7 @@ from polybot.discovery.types import MarketContext
 from polybot.log import log_event
 
 from .compiler import (
+    _critical_consensus_payload,
     effective_deadline_authority_policy,
     rule_compilation_blocker,
 )
@@ -95,6 +96,15 @@ def prepare_rule_review_command(
             "output_sha256": stored_pass["output_sha256"],
             "pass_index": stored_pass["pass_index"],
         },
+        # A market reaches review precisely because its passes disagreed, so
+        # the unexported pass is a competing reading of the same rules, not
+        # noise. Reviewing one pass blind has already shipped the weaker
+        # reading of a source policy; list the alternatives and where they
+        # diverge so the choice is deliberate.
+        "alternate_passes": _alternate_passes(
+            rule_store.compilation_passes(market_id, context.rule_text_sha256),
+            selected_output_sha256=stored_pass["output_sha256"],
+        ),
     }
     if destination is None:
         payload["candidate_spec"] = candidate
@@ -225,6 +235,150 @@ def import_reviewed_rule_command(
         )
     )
     return 0
+
+
+def consensus_report_command(
+    config_path: Path,
+    *,
+    market_id: str = "",
+) -> int:
+    """Score two-pass agreement across every stored compilation pass.
+
+    Compilation reaching zero stored specs is invisible from the pass table
+    alone, because a pass can be clean and still be discarded at consensus.
+    This scores the same comparison the compiler uses, so a change to
+    consensus or to the prompt can be judged by a number instead of a
+    hypothesis. It reads stored passes only and compiles nothing.
+    """
+    config = load_discovery_config(config_path)
+    rule_store = RuleStore(rule_store_db_path(config))
+    discovery_store = DiscoveryStore(config.data_dir)
+
+    market_ids = (
+        [market_id]
+        if market_id
+        else sorted(
+            {item for item, _rule in rule_store.compilation_pass_counts()}
+        )
+    )
+    markets: list[dict[str, Any]] = []
+    field_counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {
+        "AGREE": 0,
+        "DISAGREE": 0,
+        "NO_CLEAN_PAIR": 0,
+    }
+    for item in market_ids:
+        context = discovery_store.load_context(item)
+        if context is None:
+            continue
+        stored = rule_store.compilation_passes(item, context.rule_text_sha256)
+        usable = [
+            entry
+            for entry in stored
+            if entry.get("normalized_output") is not None
+        ]
+        errored = [entry for entry in stored if entry.get("error")]
+        latest: dict[int, dict[str, Any]] = {}
+        for entry in usable:
+            latest[int(entry["pass_index"])] = entry
+        row: dict[str, Any] = {
+            "market_id": item,
+            "clean_passes": len(usable),
+            "errored_passes": len(errored),
+        }
+        if len(latest) < 2:
+            row["status"] = "NO_CLEAN_PAIR"
+            if errored:
+                row["last_error"] = errored[-1]["error"][:200]
+        else:
+            first, second = (latest[index] for index in sorted(latest)[:2])
+            differing = _differing_fields(
+                _critical_consensus_payload(first["normalized_output"]),
+                _critical_consensus_payload(second["normalized_output"]),
+            )
+            row["status"] = "AGREE" if not differing else "DISAGREE"
+            if differing:
+                row["differing_fields"] = differing
+                for field in differing:
+                    field_counts[field] = field_counts.get(field, 0) + 1
+        status_counts[row["status"]] += 1
+        markets.append(row)
+
+    payload = {
+        "markets": sorted(markets, key=lambda entry: entry["market_id"]),
+        "summary": {
+            **status_counts,
+            "markets_scored": len(markets),
+            "differing_fields": dict(
+                sorted(
+                    field_counts.items(),
+                    key=lambda pair: (-pair[1], pair[0]),
+                )
+            ),
+        },
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def _alternate_passes(
+    stored_passes: list[dict[str, Any]],
+    *,
+    selected_output_sha256: str,
+) -> list[dict[str, Any]]:
+    """Describe every other usable pass and how it differs from the export."""
+
+    selected = next(
+        (
+            item
+            for item in stored_passes
+            if item.get("output_sha256") == selected_output_sha256
+            and item.get("normalized_output") is not None
+        ),
+        None,
+    )
+    alternates: list[dict[str, Any]] = []
+    for item in stored_passes:
+        if item.get("output_sha256") == selected_output_sha256:
+            continue
+        entry: dict[str, Any] = {
+            "created_at": item["created_at"],
+            "model": item["model"],
+            "output_sha256": item["output_sha256"] or "",
+            "pass_index": item["pass_index"],
+            "usable": item.get("normalized_output") is not None,
+        }
+        if item.get("error"):
+            entry["error"] = item["error"]
+        if selected is not None and item.get("normalized_output") is not None:
+            entry["differing_fields"] = _differing_fields(
+                _critical_consensus_payload(selected["normalized_output"]),
+                _critical_consensus_payload(item["normalized_output"]),
+            )
+        alternates.append(entry)
+    return alternates
+
+
+def _differing_fields(
+    selected: Any,
+    other: Any,
+    path: str = "",
+) -> list[str]:
+    if isinstance(selected, dict) and isinstance(other, dict):
+        fields: list[str] = []
+        for key in sorted(set(selected) | set(other)):
+            child = f"{path}.{key}" if path else key
+            if key in selected and key in other:
+                fields.extend(
+                    _differing_fields(selected[key], other[key], child)
+                )
+            else:
+                fields.append(child)
+        return fields
+    if selected != other:
+        return [path or "<root>"]
+    return []
 
 
 def _reviewable_context(config: Any, market_id: str) -> MarketContext:

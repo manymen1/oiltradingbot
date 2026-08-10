@@ -94,6 +94,9 @@ def main(argv: list[str] | None = None) -> int:
     inspect_rule_parser.add_argument("--market", required=True)
     validate_rule_parser = sub.add_parser("validate-rule")
     validate_rule_parser.add_argument("--spec", required=True)
+    consensus_report_parser = sub.add_parser("consensus-report")
+    consensus_report_parser.add_argument("--config", required=True)
+    consensus_report_parser.add_argument("--market")
     prepare_rule_review_parser = sub.add_parser("prepare-rule-review")
     prepare_rule_review_parser.add_argument("--config", required=True)
     prepare_rule_review_parser.add_argument("--market", required=True)
@@ -318,6 +321,13 @@ def main(argv: list[str] | None = None) -> int:
             args.market,
             args.pass_sha256,
             out=Path(args.out) if args.out else None,
+        )
+    if args.command == "consensus-report":
+        from .rules.review import consensus_report_command
+
+        return consensus_report_command(
+            Path(args.config),
+            market_id=args.market or "",
         )
     if args.command == "import-reviewed-rule":
         from .rules.review import import_reviewed_rule_command

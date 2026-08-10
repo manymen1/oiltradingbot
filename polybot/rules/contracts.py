@@ -182,6 +182,9 @@ class OutcomeBinding:
     deadline_authority: str
     rule_text_sha256: str
     resolution_source: str
+    # Gamma's per-leg createdAt, preserved so a ladder leg added after an
+    # earlier announcement cannot be treated as retroactively qualified.
+    start_iso: str = ""
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "OutcomeBinding":
@@ -198,6 +201,7 @@ class OutcomeBinding:
                     "deadline_iso",
                     "gamma_deadline_iso",
                     "rule_deadline_iso",
+                    "start_iso",
                 }
                 else _sha256(
                     data.get(name),
@@ -294,6 +298,10 @@ class SourceRequirement:
     roles: list[str]
     required: bool = False
     rationale: str = ""
+    # Anchors this source policy to the verbatim resolution-source clause(s)
+    # it implements, so the requirement cannot silently drift from the rule
+    # text that authorized it.
+    clause_ids: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "SourceRequirement":
@@ -333,6 +341,10 @@ class SourceRequirement:
                 data.get("rationale", ""),
                 "source_requirement.rationale",
                 allow_empty=True,
+            ),
+            clause_ids=_clause_ids(
+                data.get("clause_ids", []),
+                "source_requirement.clause_ids",
             ),
         )
 
@@ -569,6 +581,7 @@ class RuleSemantics:
                     "source_ref": _normalize_text(item["source_ref"]),
                     "roles": sorted(set(item["roles"])),
                     "rationale": _normalize_text(item["rationale"]),
+                    "clause_ids": sorted(set(item["clause_ids"])),
                 }
                 for item in raw["source_requirements"]
             ),
@@ -784,6 +797,9 @@ class RuleSpec:
                 resolution_source=(
                     item.resolution_source or context.resolution_source
                 ).strip(),
+                start_iso=(
+                    item.start_iso or context.discovered_at
+                ),
             )
             for item in context.outcomes
         ]
@@ -834,6 +850,7 @@ class RuleSpec:
         spec._validate_topology()
         spec._validate_deadline_authority()
         spec._validate_clause_bindings()
+        spec._validate_window()
         return spec
 
     @classmethod
@@ -917,6 +934,7 @@ class RuleSpec:
         spec._validate_topology()
         spec._validate_deadline_authority()
         spec._validate_clause_bindings()
+        spec._validate_window()
         return spec
 
     def _validate_topology(self) -> None:
@@ -949,6 +967,17 @@ class RuleSpec:
                     f"{self.outcome_topology} requires per-outcome deadlines: "
                     + ",".join(missing)
                 )
+        if self.outcome_topology == "MONOTONE_DEADLINE_LADDER":
+            missing_start = [
+                outcome.name
+                for outcome in self.outcomes
+                if not outcome.start_iso
+            ]
+            if missing_start:
+                raise ValueError(
+                    "MONOTONE_DEADLINE_LADDER requires per-outcome start_iso: "
+                    + ",".join(missing_start)
+                )
 
     def _validate_deadline_authority(self) -> None:
         for outcome in self.outcomes:
@@ -980,6 +1009,23 @@ class RuleSpec:
                     "deadline mismatch lacks an exact verbatim rule authority"
                 )
 
+    def _validate_window(self) -> None:
+        if self.outcome_topology != "MONOTONE_DEADLINE_LADDER":
+            return
+        window_end = _to_utc_instant(
+            self.semantics.window.end_iso,
+            self.semantics.window.timezone,
+        )
+        latest_leg = max(
+            _to_utc_instant(outcome.deadline_iso, outcome.deadline_timezone)
+            for outcome in self.outcomes
+        )
+        if window_end != latest_leg:
+            raise ValueError(
+                "MONOTONE_DEADLINE_LADDER window.end_iso must be derived from "
+                "the latest outcome deadline, not a stale parent-event cutoff"
+            )
+
     def _validate_clause_bindings(self) -> None:
         available = {item.clause_id for item in self.rule_clauses}
         semantics = self.semantics
@@ -991,6 +1037,11 @@ class RuleSpec:
             *semantics.resolution_policy.postponement_clause_ids,
             *semantics.resolution_policy.terminal_yes_clause_ids,
             *semantics.resolution_policy.terminal_no_clause_ids,
+            *(
+                clause_id
+                for item in semantics.source_requirements
+                for clause_id in item.clause_ids
+            ),
         }
         unknown = sorted(bound - available)
         if unknown:
@@ -1185,11 +1236,12 @@ class EvidenceClaim:
             mismatches.append("clauses_satisfied")
         if not set(self.clauses_violated).issubset(allowed_clause_ids):
             mismatches.append("clauses_violated")
-        if spec.kind == "grouped" and not self.target_outcome and self.assertion not in {
-            "NONE",
-            "CONFLICTING",
-            "EXCLUDED_ACTIVITY",
-        }:
+        if (
+            spec.kind == "grouped"
+            and not self.target_outcome
+            and self.assertion not in {"NONE", "CONFLICTING", "EXCLUDED_ACTIVITY"}
+            and spec.outcome_topology != "MONOTONE_DEADLINE_LADDER"
+        ):
             mismatches.append("target_outcome")
         if mismatches:
             raise ValueError(
@@ -1838,6 +1890,13 @@ def _iso_datetime(
     except ValueError as exc:
         raise ValueError(f"{name} must be an ISO date-time") from exc
     return text
+
+
+def _to_utc_instant(value: str, timezone_name: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo(timezone_name))
+    return parsed.astimezone(timezone.utc)
 
 
 def _sha256(value: Any, name: str) -> str:
