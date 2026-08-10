@@ -145,9 +145,15 @@ The blockade review exercise also exposed and fixed a deterministic source
 registry gap. Its six named US-government alternatives now resolve to the
 appropriate White House, State, Defense/War, and CENTCOM domains. Every one is
 assigned to `government:united_states`, so multiple official endpoints cannot
-be miscounted as independent confirmations. The exported draft now builds a
-fresh SourcePlan with all six policy IDs resolved, but this does not resolve
-the remaining semantic review decisions or authorize import.
+be miscounted as independent confirmations. A second review selected the
+newer `SOURCE_LOCKED_ANNOUNCEMENT` compiler pass, represented the named offices
+as alternatives satisfying one US-government authority, and restored both
+verbatim terminal-Yes clauses. The exact reviewed RuleSpec
+`25837ae13fa6dc7b684afa6b06397bdff0d59912dde97f6105be937542214545`
+is now imported with a fresh 21-record SourcePlan and grades
+`PAPER_ELIGIBLE`. Its first generic paper cycle emitted 17 ambiguous per-leg
+proofs and zero executions; terminal-positive replay fixtures and forward
+observations remain required.
 
 ## Live Mapping
 

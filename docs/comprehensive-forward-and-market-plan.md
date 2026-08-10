@@ -47,6 +47,10 @@ risk review.
 - Active paper canary: US strike on Cuba, current RuleSpec and SourcePlan,
   `PAPER_ELIGIBLE`; one cycle yielded zero executions and explicit ambiguous
   proofs.
+- Official-announcement paper canary: US blockade announcement, reviewed
+  RuleSpec `25837ae13fa6dc7b684afa6b06397bdff0d59912dde97f6105be937542214545`,
+  fresh SourcePlan, and `PAPER_ELIGIBLE`; one cycle produced 17 ambiguous
+  per-leg proofs and zero executions.
 
 These are point-in-time observations. Fleet status and SQLite counts must be
 refreshed before every rollout decision.
@@ -74,7 +78,7 @@ flowchart LR
 
 | Priority | Market | Current state | Terminal sources | Required next work |
 |---:|---|---|---|---|
-| 1 | US announces end of Iranian blockade | Rule compiler disagreement | White House, State, Defense/War, CENTCOM | Review exact official alternatives and terminal-Yes clause coverage; import only a hash-pinned reviewed spec |
+| 1 | US announces end of Iranian blockade | `PAPER_ELIGIBLE`, reviewed spec/plan current | White House, State, Defense/War, CENTCOM | Add official/partial/conditional/leaked replay fixtures; collect forward paper evidence |
 | 2 | US-Iran effective ceasefire | Rule compiler disagreement | US and Iranian government/military; credible reporting only where rules permit | Review 14-day reset state, qualifying strikes, conflict fallback, and exact ET deadline |
 | 3 | US-Iran final nuclear deal | Rule compiler disagreement | US/Iran governments or authorized representatives | Review written-instrument predicate and per-leg rule deadlines |
 | 4 | US military action against Cuba | `PAPER_ELIGIBLE` | Credible-reporting consensus, Donald Trump, or US government | Add replay fixtures for claimed and independently reported strikes; collect forward paper evidence |

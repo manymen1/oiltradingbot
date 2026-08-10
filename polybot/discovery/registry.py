@@ -105,6 +105,10 @@ _NAMED_OFFICIAL_ACTOR_REFERENCES: dict[
         "united_states",
         {"state.gov", "whitehouse.gov", "defense.gov", "war.gov", "centcom.mil"},
     ),
+    "united states government": (
+        "united_states",
+        {"state.gov", "whitehouse.gov", "defense.gov", "war.gov", "centcom.mil"},
+    ),
     "donald trump": (
         "united_states",
         {"whitehouse.gov"},
