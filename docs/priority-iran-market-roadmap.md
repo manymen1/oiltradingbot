@@ -135,8 +135,10 @@ stored with RuleSpec hash
 `2f3109a3620e906bc295c89c2571f5b8b36add31554fd71f1ba6d526ec7fd917`
 and a fresh 22-record SourcePlan. Its terminal policy conservatively accepts a
 named US or Iranian government source; the credible-reporting alternative was
-withheld because the current flat policy cannot express “one government OR two
-independent publishers” without weakening the official path. Regrading now
+withheld in that immutable reviewed version. The additive branch policy can now
+express “one government OR one approved original credible publisher,” so a
+future reviewed version can restore that rule-authorized path without changing
+the official branch. Regrading now
 correctly classifies this context `CLOSED`, so it is a resolution/replay canary
 rather than a live paper-trading canary.
 
@@ -150,9 +152,10 @@ Trump” and “U.S. government” to canonical US-government identities; the la
 can no longer be misparsed as a synthetic `u.s` domain. This canary remains
 paper-only because its rule family is not promoted, its rules are
 discretionary, and Gamma's deadline differs from the exact verbatim-rule clock.
-The source policy intentionally treats the first qualifying report from one
-approved credible publisher as terminal; a qualifying Trump or U.S.-government
-claim is also terminal. A deterministic adversarial replay confirms that
+The global source policy intentionally treats the first qualifying report from
+one approved original credible publisher as terminal in every market that
+permits credible reporting; a qualifying Trump or U.S.-government claim is
+also terminal here. A deterministic adversarial replay confirms that
 artillery, interception, naval shelling, and territorial-sea reports remain
 nonterminal before one Reuters ground-impact report produces the sole paper
 entry, with zero false-terminal and settlement-source violations. Mirrored
@@ -189,7 +192,7 @@ Forward observations and human labels remain required.
 | 6 | [Bab el-Mandeb effectively closed](https://polymarket.com/event/bab-el-mandeb-strait-effectively-closed-by) | `MONOTONE_DEADLINE_LADDER` | `NUMERIC_THRESHOLD` (`7-day moving average <= 10`) | IMF PortWatch is the required settlement source | Source-specific data adapter, revision cutoff, 14-day missing-data rule, and bad Gamma dates |
 | 7 | [Next US-Iran peace talks by](https://polymarket.com/event/next-round-of-us-iran-peace-talks-byptptpt-20260623022722982) | `MONOTONE_DEADLINE_LADDER` | `OCCURRENCE_BEFORE_DEADLINE` | Official US and Iranian information plus consensus credible reporting | Per-leg deadline and exact definition of a qualifying round |
 | 8 | [Iran military action against a Gulf state](https://polymarket.com/event/iran-military-action-against-a-gulf-state-onptptpt-20260708212328295/iran-military-action-against-a-gulf-state-on-july-31-20260708212322956) / Jul 31 | `INDEPENDENT_MULTI` daily bins | `OCCURRENCE_ON_DATE` | Official Iran/relevant Gulf-state government and military information plus consensus credible reporting | Current evaluator would inspect only the first outcome; every date needs an independent window |
-| 9 | [Hamas agrees to disarm](https://polymarket.com/event/will-hamaz-disarm-by-december-31) / Dec 31, 2026 | `MONOTONE_DEADLINE_LADDER` (one open leg, historical siblings retained) | `SOURCE_LOCKED_ANNOUNCEMENT` | Hamas leadership statement, with wide credible-reporting consensus as an alternative qualifying path | `PRIMARY_WITH_FALLBACK`/alternative source policy and per-leg rules |
+| 9 | [Hamas agrees to disarm](https://polymarket.com/event/will-hamaz-disarm-by-december-31) / Dec 31, 2026 | `MONOTONE_DEADLINE_LADDER` (one open leg, historical siblings retained) | `SOURCE_LOCKED_ANNOUNCEMENT` | Hamas leadership statement, or one approved original credible publisher under the alternative reporting path | Alternative source policy and per-leg rules |
 | 10 | [Location of next US-Iran talks](https://polymarket.com/event/where-will-the-next-next-round-of-us-iran-peace-talks-beptptpt-20260623023740663/will-the-next-diplomatic-us-iran-meeting-be-in-switzerland-by-september-30-2026-20260622185050768) / Switzerland | `EXCLUSIVE_ONE_OF_N` | `CATEGORICAL_EXCLUSIVE` | Official US and Iranian information plus consensus credible reporting | Correct exclusive binding for 19 outcomes, including no-meeting and regional catch-alls |
 | 11 | [US military action against Cuba](https://polymarket.com/event/us-strike-on-cuba-by) | `MONOTONE_DEADLINE_LADDER` (one open leg) | `OCCURRENCE_BEFORE_DEADLINE` | Consensus of credible reporting; Trump/US claims qualify subject to the rule | Two-day post-deadline confirmation window and historical siblings |
 | 12 | [Iran successfully targets shipping](https://polymarket.com/event/iran-successfully-targets-shipping-onptptpt-20260729163314520/iran-successfully-targets-shipping-on-august-23-2026-20260729163314543) / Aug 23 | `INDEPENDENT_MULTI` daily bins | `OCCURRENCE_ON_DATE` | Consensus of credible reporting | 31 independent date windows; no categorical or ladder inference is valid |

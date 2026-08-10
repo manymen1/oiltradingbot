@@ -402,7 +402,9 @@ def test_observed_venezuela_inverted_window_is_not_repaired() -> None:
 
     repaired, notes = _repair_semantic_payload(payload)
 
-    assert notes == []
+    assert notes == [
+        "resolution_policy.credible_reporting_confirmations->1"
+    ]
     with pytest.raises(ValueError, match="end_iso must be after"):
         RuleSemantics.from_dict(repaired)
 

@@ -115,15 +115,16 @@ is evaluated later from immutable source and requirement identities. A mirror
 of Reuters is still one Reuters observation; six US government endpoints are
 still one `government:united_states` independence group.
 
-For the Cuba canary, the operator interpretation is deliberately low latency:
-one qualifying report from one approved credible publisher is terminal, and a
-qualifying Trump or U.S.-government claim is an alternative terminal path.
-Additional publishers corroborate the event but are not required before the
-paper decision. Syndicated copies remain the same origin observation; they do
-not manufacture extra authority. Predicate and exclusion checks still run
-before source policy, so an official report about an intercepted missile,
+The operator policy is deliberately low latency across every market: whenever
+credible reporting is an allowed source path, one qualifying report from one
+approved original credible publisher is terminal. Additional publishers
+corroborate the event but are not required before the paper decision.
+Syndicated copies remain the same origin observation; they do not manufacture
+extra authority. This source threshold never bypasses the predicate or another
+required branch. For example, a Cuba report about an intercepted missile,
 artillery, naval shelling, cyber activity, or a non-terrestrial impact cannot
-terminal the market.
+terminal, and an announcement-and-implementation market still needs both
+predicate branches.
 
 ### How much a source moves a market
 
@@ -212,7 +213,7 @@ or an opaque `DURATION_OBSERVED=14 days` claim cannot create terminal Yes.
 | 2 | US-Iran effective ceasefire | Rule compiler disagreement | US and Iranian government/military; credible reporting only where rules permit | Review 14-day reset state, qualifying strikes, conflict fallback, and exact ET deadline |
 | 3 | US-Iran final nuclear deal | Rule compiler disagreement | US/Iran governments or authorized representatives | Review written-instrument predicate and per-leg rule deadlines |
 | 4 | US military action against Cuba | `PAPER_ELIGIBLE`; single-source/exclusion replay passed | One approved credible publisher, Donald Trump, or US government | Repair/refresh fee schedules and book freshness, then collect forward paper evidence and labels |
-| 5 | Hamas disarm by Dec 31 | Rule compiler disagreement | Hamas leadership; wide credible consensus only under the rule's alternative path | Implement safe nested/alternative quorum or keep fallback blocked |
+| 5 | Hamas disarm by Dec 31 | Rule compiler disagreement | Hamas leadership or one approved credible publisher under the reporting path | Implement safe alternative branches or keep the market blocked |
 | 6 | Location of next US-Iran talks | Invalid first compile | US/Iran official information plus credible consensus | Review 19-way exclusive topology and correct invalid fallback quorum |
 | 7 | Iran successfully targets shipping | Rule compiler disagreement | Credible-reporting consensus | Review every daily outcome independently; prohibit cross-date inference |
 | 8 | Iran charges Hormuz fees | Rule compiler disagreement | Iranian official announcement and independent reporting of collection | Add compound announcement-AND-collection predicate/evidence support |
@@ -237,7 +238,7 @@ earlier package.
 | 1 | Blockade and Cuba | evidence extraction, replay, generic paper runner | Real-source labels, compatible quote timelines, paper proofs; both adversarial replays now pass | Zero false terminals/policy bypasses and configured minimum forward samples begin accumulating |
 | 2 | US-Iran duration and Israel-Iran ceasefire status | contracts, evidence claims, evaluators, replay | Action ledger, explicit duration intervals, ET/IRST calendar logic, conflict adjudication, shared strike-exclusion corpus | Every reset/status fixture passes per leg; compiler candidate repeats exactly or remains blocked |
 | 3 | Final nuclear deal | compiler clauses, compound document evidence, source policy | Same-instrument/two-signature and formal-adoption representations; authorized representative identities | Partial drafts, framework announcements, one-sided signatures, and later repudiation replay correctly |
-| 4 | Hamas disarm and talks location | structured source policy and exclusive topology | Official-OR-wide-consensus policy; 19-way exclusive binding including catch-alls | No flattening of alternative quorums; exactly one terminal location outcome can win |
+| 4 | Hamas disarm and talks location | structured source policy and exclusive topology | Official-OR-one-credible-publisher policy; 19-way exclusive binding including catch-alls | No flattening of alternative branches; exactly one terminal location outcome can win |
 | 5 | Hormuz fees | compound predicates and evidence joins | Iranian announcement branch AND independent collection branch, both before each leg cutoff | Neither announcement-only nor isolated vessel demand can terminal; both branches can |
 | 6 | Shipping and Gulf-state daily markets | independent multi-outcome evaluator | Immutable per-date windows, target outcome enforcement, date-local proofs | Evidence for one date cannot affect another; every active leg has boundary fixtures |
 | 7 | Iran leader | categorical authority evaluator | Active-outcome filtering and de facto-control indicators | Symbolic/formal-only claims stay ambiguous; one effective controller or No Head of State resolves exclusively |
@@ -283,8 +284,8 @@ rule version.
 - Source-locked official markets: ingest the exact named government or
   organization endpoints. All endpoints for one government share one
   independence group.
-- Credible-reporting markets: require the RuleSpec's exact policy and count
-  independent publishers, not URLs, mirrors, or aggregators.
+- Credible-reporting markets: one approved original credible publisher is
+  terminal. Count the origin organization, not URLs, mirrors, or aggregators.
 - Numeric-oracle markets: accept only the named dataset and its versioned
   calculation/revision rules.
 - Compound markets: every required evidence branch must be satisfied; one
@@ -317,8 +318,8 @@ must count every `<item>` or `<entry>` occurrence.
 
 ### R2 — Add missing expressiveness
 
-- Nested source logic: one official source OR a quorum of independent credible
-  publishers.
+- Alternative source logic: one official source OR one approved original
+  credible publisher.
 - Compound predicates: official announcement AND observed implementation.
 - Resettable durations: a qualifying event restarts an exact continuous window.
 - Numeric time series: named dataset, moving average, revisions, publication

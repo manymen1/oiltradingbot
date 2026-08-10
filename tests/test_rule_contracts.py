@@ -364,11 +364,21 @@ def test_compiler_canonicalizes_consensus_or_official_alternatives() -> None:
     assert "source_policy.any_of_consensus->alternative_quorum" in repairs
 
 
-def test_compiler_preserves_wide_consensus_independence() -> None:
+@pytest.mark.parametrize(
+    "source_ref",
+    [
+        "credible reporting",
+        "consensus of credible reporting",
+        "wide consensus of credible reporting",
+    ],
+)
+def test_compiler_uses_one_source_for_all_credible_reporting_wording(
+    source_ref: str,
+) -> None:
     context = context_for_case(_golden_rules()[0], strong_analysis=True)
     raw = fixture_semantics(context).as_dict()
     credible = raw["source_requirements"][0]
-    credible["source_ref"] = "wide consensus of credible reporting"
+    credible["source_ref"] = source_ref
     credible["requirement_id"] = "temporary_wide_consensus"
     official = {
         **credible,
@@ -388,15 +398,54 @@ def test_compiler_preserves_wide_consensus_independence() -> None:
         "fallback_requirement_ids": [],
         "fallback_condition": "",
     }
-    raw["resolution_policy"]["independent_confirmation_sources"] = 1
+    raw["resolution_policy"]["independent_confirmation_sources"] = 2
 
-    repaired, _repairs = _repair_semantic_payload(raw)
+    repaired, repairs = _repair_semantic_payload(raw)
 
     assert repaired["source_policy"]["branches"][0] == {
         "requirement_ids": ["temporary_wide_consensus"],
         "requirement_quorum": 1,
-        "minimum_independent_sources": 2,
+        "minimum_independent_sources": 1,
     }
+    assert repaired["resolution_policy"][
+        "independent_confirmation_sources"
+    ] == 1
+    assert (
+        "resolution_policy.credible_reporting_confirmations->1" in repairs
+    )
+
+    direct = json.loads(json.dumps(raw))
+    direct["source_policy"] = {
+        "policy_type": "ALTERNATIVE_QUORUM",
+        "requirement_ids": [
+            "temporary_wide_consensus",
+            "temporary_official",
+        ],
+        "quorum": 1,
+        "primary_requirement_ids": [],
+        "fallback_requirement_ids": [],
+        "fallback_condition": "",
+        "branches": [
+            {
+                "requirement_ids": ["temporary_wide_consensus"],
+                "requirement_quorum": 1,
+                "minimum_independent_sources": 3,
+            },
+            {
+                "requirement_ids": ["temporary_official"],
+                "requirement_quorum": 1,
+                "minimum_independent_sources": 1,
+            },
+        ],
+    }
+    direct_repaired, direct_repairs = _repair_semantic_payload(direct)
+    assert direct_repaired["source_policy"]["branches"][0][
+        "minimum_independent_sources"
+    ] == 1
+    assert (
+        "source_policy.credible_reporting_branch_sources->1"
+        in direct_repairs
+    )
 
 
 def test_rule_spec_binding_rejects_instrument_mutation() -> None:
