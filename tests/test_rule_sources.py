@@ -127,6 +127,17 @@ def test_untrusted_literal_source_is_not_an_outbound_poll_target() -> None:
 @pytest.mark.parametrize(
     ("source_ref", "expected_domains"),
     [
+        ("Donald Trump", {"whitehouse.gov"}),
+        (
+            "U.S. government",
+            {
+                "state.gov",
+                "whitehouse.gov",
+                "defense.gov",
+                "war.gov",
+                "centcom.mil",
+            },
+        ),
         ("President of the United States", {"whitehouse.gov"}),
         ("United States Department of State", {"state.gov"}),
         (

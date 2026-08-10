@@ -1,6 +1,6 @@
 # Priority Iran Market Semantic Roadmap
 
-Snapshot date: 2026-07-31
+Snapshot date: 2026-08-10
 
 ## Objective
 
@@ -120,9 +120,26 @@ and substantive review note. The imported file hash and approval are stored
 atomically with the immutable RuleSpec. Deterministic preflight, clause,
 instrument, topology, deadline-authority, SourcePlan, grading, and execution
 checks remain in force. Reviewed-only specs are unconditionally paper-only.
-No canary has been imported: the blockade candidate still requires operator
-review of its rule family, official-source representation, and terminal-Yes
-clause coverage.
+The first reviewed import, the next-round-of-US-Iran-peace-talks event, is now
+stored with RuleSpec hash
+`2f3109a3620e906bc295c89c2571f5b8b36add31554fd71f1ba6d526ec7fd917`
+and a fresh 22-record SourcePlan. Its terminal policy conservatively accepts a
+named US or Iranian government source; the credible-reporting alternative was
+withheld because the current flat policy cannot express “one government OR two
+independent publishers” without weakening the official path. Regrading now
+correctly classifies this context `CLOSED`, so it is a resolution/replay canary
+rather than a live paper-trading canary.
+
+The first automatically agreed active canary is the US-military-action-against-
+Cuba event, RuleSpec hash
+`abc268b023c6cc4691554a38599676fa525d69fd90170e131d587dd9ac8d2f6e`.
+Its three source-policy alternatives are fully resolved, its context grades
+`PAPER_ELIGIBLE`, and a one-shot generic runner cycle produced three immutable
+ambiguous proofs and zero executions. The registry now binds both “Donald
+Trump” and “U.S. government” to canonical US-government identities; the latter
+can no longer be misparsed as a synthetic `u.s` domain. This canary remains
+paper-only because its rule family is not promoted, its rules are
+discretionary, and Gamma's deadline differs from the exact verbatim-rule clock.
 
 The blockade review exercise also exposed and fixed a deterministic source
 registry gap. Its six named US-government alternatives now resolve to the

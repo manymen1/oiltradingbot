@@ -97,6 +97,18 @@ _NAMED_OFFICIAL_ACTOR_REFERENCES: dict[
     str,
     tuple[str, set[str]],
 ] = {
+    # These short verbatim forms occur in Polymarket resolution rules. Handle
+    # them before the generic domain parser so ``U.S. government`` cannot be
+    # misread as the synthetic domain ``u.s`` and a named president is bound
+    # to the same government identity as the official presidential channel.
+    "u.s. government": (
+        "united_states",
+        {"state.gov", "whitehouse.gov", "defense.gov", "war.gov", "centcom.mil"},
+    ),
+    "donald trump": (
+        "united_states",
+        {"whitehouse.gov"},
+    ),
     "official information from the united states government": (
         "united_states",
         {"state.gov", "whitehouse.gov", "defense.gov", "war.gov", "centcom.mil"},
