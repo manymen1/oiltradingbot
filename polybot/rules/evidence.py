@@ -326,6 +326,10 @@ class EvidenceExtractor:
                 article.domain,
                 organization,
                 independence_group,
+                allowed_requirement_ids={
+                    item.requirement_id
+                    for item in spec.semantics.source_requirements
+                },
             ),
             published_at=_timestamp(article.published_at),
             extracted_at=extraction_time,
@@ -664,6 +668,23 @@ def fixture_fact(
             "same single",
             "duplicate report",
             "no event occurred",
+            # Source-locked announcement exclusions used by the reviewed
+            # blockade canary. Keep these literal and conservative: replay
+            # fixtures must not promote a partial exemption, a conditional
+            # preview, a leak, or an unofficial communication into a
+            # terminal announcement merely because it contains words such as
+            # "announced" or "official" elsewhere in the article.
+            "limited or partial change",
+            "specific vessel exemption",
+            "prospective or contingent",
+            "conditional end",
+            "leaked statement",
+            "anonymous statement",
+            "not authorized to speak",
+            "informal comment",
+            "fabricated communication",
+            "hacked communication",
+            "impersonated communication",
         )
     ):
         assertion = "EXCLUDED_ACTIVITY"
@@ -805,6 +826,8 @@ def _source_requirement_ids(
     domain: str,
     organization: str,
     independence_group: str,
+    *,
+    allowed_requirement_ids: set[str] | None = None,
 ) -> list[str]:
     normalized_domain = _domain(domain)
     requirement_ids: set[str] = set()
@@ -822,6 +845,8 @@ def _source_requirement_ids(
         )
         if domain_match or identity_match:
             requirement_ids.update(item.requirement_ids)
+    if allowed_requirement_ids is not None:
+        requirement_ids.intersection_update(allowed_requirement_ids)
     return sorted(requirement_ids)
 
 

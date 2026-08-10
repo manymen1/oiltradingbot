@@ -152,8 +152,11 @@ verbatim terminal-Yes clauses. The exact reviewed RuleSpec
 `25837ae13fa6dc7b684afa6b06397bdff0d59912dde97f6105be937542214545`
 is now imported with a fresh 21-record SourcePlan and grades
 `PAPER_ELIGIBLE`. Its first generic paper cycle emitted 17 ambiguous per-leg
-proofs and zero executions; terminal-positive replay fixtures and forward
-observations remain required.
+proofs and zero executions. Its adversarial replay now keeps partial vessel
+exemptions, conditional previews, leaks, and unauthorized comments
+nonterminal; only the final qualifying White House announcement creates a
+paper entry, with zero false-terminal or settlement-source violations.
+Forward observations and human labels remain required.
 
 ## Live Mapping
 

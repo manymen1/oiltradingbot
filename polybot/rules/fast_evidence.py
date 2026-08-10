@@ -179,6 +179,10 @@ def extract_fast_evidence(
                 article.domain,
                 organization,
                 independence_group,
+                allowed_requirement_ids={
+                    item.requirement_id
+                    for item in spec.semantics.source_requirements
+                },
             ),
             published_at=_iso(article.published_at),
             extracted_at=_iso(extracted_at),

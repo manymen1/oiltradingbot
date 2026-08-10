@@ -12,7 +12,13 @@ from polybot.core.types import Article
 from polybot.discovery.sources import build_source_plan
 from polybot.discovery.store import DiscoveryStore
 from polybot.rules.compiler import fixture_semantics
-from polybot.rules.contracts import RuleSpec, sha256_json
+from polybot.rules.contracts import (
+    RuleSpec,
+    SourcePolicy,
+    SourceRequirement,
+    sha256_json,
+    source_requirement_id,
+)
 from polybot.rules.promotion import (
     PromotionPolicy,
     build_promotion_report,
@@ -70,6 +76,90 @@ logs_dir: {tmp_path / 'logs'}
     return config_path, context, spec
 
 
+def _setup_blockade(tmp_path: Path) -> tuple[Path, object, RuleSpec]:
+    rule_text = """This market resolves Yes if the United States government, or an authorized representative, publicly and officially announces the end, termination, lifting, or suspension of the United States naval blockade on Iranian ships before the deadline. A qualifying announcement must clearly communicate a present and decided general end or suspension through official channels. A limited or partial change, a specific-vessel exemption, a prospective, contingent, probable, or conditional end, an anonymous or leaked statement, an informal comment, a statement by someone not authorized to speak, or a fabricated, hacked, or impersonated communication does not qualify. Resolution will be based on official information from the United States government. Once a qualifying announcement is made, the result remains Yes even if it is later reversed. Otherwise this market resolves No."""
+    case = {
+        "id": "reviewed-us-iran-blockade",
+        "kind": "binary",
+        "question": "Will the US officially announce an end to the Iranian blockade?",
+        "rule_text": rule_text,
+        "resolution_source": "https://www.whitehouse.gov/",
+        "expected_family": "SOURCE_LOCKED_ANNOUNCEMENT",
+        "expected_comparator": "ANNOUNCED",
+    }
+    context = replace(
+        context_for_case(case, strong_analysis=True),
+        state="PAPER_ELIGIBLE",
+    )
+    semantics = fixture_semantics(context)
+    source_ref = "united states government"
+    requirement_id = source_requirement_id(
+        source_ref,
+        ["SETTLEMENT"],
+        True,
+    )
+    source_clause = next(
+        item.clause_id
+        for item in RuleSpec.from_context(
+            context,
+            semantics,
+            compiler_model="fixture",
+            compiled_at="2026-07-25T00:00:00+00:00",
+        ).rule_clauses
+        if "resolution will be based" in item.text.casefold()
+    )
+    semantics = replace(
+        semantics,
+        source_requirements=[
+            SourceRequirement(
+                requirement_id=requirement_id,
+                source_ref=source_ref,
+                roles=["SETTLEMENT"],
+                required=True,
+                rationale="reviewed blockade requires official US information",
+                clause_ids=[source_clause],
+            )
+        ],
+        source_policy=SourcePolicy(
+            policy_type="ALL_OF",
+            requirement_ids=[requirement_id],
+            quorum=1,
+        ),
+    )
+    spec = RuleSpec.from_context(
+        context,
+        semantics,
+        compiler_model="reviewed:test",
+        compiled_at="2026-07-25T00:00:00+00:00",
+    )
+    plan = build_source_plan(context, spec)
+    data_dir = tmp_path / "data"
+    store = DiscoveryStore(data_dir)
+    store.save_context(context)
+    store.save_source_plan(plan)
+    RuleStore(data_dir / "rules.sqlite3").save_spec(spec)
+    config_path = tmp_path / "discovery.yaml"
+    config_path.write_text(
+        f"""
+classifier:
+  provider: rule_based
+rule_compiler:
+  enabled: true
+rule_runner:
+  enabled: true
+  extraction_passes: 2
+  paper_fee_bps: 0
+  paper_slippage_bps: 25
+fleet:
+  position_mode: alert_only
+data_dir: {data_dir}
+logs_dir: {tmp_path / 'logs'}
+""",
+        encoding="utf-8",
+    )
+    return config_path, context, spec
+
+
 def _book(
     at: str,
     outcome: str,
@@ -96,8 +186,8 @@ def _article(
     at: str,
     article_id: str,
     domain: str,
+    text: str = "Both senior delegations entered the room and talks began.",
 ) -> dict:
-    text = "Both senior delegations entered the room and talks began."
     return {
         "type": "ARTICLE",
         "at": at,
@@ -201,6 +291,72 @@ def test_rules_first_replay_reprices_after_terminal_evidence_and_is_stable(
     changed = replay_rule_market(changed_config, context.market_id, timeline)
     assert changed["run_id"] != first["run_id"]
     assert changed["replay_policy_sha256"] != first["replay_policy_sha256"]
+
+
+def test_blockade_replay_rejects_near_misses_before_official_announcement(
+    tmp_path: Path,
+) -> None:
+    config_path, context, spec = _setup_blockade(tmp_path)
+    outcome = spec.outcomes[0].name
+    events = [
+        _book(
+            "2026-07-25T10:00:00+00:00",
+            outcome,
+            yes_bid=0.78,
+            yes_ask=0.80,
+        ),
+        _article(
+            "2026-07-25T10:00:01+00:00",
+            "partial-exemption",
+            "whitehouse.gov",
+            "A limited or partial change created a specific vessel exemption.",
+        ),
+        _article(
+            "2026-07-25T10:00:02+00:00",
+            "conditional-preview",
+            "whitehouse.gov",
+            "The administration described a conditional end and plans to announce later.",
+        ),
+        _article(
+            "2026-07-25T10:00:03+00:00",
+            "leaked-draft",
+            "reuters.com",
+            "An anonymous leaked statement described a draft suspension.",
+        ),
+        _article(
+            "2026-07-25T10:00:04+00:00",
+            "unauthorized-comment",
+            "whitehouse.gov",
+            "An adviser not authorized to speak made an informal comment.",
+        ),
+        _article(
+            "2026-07-25T10:00:05+00:00",
+            "official-final",
+            "whitehouse.gov",
+            "The White House formally announced the present general end of the blockade.",
+        ),
+        {
+            "type": "RESOLUTION",
+            "at": "2026-12-31T23:59:59-05:00",
+            "outcome": outcome,
+            "resolved_yes": True,
+        },
+    ]
+    timeline = tmp_path / "blockade-timeline.jsonl"
+    timeline.write_text(
+        "\n".join(json.dumps(item, sort_keys=True) for item in events),
+        encoding="utf-8",
+    )
+
+    result = replay_rule_market(config_path, context.market_id, timeline)
+
+    executed = [cycle for cycle in result["cycles"] if cycle.get("executed")]
+    assert len(executed) == 1
+    assert executed[0]["trigger"] == "ARTICLE"
+    assert executed[0]["at"] == "2026-07-25T10:00:05+00:00"
+    assert result["decisions"]["executed_entries"] == 1
+    assert result["safety"]["false_terminal_actions"] == 0
+    assert result["safety"]["settlement_source_violations"] == 0
 
 
 def test_historical_article_age_uses_replay_clock() -> None:
