@@ -756,9 +756,13 @@ def merge_refresh(existing: MarketContext, fresh: MarketContext) -> MarketContex
     version bumps, and the market falls back to RULES_REVIEW_REQUIRED (the
     changed-rule-hash execution block)."""
     rule_changed = existing.rule_text_sha256 != fresh.rule_text_sha256
+    fresh_payload = fresh.as_dict()
     merged = {
         **existing.as_dict(),
-        "outcomes": [o.__dict__ for o in fresh.outcomes],
+        # Use the public serialized form. OutcomeRecord.__dict__ leaves the
+        # nested FeeScheduleSnapshot as a Python object, and from_dict treats
+        # non-dicts as unavailable. That silently discarded every fee refresh.
+        "outcomes": fresh_payload["outcomes"],
         "deadline_iso": fresh.deadline_iso,
         "volume": fresh.volume,
         "liquidity": fresh.liquidity,

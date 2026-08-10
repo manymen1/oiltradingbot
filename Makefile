@@ -137,6 +137,13 @@ build-forward-timeline: ## build content-addressed forward replay input (MARKET=
 rotate-forward-recorder: ## offline checkpoint and recoverable archive rotation
 	$(GEO) rotate-forward-recorder --config $(CONFIG) $(if $(ARCHIVE_DIR),--archive-dir "$(ARCHIVE_DIR)",) $(if $(FULL_CHECK),--full-check,)
 
+forward-recorder-rotation-due: ## report whether the hot recorder segment is due for rotation
+	$(GEO) forward-recorder-rotation-due --config $(CONFIG)
+
+compress-forward-recorder-archive: ## verify/compress one closed segment (MANIFEST=file)
+	@test -n "$(MANIFEST)" || (echo "usage: make compress-forward-recorder-archive MANIFEST=<manifest.json> [LEVEL=1]"; exit 1)
+	$(GEO) compress-forward-recorder-archive --manifest "$(MANIFEST)" --level "$(or $(LEVEL),1)"
+
 reconcile: ## ledger hygiene: free dead position slots, roll stale buckets
 	$(GEO) reconcile-ledger --config $(CONFIG)
 

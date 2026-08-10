@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import fcntl
+import gzip
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import threading
 import time
@@ -2190,6 +2192,7 @@ class ForwardBookService:
 
     def status(self) -> dict[str, Any]:
         capture = self.store.capture_status()
+        rotation = forward_recorder_rotation_status(self.config)
         self._refresh_storage_pressure(
             database_size_bytes=int(capture["database_size_bytes"]),
             force=True,
@@ -2241,6 +2244,7 @@ class ForwardBookService:
                 "storage_hard_limit_gib": (
                     self.recorder_config.storage_hard_limit_gib
                 ),
+                "rotation": rotation,
                 "storage_growth_bytes_per_second": round(
                     self._storage_growth_bytes_per_second,
                     3,
@@ -2331,6 +2335,11 @@ class ForwardBookService:
                 health_blockers.append(
                     "storage_warning:"
                     f"{capture['database_size_gib']}GiB"
+                )
+            if bool(rotation["archive_warning"]):
+                health_blockers.append(
+                    "archive_storage_warning:"
+                    f"{rotation['archive_size_gib']}GiB"
                 )
         soak = {
             "healthy": not health_blockers,
@@ -3599,7 +3608,247 @@ def rotate_forward_recorder(
     manifest["rest_seed_failures_carried"] = len(failure_rows)
     _atomic_json_write(Path(str(manifest["manifest_path"])), manifest)
     fresh_store.close()
+    log_event(
+        "forward_recorder_rotated",
+        archive_path=manifest["archive_path"],
+        archived_bytes=manifest["archived_bytes"],
+        book_event_high_watermark=manifest["book_event_high_watermark"],
+        operational_event_high_watermark=(
+            manifest["operational_event_high_watermark"]
+        ),
+        rest_seed_failures_carried=manifest["rest_seed_failures_carried"],
+    )
     return manifest
+
+
+def forward_recorder_rotation_status(
+    config: DiscoveryConfig,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Return the evidence used by the supervised rotation condition.
+
+    Time-based rotation uses the oldest session in the current segment rather
+    than the database mtime, which changes on every write. Size includes WAL
+    and SHM sidecars so a large uncheckpointed segment cannot evade rotation.
+    """
+    database_path = forward_recorder_db_path(config)
+    sidecars = [Path(f"{database_path}{suffix}") for suffix in ("-wal", "-shm")]
+    database_size_bytes = sum(
+        item.stat().st_size
+        for item in (database_path, *sidecars)
+        if item.exists()
+    )
+    segment_started_at = ""
+    if database_path.exists():
+        try:
+            with sqlite3.connect(
+                f"file:{database_path}?mode=ro",
+                uri=True,
+                timeout=5.0,
+            ) as connection:
+                row = connection.execute(
+                    "SELECT MIN(started_at) FROM sessions"
+                ).fetchone()
+                segment_started_at = str(row[0] or "") if row else ""
+        except sqlite3.Error:
+            segment_started_at = ""
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    segment_age_hours: float | None = None
+    if segment_started_at:
+        try:
+            started = datetime.fromisoformat(
+                segment_started_at.replace("Z", "+00:00")
+            )
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            segment_age_hours = max(
+                0.0,
+                (current - started.astimezone(timezone.utc)).total_seconds()
+                / 3600.0,
+            )
+        except ValueError:
+            segment_age_hours = None
+
+    policy = config.forward_recorder
+    due_reasons: list[str] = []
+    if (
+        policy.auto_rotate_gib > 0
+        and database_size_bytes >= policy.auto_rotate_gib * (1024**3)
+    ):
+        due_reasons.append("size")
+    if (
+        policy.auto_rotate_hours > 0
+        and segment_age_hours is not None
+        and segment_age_hours >= policy.auto_rotate_hours
+    ):
+        due_reasons.append("age")
+
+    archive_dir = database_path.parent / "forward_recorder_archive"
+    archive_size_bytes = sum(
+        item.stat().st_size
+        for item in archive_dir.iterdir()
+        if item.is_file()
+    ) if archive_dir.exists() else 0
+    archive_warning = (
+        policy.archive_warning_gib > 0
+        and archive_size_bytes >= policy.archive_warning_gib * (1024**3)
+    )
+    return {
+        "database_path": str(database_path),
+        "database_size_bytes": database_size_bytes,
+        "database_size_gib": round(database_size_bytes / (1024**3), 3),
+        "segment_started_at": segment_started_at,
+        "segment_age_hours": (
+            round(segment_age_hours, 3)
+            if segment_age_hours is not None
+            else None
+        ),
+        "auto_rotate_gib": policy.auto_rotate_gib,
+        "auto_rotate_hours": policy.auto_rotate_hours,
+        "rotation_due": bool(due_reasons),
+        "rotation_due_reasons": due_reasons,
+        "archive_path": str(archive_dir),
+        "archive_size_bytes": archive_size_bytes,
+        "archive_size_gib": round(archive_size_bytes / (1024**3), 3),
+        "archive_warning_gib": policy.archive_warning_gib,
+        "archive_warning": archive_warning,
+        "archive_compression": policy.archive_compression,
+        "archive_compression_level": policy.archive_compression_level,
+        "checked_at": current.astimezone(timezone.utc).isoformat(),
+    }
+
+
+def compress_forward_recorder_archive(
+    manifest_path: Path,
+    *,
+    level: int = 1,
+) -> dict[str, Any]:
+    """Losslessly compress one closed recorder segment and update its manifest.
+
+    The original SQLite file remains in place until a complete decompression
+    verification succeeds. Checkpoint sidecars are removed only after the
+    replacement is durable and the manifest records its checksum.
+    """
+    if level < 1 or level > 9:
+        raise ValueError("gzip compression level must be between 1 and 9")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    archive_path = Path(str(manifest.get("archive_path") or ""))
+    if not archive_path.is_absolute():
+        archive_path = Path.cwd() / archive_path
+    if archive_path.suffix == ".gz":
+        if not archive_path.exists():
+            raise ValueError(f"compressed archive does not exist: {archive_path}")
+        return manifest
+    if not archive_path.exists():
+        raise ValueError(f"forward recorder archive does not exist: {archive_path}")
+    checkpoint = manifest.get("wal_checkpoint")
+    if not isinstance(checkpoint, list) or not checkpoint or int(checkpoint[0]) != 0:
+        raise ValueError("archive manifest does not prove a completed WAL checkpoint")
+
+    compressed_path = Path(f"{archive_path}.gz")
+    temporary_path = compressed_path.with_name(
+        f".{compressed_path.name}.{uuid.uuid4().hex}.tmp"
+    )
+    source_bytes = archive_path.stat().st_size
+    try:
+        with archive_path.open("rb") as source, temporary_path.open("wb") as raw:
+            with gzip.GzipFile(
+                filename=archive_path.name,
+                mode="wb",
+                fileobj=raw,
+                compresslevel=level,
+                mtime=0,
+            ) as destination:
+                shutil.copyfileobj(source, destination, length=16 * 1024 * 1024)
+            raw.flush()
+            os.fsync(raw.fileno())
+
+        restored_bytes = 0
+        with gzip.open(temporary_path, "rb") as verified:
+            while chunk := verified.read(16 * 1024 * 1024):
+                restored_bytes += len(chunk)
+        if restored_bytes != source_bytes:
+            raise RuntimeError(
+                "compressed recorder verification size mismatch: "
+                f"{restored_bytes}!={source_bytes}"
+            )
+        compressed_sha256 = hashlib.sha256()
+        with temporary_path.open("rb") as compressed:
+            while chunk := compressed.read(16 * 1024 * 1024):
+                compressed_sha256.update(chunk)
+        os.replace(temporary_path, compressed_path)
+        archive_path.unlink()
+
+        for raw_sidecar in manifest.get("archived_sidecars", []):
+            sidecar = Path(str(raw_sidecar))
+            if not sidecar.is_absolute():
+                sidecar = Path.cwd() / sidecar
+            if sidecar.exists():
+                if sidecar.name.endswith("-wal") and sidecar.stat().st_size:
+                    raise RuntimeError(
+                        f"refusing to remove non-empty archived WAL: {sidecar}"
+                    )
+                sidecar.unlink()
+
+        display_path: Path
+        try:
+            display_path = compressed_path.relative_to(Path.cwd())
+        except ValueError:
+            display_path = compressed_path
+        manifest.update(
+            {
+                "archive_path": str(display_path),
+                "archived_sidecars": [],
+                "compressed_bytes": compressed_path.stat().st_size,
+                "compression": f"gzip-{level}",
+                "compressed_sha256": compressed_sha256.hexdigest(),
+                "compression_verified_at": _now(),
+                "recovery": (
+                    "Run gzip -dk on archive_path, then set "
+                    "forward_recorder.db_path to the decompressed .sqlite3 "
+                    "path in a copy of the config."
+                ),
+            }
+        )
+        _atomic_json_write(manifest_path, manifest)
+        log_event(
+            "forward_recorder_archive_compressed",
+            archive_path=manifest["archive_path"],
+            archived_bytes=manifest.get("archived_bytes"),
+            compressed_bytes=manifest["compressed_bytes"],
+            compressed_sha256=manifest["compressed_sha256"],
+            compression=manifest["compression"],
+        )
+        return manifest
+    except Exception:
+        if temporary_path.exists():
+            temporary_path.unlink()
+        raise
+
+
+def forward_recorder_rotation_due_command(config_path: Path) -> int:
+    config = load_discovery_config(config_path)
+    status = forward_recorder_rotation_status(config)
+    print(json.dumps(status, indent=2, sort_keys=True))
+    return 0 if status["rotation_due"] else 1
+
+
+def compress_forward_recorder_archive_command(
+    manifest_path: Path,
+    *,
+    level: int = 1,
+) -> int:
+    print(
+        json.dumps(
+            compress_forward_recorder_archive(manifest_path, level=level),
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
 
 
 def rotate_forward_recorder_command(
@@ -4162,8 +4411,12 @@ __all__ = [
     "RecordedClobQuoteAdapter",
     "build_forward_timeline",
     "build_forward_timeline_command",
+    "compress_forward_recorder_archive",
+    "compress_forward_recorder_archive_command",
     "forward_completeness_command",
     "forward_completeness_report",
+    "forward_recorder_rotation_due_command",
+    "forward_recorder_rotation_status",
     "record_forward_resolutions",
     "rotate_forward_recorder",
     "rotate_forward_recorder_command",

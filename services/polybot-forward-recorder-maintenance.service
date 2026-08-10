@@ -1,0 +1,12 @@
+[Unit]
+Description=Rotate and compress the Polybot forward recorder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/tstuv/poly/anthropic-exec-bot
+ExecCondition=/home/tstuv/poly/anthropic-exec-bot/bin/geo forward-recorder-rotation-due --config configs/geopolitics/discovery.yaml
+ExecStart=/home/tstuv/poly/anthropic-exec-bot/scripts/maintain_forward_recorder.sh configs/geopolitics/discovery.yaml polybot-fleet.service
+TimeoutStartSec=infinity
+

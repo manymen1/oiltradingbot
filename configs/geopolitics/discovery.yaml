@@ -322,6 +322,14 @@ forward_recorder:
   storage_warning_gib: 70.0
   storage_hard_limit_gib: 80.0
   storage_check_seconds: 5.0
+  # Keep the hot SQLite segment bounded. The maintenance timer restarts the
+  # fleet immediately after rotation and compresses the closed segment while
+  # capture is live again. The archive budget warns but never auto-deletes.
+  auto_rotate_gib: 10.0
+  auto_rotate_hours: 24.0
+  archive_compression: "gzip"
+  archive_compression_level: 1
+  archive_warning_gib: 150.0
   quote_survival_horizons_ms:
     - 100
     - 250

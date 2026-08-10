@@ -484,6 +484,21 @@ def test_rule_spec_binding_rejects_instrument_mutation() -> None:
             spec.validate_context_binding(changed)
 
 
+def test_rule_spec_binding_ignores_gamma_outcome_list_reordering() -> None:
+    case = next(item for item in _golden_rules() if item["kind"] == "grouped")
+    context = context_for_case(case, strong_analysis=True)
+    spec = RuleSpec.from_context(
+        context,
+        fixture_semantics(context),
+        compiler_model="anthropic:test",
+        compiled_at="2026-07-25T00:00:00+00:00",
+    )
+
+    spec.validate_context_binding(
+        replace(context, outcomes=list(reversed(context.outcomes)))
+    )
+
+
 def test_family_specific_contract_validation_fails_closed() -> None:
     context = context_for_case(_golden_rules()[0], strong_analysis=True)
     raw = fixture_semantics(context).as_dict()

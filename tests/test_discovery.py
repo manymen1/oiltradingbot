@@ -369,6 +369,12 @@ def test_refresh_updates_outcome_topology_and_bound_leg_metadata() -> None:
         outcome.resolution_source == event["resolutionSource"]
         for outcome in merged.outcomes
     )
+    assert all(outcome.fee_schedule is not None for outcome in merged.outcomes)
+    assert all(
+        outcome.fee_schedule.fees_enabled is False
+        for outcome in merged.outcomes
+        if outcome.fee_schedule is not None
+    )
 
 
 # ---- analyzer + scorer ----

@@ -529,6 +529,15 @@ class ForwardRecorderConfig:
     storage_warning_gib: float = 0.0
     storage_hard_limit_gib: float = 0.0
     storage_check_seconds: float = 5.0
+    # Optional offline maintenance policy. A separate supervised timer checks
+    # these thresholds, briefly stops the fleet for the atomic checkpoint and
+    # rename, restarts capture, then compresses the closed segment. Archives
+    # are never deleted automatically; archive_warning_gib is alert-only.
+    auto_rotate_gib: float = 0.0
+    auto_rotate_hours: float = 0.0
+    archive_compression: str = "none"
+    archive_compression_level: int = 1
+    archive_warning_gib: float = 0.0
     # Book recording normally follows the fleet's monitored set, which is
     # filtered to TRADEABLE_STATES. That couples the recorded universe to
     # grading thresholds that are themselves untested hypotheses, so a
@@ -1360,6 +1369,9 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
     for field_name in (
         "storage_warning_gib",
         "storage_hard_limit_gib",
+        "auto_rotate_gib",
+        "auto_rotate_hours",
+        "archive_warning_gib",
     ):
         require_number(
             getattr(recorder, field_name),
@@ -1376,6 +1388,25 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
             "forward_recorder.storage_warning_gib must be less than "
             "storage_hard_limit_gib"
         )
+    if (
+        recorder.auto_rotate_gib > 0
+        and recorder.storage_hard_limit_gib > 0
+        and recorder.auto_rotate_gib >= recorder.storage_hard_limit_gib
+    ):
+        raise ValueError(
+            "forward_recorder.auto_rotate_gib must be less than "
+            "storage_hard_limit_gib"
+        )
+    if recorder.archive_compression not in {"none", "gzip"}:
+        raise ValueError(
+            "forward_recorder.archive_compression must be none or gzip"
+        )
+    require_integer(
+        recorder.archive_compression_level,
+        "forward_recorder.archive_compression_level",
+        minimum=1,
+        maximum=9,
+    )
     if recorder.enabled and not config.rule_runner.enabled:
         raise ValueError(
             "forward_recorder.enabled requires rule_runner.enabled"

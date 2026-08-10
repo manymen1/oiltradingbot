@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import gzip
+import hashlib
 import sqlite3
 import threading
 import time
@@ -29,7 +31,9 @@ from polybot.rules.forward import (
     RecordedClobQuoteAdapter,
     _evidence_policy_payload,
     build_forward_timeline,
+    compress_forward_recorder_archive,
     forward_completeness_report,
+    forward_recorder_rotation_status,
     record_forward_resolutions,
     rotate_forward_recorder,
 )
@@ -856,6 +860,83 @@ def test_rotation_refuses_active_store_then_archives_without_deletion(
     fresh.close()
 
 
+def test_closed_rotation_archive_is_verified_and_losslessly_compressed(
+    tmp_path: Path,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    database_path = forward_recorder_db_path(config)
+    store = ForwardRecorderStore(database_path)
+    binding = store.ensure_book_binding(context, config.forward_recorder)
+    store.start_session(
+        binding,
+        session_id="capture",
+        started_at="2026-07-25T00:00:00+00:00",
+    )
+    store.close()
+    rotated = rotate_forward_recorder(
+        config_path,
+        archive_dir=tmp_path / "archive",
+    )
+    manifest_path = Path(rotated["manifest_path"])
+    source_path = Path(rotated["archive_path"])
+
+    compressed = compress_forward_recorder_archive(
+        manifest_path,
+        level=1,
+    )
+    compressed_path = Path(compressed["archive_path"])
+    assert compressed_path.exists()
+    assert not source_path.exists()
+    assert compressed["compression"] == "gzip-1"
+    assert compressed["archived_sidecars"] == []
+    assert compressed["compressed_bytes"] == compressed_path.stat().st_size
+    assert compressed["compressed_sha256"] == hashlib.sha256(
+        compressed_path.read_bytes()
+    ).hexdigest()
+    with gzip.open(compressed_path, "rb") as archive:
+        assert archive.read(16) == b"SQLite format 3\x00"
+    assert compress_forward_recorder_archive(manifest_path) == compressed
+
+
+def test_rotation_status_reports_size_age_and_archive_budget(
+    tmp_path: Path,
+) -> None:
+    config_path, context, _spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    config = replace(
+        config,
+        forward_recorder=replace(
+            config.forward_recorder,
+            auto_rotate_gib=0.000000001,
+            auto_rotate_hours=1.0,
+            archive_warning_gib=0.000000001,
+            archive_compression="gzip",
+        ),
+    )
+    store = ForwardRecorderStore(forward_recorder_db_path(config))
+    binding = store.ensure_book_binding(context, config.forward_recorder)
+    store.start_session(
+        binding,
+        session_id="old-segment",
+        started_at="2026-07-25T00:00:00+00:00",
+    )
+    store.close()
+    archive_dir = config.data_dir / "forward_recorder_archive"
+    archive_dir.mkdir(parents=True)
+    (archive_dir / "segment.sqlite3.gz").write_bytes(b"archive")
+
+    status = forward_recorder_rotation_status(
+        config,
+        now=datetime(2026, 7, 25, 2, tzinfo=timezone.utc),
+    )
+    assert status["rotation_due"] is True
+    assert status["rotation_due_reasons"] == ["size", "age"]
+    assert status["segment_age_hours"] == 2.0
+    assert status["archive_warning"] is True
+    assert status["archive_compression"] == "gzip"
+
+
 def test_websocket_starts_before_rest_seed_and_shutdown_discards_old_seed(
     tmp_path: Path,
     monkeypatch,
@@ -1270,6 +1351,8 @@ def test_storage_status_forecasts_warning_and_hard_limit(
     assert status["storage_forecast_observation_seconds"] >= 3_599.0
     assert status["storage_hours_to_warning"] is not None
     assert status["storage_hours_to_hard_limit"] is not None
+    assert status["rotation"]["auto_rotate_gib"] == 0.0
+    assert status["rotation"]["rotation_due"] is False
     assert (
         status["storage_hours_to_warning"]
         < status["storage_hours_to_hard_limit"]
@@ -1598,6 +1681,39 @@ forward_recorder:
         match="rest_seed_not_found_retry_seconds",
     ):
         load_discovery_config(bad_retry)
+
+    bad_rotation = tmp_path / "bad-rotation.yaml"
+    bad_rotation.write_text(
+        """
+rule_compiler:
+  enabled: true
+rule_runner:
+  enabled: true
+forward_recorder:
+  enabled: true
+  auto_rotate_gib: 80
+  storage_hard_limit_gib: 80
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="auto_rotate_gib"):
+        load_discovery_config(bad_rotation)
+
+    bad_compression = tmp_path / "bad-compression.yaml"
+    bad_compression.write_text(
+        """
+rule_compiler:
+  enabled: true
+rule_runner:
+  enabled: true
+forward_recorder:
+  enabled: true
+  archive_compression: zstd
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="archive_compression"):
+        load_discovery_config(bad_compression)
 
     assert (
         ForwardRecorderConfig().quote_survival_horizons_ms

@@ -1176,11 +1176,26 @@ class RuleSpec:
             "outcome_topology",
             "deadline_authority_policy",
             "rule_clauses",
-            "outcomes",
         )
         mismatches = [
             name for name in fields if getattr(self, name) != getattr(expected, name)
         ]
+        # Gamma may reorder the markets nested under an event without changing
+        # any instrument. Preserve the reviewed RuleSpec order (it can encode
+        # ladder chronology), but compare freshness by immutable leg identity
+        # rather than transient API list position.
+        def outcome_key(item: OutcomeBinding) -> tuple[str, str, str, str]:
+            return (
+                item.condition_id,
+                item.yes_token_id,
+                item.no_token_id,
+                item.name,
+            )
+        if sorted(self.outcomes, key=outcome_key) != sorted(
+            expected.outcomes,
+            key=outcome_key,
+        ):
+            mismatches.append("outcomes")
         if mismatches:
             raise ValueError(
                 "RuleSpec is stale or instrument binding changed: "

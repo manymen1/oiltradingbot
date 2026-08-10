@@ -133,6 +133,15 @@ def main(argv: list[str] | None = None) -> int:
     rotate_forward_parser.add_argument("--config", required=True)
     rotate_forward_parser.add_argument("--archive-dir")
     rotate_forward_parser.add_argument("--full-check", action="store_true")
+    rotation_due_parser = sub.add_parser(
+        "forward-recorder-rotation-due"
+    )
+    rotation_due_parser.add_argument("--config", required=True)
+    compress_forward_parser = sub.add_parser(
+        "compress-forward-recorder-archive"
+    )
+    compress_forward_parser.add_argument("--manifest", required=True)
+    compress_forward_parser.add_argument("--level", type=int, default=1)
     plan_sources_parser = sub.add_parser("plan-sources")
     plan_sources_parser.add_argument("--config", required=True)
     plan_sources_parser.add_argument("--market")
@@ -384,6 +393,17 @@ def main(argv: list[str] | None = None) -> int:
                 Path(args.archive_dir) if args.archive_dir else None
             ),
             full_check=args.full_check,
+        )
+    if args.command == "forward-recorder-rotation-due":
+        from .rules.forward import forward_recorder_rotation_due_command
+
+        return forward_recorder_rotation_due_command(Path(args.config))
+    if args.command == "compress-forward-recorder-archive":
+        from .rules.forward import compress_forward_recorder_archive_command
+
+        return compress_forward_recorder_archive_command(
+            Path(args.manifest),
+            level=args.level,
         )
     if args.command == "plan-sources":
         from .discovery.runner import plan_sources_command
