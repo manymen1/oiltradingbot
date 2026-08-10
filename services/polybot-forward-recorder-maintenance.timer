@@ -3,7 +3,7 @@ Description=Check Polybot forward recorder rotation thresholds
 
 [Timer]
 OnBootSec=5min
-OnUnitActiveSec=15min
+OnUnitInactiveSec=15min
 Persistent=true
 RandomizedDelaySec=30
 Unit=polybot-forward-recorder-maintenance.service
