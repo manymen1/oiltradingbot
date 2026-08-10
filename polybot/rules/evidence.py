@@ -44,6 +44,8 @@ _FACT_SCHEMA: dict[str, Any] = {
             "enum": sorted(TEMPORAL_RELATIONS),
         },
         "event_at": {"type": "string"},
+        "interval_start_at": {"type": "string"},
+        "interval_end_at": {"type": "string"},
         "observed_value": {"type": "string"},
         "observed_value_upper": {"type": "string"},
         "observed_unit": {"type": "string"},
@@ -338,6 +340,8 @@ class EvidenceExtractor:
             predicate_matches=bool(fact["predicate_matches"]),
             temporal_relation=str(fact["temporal_relation"]),
             event_at=str(fact["event_at"]),
+            interval_start_at=str(fact["interval_start_at"]),
+            interval_end_at=str(fact["interval_end_at"]),
             observed_value=str(fact["observed_value"]),
             observed_value_upper=str(fact["observed_value_upper"]),
             observed_unit=str(fact["observed_unit"]),
@@ -492,6 +496,13 @@ def normalize_fact(
     article: Article,
     raw: dict[str, Any],
 ) -> dict[str, Any]:
+    raw = dict(raw)
+    # These fields were added in evidence schema v2. Defaulting them keeps
+    # non-duration adapters and stored v1 extraction fixtures compatible;
+    # DURATION_OBSERVED still fails closed in the evaluator when they are
+    # absent.
+    raw.setdefault("interval_start_at", "")
+    raw.setdefault("interval_end_at", "")
     expected = set(_FACT_SCHEMA["properties"])
     unknown = sorted(set(raw) - expected)
     missing = sorted(expected - set(raw))
@@ -544,6 +555,28 @@ def normalize_fact(
             datetime.fromisoformat(event_at.replace("Z", "+00:00"))
         except ValueError as exc:
             raise ValueError("event_at must be an ISO date-time or empty") from exc
+    interval_start_at = str(raw.get("interval_start_at", "")).strip()
+    interval_end_at = str(raw.get("interval_end_at", "")).strip()
+    if bool(interval_start_at) != bool(interval_end_at):
+        raise ValueError(
+            "interval_start_at and interval_end_at must both be set or empty"
+        )
+    if interval_start_at:
+        try:
+            interval_start = datetime.fromisoformat(
+                interval_start_at.replace("Z", "+00:00")
+            )
+            interval_end = datetime.fromisoformat(
+                interval_end_at.replace("Z", "+00:00")
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "duration interval timestamps must be ISO date-times"
+            ) from exc
+        if interval_end <= interval_start:
+            raise ValueError(
+                "interval_end_at must be after interval_start_at"
+            )
     quote = " ".join(str(raw["supporting_quote"]).split())
     if not quote:
         raise ValueError("supporting_quote must not be empty")
@@ -576,6 +609,8 @@ def normalize_fact(
         "predicate_matches": raw["predicate_matches"],
         "temporal_relation": temporal,
         "event_at": event_at,
+        "interval_start_at": interval_start_at,
+        "interval_end_at": interval_end_at,
         "observed_value": str(raw["observed_value"]).strip(),
         "observed_value_upper": str(raw["observed_value_upper"]).strip(),
         "observed_unit": str(raw["observed_unit"]).strip(),
@@ -624,7 +659,11 @@ def extraction_prompt(
         "PREDICATE_FORECLOSED means the YES predicate has become impossible "
         "inside the window, not a temporary setback. Use COUNT_OBSERVED or "
         "DURATION_OBSERVED with string values and units; use "
-        "observed_value_upper for a reported range. The supporting quote must "
+        "observed_value_upper for a reported range. DURATION_OBSERVED must "
+        "also include explicit interval_start_at and interval_end_at ISO-8601 "
+        "instants copied or deterministically derived from the report; leave "
+        "both empty for other assertions. Publication time is not a duration "
+        "interval. The supporting quote must "
         "be copied from the article. In clauses_satisfied and "
         "clauses_violated, output only clause_id values from the immutable "
         "catalog; never invent or paraphrase clauses. Never output market IDs, "
@@ -801,6 +840,8 @@ def fixture_fact(
         "predicate_matches": predicate_matches,
         "temporal_relation": "IN_WINDOW",
         "event_at": "",
+        "interval_start_at": "",
+        "interval_end_at": "",
         "observed_value": observed_value,
         "observed_value_upper": observed_value_upper,
         "observed_unit": observed_unit,

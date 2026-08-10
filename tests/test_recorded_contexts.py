@@ -185,19 +185,21 @@ def test_priority_context_reserves_capacity_before_volume_fill() -> None:
     assert [c.market_id for c in recorded] == ["selected", "high"]
 
 
-def test_priority_terminal_state_is_recorded_until_closed_flag_is_true() -> None:
-    selected = _context("selected", state="CLOSED", closed=False)
+def test_priority_terminal_extras_do_not_reserve_capacity() -> None:
+    closed = _context("closed", state="CLOSED", closed=False)
+    rejected = _context("rejected", state="REJECTED", closed=False)
+    open_context = _context("open", state="MONITOR_ONLY", volume=1.0)
 
     recorded = recorded_book_contexts(
         _config(
             record_all_contexts=True,
-            priority_market_ids=["selected"],
+            priority_market_ids=["closed", "rejected", "open"],
         ),
-        [selected],
+        [closed, rejected, open_context],
         [],
     )
 
-    assert [c.market_id for c in recorded] == ["selected"]
+    assert [c.market_id for c in recorded] == ["open"]
 
 
 def test_cap_below_monitored_count_still_keeps_every_monitored_market() -> None:

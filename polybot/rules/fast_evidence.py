@@ -191,6 +191,8 @@ def extract_fast_evidence(
             predicate_matches=bool(fact["predicate_matches"]),
             temporal_relation=str(fact["temporal_relation"]),
             event_at=str(fact["event_at"]),
+            interval_start_at=str(fact["interval_start_at"]),
+            interval_end_at=str(fact["interval_end_at"]),
             observed_value=str(fact["observed_value"]),
             observed_value_upper=str(fact["observed_value_upper"]),
             observed_unit=str(fact["observed_unit"]),

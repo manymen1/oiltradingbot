@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from polybot.core.fees import FEE_POLICY_VERSION, FeeScheduleSnapshot
 
 RULE_SPEC_SCHEMA_VERSION = 4
-EVIDENCE_CLAIM_SCHEMA_VERSION = 1
+EVIDENCE_CLAIM_SCHEMA_VERSION = 2
 RULE_EVALUATION_SCHEMA_VERSION = 1
 TRADE_INTENT_SCHEMA_VERSION = 1
 DECISION_PROOF_SCHEMA_VERSION = 2
@@ -1218,9 +1218,19 @@ class EvidenceClaim:
     # model never chooses these ids. Legacy claims deserialize with an empty
     # list and therefore cannot satisfy a current terminal source policy.
     source_requirement_ids: list[str] = field(default_factory=list)
+    # Duration evidence needs an explicit immutable coverage interval. Article
+    # publication time is deliberately not a substitute: a newly published
+    # story can describe a period that ended before a later clock reset.
+    interval_start_at: str = ""
+    interval_end_at: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        if self.schema_version == 1:
+            # Preserve the canonical payload and hash of persisted v1 claims.
+            payload.pop("interval_start_at", None)
+            payload.pop("interval_end_at", None)
+        return payload
 
     @property
     def claim_sha256(self) -> str:
@@ -1231,11 +1241,11 @@ class EvidenceClaim:
         data = _object(raw, "evidence_claim")
         _known(data, cls.__dataclass_fields__, "evidence_claim")
         schema = _integer(data.get("schema_version"), "schema_version", minimum=1)
-        if schema != EVIDENCE_CLAIM_SCHEMA_VERSION:
+        if schema not in {1, EVIDENCE_CLAIM_SCHEMA_VERSION}:
             raise ValueError(
                 f"unsupported EvidenceClaim schema_version {schema}"
             )
-        return cls(
+        claim = cls(
             schema_version=schema,
             market_id=_text(data.get("market_id"), "market_id"),
             rule_spec_sha256=_sha256(
@@ -1336,7 +1346,31 @@ class EvidenceClaim:
                 data.get("source_requirement_ids", []),
                 "source_requirement_ids",
             ),
+            interval_start_at=_iso_datetime(
+                data.get("interval_start_at", ""),
+                "interval_start_at",
+                allow_empty=True,
+            ),
+            interval_end_at=_iso_datetime(
+                data.get("interval_end_at", ""),
+                "interval_end_at",
+                allow_empty=True,
+            ),
         )
+        if bool(claim.interval_start_at) != bool(claim.interval_end_at):
+            raise ValueError(
+                "interval_start_at and interval_end_at must both be set or empty"
+            )
+        if claim.interval_start_at and (
+            datetime.fromisoformat(
+                claim.interval_end_at.replace("Z", "+00:00")
+            )
+            <= datetime.fromisoformat(
+                claim.interval_start_at.replace("Z", "+00:00")
+            )
+        ):
+            raise ValueError("interval_end_at must be after interval_start_at")
+        return claim
 
     def validate_spec_binding(self, spec: RuleSpec) -> None:
         mismatches: list[str] = []

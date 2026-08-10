@@ -78,7 +78,7 @@ def recorded_book_contexts(
             (context := contexts_by_id.get(market_id)) is not None
             and context.market_id not in desired_ids
             and not context.closed
-            and context.state != "REJECTED"
+            and context.state not in {"CLOSED", "REJECTED"}
         )
     ]
     cap = config.forward_recorder.max_recorded_markets

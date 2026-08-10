@@ -14,7 +14,7 @@ from .contracts import (
     RuleSpec,
 )
 
-EVALUATOR_VERSION = "rules-evaluator-v2"
+EVALUATOR_VERSION = "rules-evaluator-v3"
 SUPPORTED_OUTCOME_TOPOLOGIES = {
     "SINGLE_BINARY",
     "EXCLUSIVE_ONE_OF_N",
@@ -528,7 +528,7 @@ def _duration(
     return [
         _duration_outcome(
             spec,
-            outcome.name,
+            outcome,
             claims,
             as_of=as_of,
         )
@@ -538,38 +538,186 @@ def _duration(
 
 def _duration_outcome(
     spec: RuleSpec,
-    outcome: str,
+    outcome: OutcomeBinding,
     claims: list[EvidenceClaim],
     *,
     as_of: datetime | None,
 ) -> RuleEvaluation:
-    deadline = _outcome_deadline(spec, outcome)
+    deadline = _outcome_deadline(spec, outcome.name)
     relevant = [
         claim
-        for claim in _claims_for_outcome(spec, claims, outcome)
-        if _claim_matches_outcome_window(claim, deadline)
+        for claim in _claims_for_outcome(spec, claims, outcome.name)
+        if claim.temporal_relation != "BEFORE_WINDOW"
     ]
     breaches = [
         claim
         for claim in relevant
         if claim.assertion == "QUALIFYING_BREACH"
         and claim.predicate_matches
+        and _claim_matches_outcome_window(claim, deadline)
     ]
     measurements = [
         claim
         for claim in relevant
         if claim.assertion == "DURATION_OBSERVED"
         and claim.predicate_matches
+        and _duration_interval_starts_in_window(claim, outcome, deadline)
     ]
-    latest_breach = breaches[-1] if breaches else None
-    latest_measurement = measurements[-1] if measurements else None
-    if latest_breach is not None and (
-        latest_measurement is None
-        or _claim_time(latest_breach) >= _claim_time(latest_measurement)
-    ):
+    unknown_breaches = [claim for claim in breaches if not claim.event_at]
+    if unknown_breaches:
         return _evaluation(
             spec,
-            outcome_name=outcome,
+            outcome_name=outcome.name,
+            state="AMBIGUOUS",
+            terminal=False,
+            claims=unknown_breaches,
+            required=1,
+            blockers=["duration_breach_timestamp_missing"],
+            as_of=as_of,
+        )
+    breach_times = [
+        (stamp, claim)
+        for claim in breaches
+        if (stamp := _stamp(claim.event_at)) is not None
+    ]
+    required = _duration_hours(
+        spec.semantics.predicate.value,
+        spec.semantics.predicate.unit,
+    )
+    if required is None:
+        return _evaluation(
+            spec,
+            outcome_name=outcome.name,
+            state="AMBIGUOUS",
+            terminal=False,
+            claims=measurements,
+            required=1,
+            blockers=["duration_requirement_invalid"],
+            as_of=as_of,
+        )
+
+    valid_progress: list[tuple[datetime, EvidenceClaim]] = []
+    invalid_measurements: list[tuple[EvidenceClaim, str]] = []
+    reset_measurements: list[tuple[datetime, EvidenceClaim, EvidenceClaim]] = []
+    for measurement in measurements:
+        start = _stamp(measurement.interval_start_at)
+        end = _stamp(measurement.interval_end_at)
+        if start is None or end is None:
+            invalid_measurements.append(
+                (measurement, "duration_interval_timestamps_missing")
+            )
+            continue
+        observed = _duration_hours(
+            measurement.observed_value,
+            measurement.observed_unit,
+        )
+        if observed is None:
+            invalid_measurements.append(
+                (measurement, "duration_value_invalid")
+            )
+            continue
+        covered = Decimal(str((end - start).total_seconds())) / Decimal("3600")
+        if observed > covered:
+            invalid_measurements.append(
+                (measurement, "duration_observation_exceeds_interval")
+            )
+            continue
+        interval_breaches = [
+            (stamp, breach)
+            for stamp, breach in breach_times
+            if start <= stamp <= end
+        ]
+        if interval_breaches:
+            latest_reset = max(interval_breaches, key=lambda item: item[0])
+            reset_measurements.append((latest_reset[0], measurement, latest_reset[1]))
+            continue
+        if covered >= required and observed >= required:
+            blockers = (
+                []
+                if _authorized_for_terminal([measurement])
+                else ["duration_source_or_timestamp_not_authorized"]
+            )
+            return _evaluation(
+                spec,
+                outcome_name=outcome.name,
+                state="TERMINAL_YES" if not blockers else "AMBIGUOUS",
+                terminal=not blockers,
+                claims=[measurement],
+                required=1,
+                blockers=blockers,
+                as_of=as_of,
+            )
+        valid_progress.append((end, measurement))
+
+    if reset_measurements:
+        _stamp_value, measurement, breach = max(
+            reset_measurements,
+            key=lambda item: item[0],
+        )
+        return _evaluation(
+            spec,
+            outcome_name=outcome.name,
+            state="STRONG_NO",
+            terminal=False,
+            claims=[measurement, breach],
+            required=1,
+            blockers=["duration_clock_reset"],
+            as_of=as_of,
+        )
+    if valid_progress:
+        end, latest_measurement = max(valid_progress, key=lambda item: item[0])
+        later_breaches = [
+            (stamp, claim)
+            for stamp, claim in breach_times
+            if stamp >= end
+        ]
+        if later_breaches:
+            _stamp_value, breach = max(later_breaches, key=lambda item: item[0])
+            return _evaluation(
+                spec,
+                outcome_name=outcome.name,
+                state="STRONG_NO",
+                terminal=False,
+                claims=[breach],
+                required=1,
+                blockers=["duration_clock_reset"],
+                as_of=as_of,
+            )
+        blockers = (
+            []
+            if _authorized_for_terminal([latest_measurement])
+            else ["duration_source_or_timestamp_not_authorized"]
+        )
+        return _evaluation(
+            spec,
+            outcome_name=outcome.name,
+            state="PATHWAY_YES" if not blockers else "AMBIGUOUS",
+            terminal=False,
+            claims=[latest_measurement],
+            required=1,
+            blockers=blockers,
+            as_of=as_of,
+        )
+    if invalid_measurements:
+        latest_measurement, blocker = max(
+            invalid_measurements,
+            key=lambda item: _claim_time(item[0]),
+        )
+        return _evaluation(
+            spec,
+            outcome_name=outcome.name,
+            state="AMBIGUOUS",
+            terminal=False,
+            claims=[latest_measurement],
+            required=1,
+            blockers=[blocker],
+            as_of=as_of,
+        )
+    if breach_times:
+        _stamp_value, latest_breach = max(breach_times, key=lambda item: item[0])
+        return _evaluation(
+            spec,
+            outcome_name=outcome.name,
             state="STRONG_NO",
             terminal=False,
             claims=[latest_breach],
@@ -577,48 +725,32 @@ def _duration_outcome(
             blockers=["duration_clock_reset"],
             as_of=as_of,
         )
-    if latest_measurement is None:
-        return _fallback_evaluation(spec, outcome, relevant, as_of=as_of)
-    observed = _duration_hours(
-        latest_measurement.observed_value,
-        latest_measurement.observed_unit,
-    )
-    required = _duration_hours(
-        spec.semantics.predicate.value,
-        spec.semantics.predicate.unit,
-    )
-    if observed is None or required is None:
-        return _evaluation(
-            spec,
-            outcome_name=outcome,
-            state="AMBIGUOUS",
-            terminal=False,
-            claims=[latest_measurement],
-            required=1,
-            blockers=["duration_value_invalid"],
-            as_of=as_of,
-        )
-    terminal = observed >= required
-    blockers = (
-        [] if _authorized_for_terminal([latest_measurement])
-        else ["duration_source_or_timestamp_not_authorized"]
-    )
     return _evaluation(
         spec,
-        outcome_name=outcome,
-        state=(
-            "TERMINAL_YES"
-            if terminal and not blockers
-            else "PATHWAY_YES"
-            if not blockers
-            else "AMBIGUOUS"
-        ),
-        terminal=terminal and not blockers,
-        claims=[latest_measurement],
+        outcome_name=outcome.name,
+        state="AMBIGUOUS",
+        terminal=False,
+        claims=relevant,
         required=1,
-        blockers=blockers,
+        blockers=["no_decisive_rule_bound_claim"],
         as_of=as_of,
     )
+
+
+def _duration_interval_starts_in_window(
+    claim: EvidenceClaim,
+    outcome: OutcomeBinding,
+    deadline: datetime | None,
+) -> bool:
+    start = _stamp(claim.interval_start_at)
+    if start is None:
+        # Retain opaque duration claims so the evaluator emits a specific,
+        # fail-closed blocker instead of silently discarding them.
+        return True
+    outcome_start = _stamp(outcome.start_iso)
+    if outcome_start is not None and start < outcome_start:
+        return False
+    return deadline is None or start <= deadline
 
 
 def _enforce_exclusive_topology(

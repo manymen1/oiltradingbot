@@ -163,6 +163,8 @@ def _claim(
     value_upper: str = "",
     unit: str = "",
     event_at: str = "",
+    interval_start_at: str = "",
+    interval_end_at: str = "",
     requirement_ids: list[str] | None = None,
 ) -> EvidenceClaim:
     return EvidenceClaim.from_dict(
@@ -192,6 +194,8 @@ def _claim(
             predicate_matches=matches,
             temporal_relation=temporal,
             event_at=event_at,
+            interval_start_at=interval_start_at,
+            interval_end_at=interval_end_at,
             observed_value=value,
             observed_value_upper=value_upper,
             observed_unit=unit,
@@ -975,6 +979,8 @@ def test_numeric_duration_and_status_evaluators() -> None:
         group="reuters",
         value="6",
         unit="hours",
+        interval_start_at="2026-07-25T00:00:00+00:00",
+        interval_end_at="2026-07-25T06:00:00+00:00",
     )
     assert evaluate_rule(duration, [progress])[0].evidence_state == "PATHWAY_YES"
     complete = replace(
@@ -982,6 +988,8 @@ def test_numeric_duration_and_status_evaluators() -> None:
         article_id="complete",
         observed_value="8",
         observed_unit="days",
+        interval_start_at="2026-07-20T00:00:00+00:00",
+        interval_end_at="2026-07-28T00:00:00+00:00",
     )
     assert evaluate_rule(duration, [complete])[0].evidence_state == "TERMINAL_YES"
     breach = _claim(
@@ -1004,6 +1012,129 @@ def test_numeric_duration_and_status_evaluators() -> None:
     evaluated = evaluate_rule(status, [observed])[0]
     assert evaluated.evidence_state == "TERMINAL_YES"
     assert evaluated.terminal is True
+
+
+def test_duration_uses_immutable_event_intervals_not_publication_order() -> None:
+    _context, spec = _spec("DURATION_REQUIREMENT")
+    late_pre_breach_report = _claim(
+        spec,
+        article_id="late-pre-breach-report",
+        assertion="DURATION_OBSERVED",
+        group="reuters",
+        value="8",
+        unit="days",
+        interval_start_at="2026-07-20T00:00:00+00:00",
+        interval_end_at="2026-07-28T00:00:00+00:00",
+    )
+    late_pre_breach_report = replace(
+        late_pre_breach_report,
+        published_at="2026-08-10T00:00:00+00:00",
+        extracted_at="2026-08-10T00:01:00+00:00",
+    )
+    breach = _claim(
+        spec,
+        article_id="day-six-breach",
+        assertion="QUALIFYING_BREACH",
+        group="associated_press",
+        event_at="2026-07-26T00:00:00+00:00",
+    )
+    evaluation = evaluate_rule(spec, [late_pre_breach_report, breach])[0]
+    assert evaluation.evidence_state == "STRONG_NO"
+    assert evaluation.terminal is False
+    assert evaluation.blockers == ["duration_clock_reset"]
+
+    later_interval = replace(
+        late_pre_breach_report,
+        article_id="later-complete-interval",
+        published_at="2026-08-06T00:00:00+00:00",
+        extracted_at="2026-08-06T00:01:00+00:00",
+        interval_start_at="2026-07-28T00:00:00+00:00",
+        interval_end_at="2026-08-05T00:00:00+00:00",
+    )
+    evaluation = evaluate_rule(spec, [later_interval, breach])[0]
+    assert evaluation.evidence_state == "TERMINAL_YES"
+    assert evaluation.terminal is True
+
+    post_completion_breach = replace(
+        breach,
+        article_id="post-completion-breach",
+        event_at="2026-08-06T00:00:00+00:00",
+    )
+    assert evaluate_rule(
+        spec,
+        [post_completion_breach, later_interval, breach],
+    )[0].evidence_state == "TERMINAL_YES"
+
+
+def test_duration_fails_closed_without_interval_and_ignores_exclusions() -> None:
+    _context, spec = _spec("DURATION_REQUIREMENT")
+    opaque = _claim(
+        spec,
+        article_id="opaque-duration",
+        assertion="DURATION_OBSERVED",
+        group="reuters",
+        value="8",
+        unit="days",
+    )
+    evaluation = evaluate_rule(spec, [opaque])[0]
+    assert evaluation.evidence_state == "AMBIGUOUS"
+    assert evaluation.blockers == ["duration_interval_timestamps_missing"]
+
+    complete = replace(
+        opaque,
+        article_id="complete-with-interval",
+        interval_start_at="2026-07-20T00:00:00+00:00",
+        interval_end_at="2026-07-28T00:00:00+00:00",
+    )
+    excluded = _claim(
+        spec,
+        article_id="intercepted-missile",
+        assertion="EXCLUDED_ACTIVITY",
+        group="associated_press",
+        matches=False,
+        event_at="2026-07-26T00:00:00+00:00",
+    )
+    evaluation = evaluate_rule(spec, [complete, excluded])[0]
+    assert evaluation.evidence_state == "TERMINAL_YES"
+    assert evaluation.terminal is True
+
+
+def test_duration_ladder_applies_resets_and_intervals_per_leg() -> None:
+    spec = _multi_spec("DURATION_REQUIREMENT", "MONOTONE_DEADLINE_LADDER")
+    interval = _claim(
+        spec,
+        article_id="event-level-interval",
+        assertion="DURATION_OBSERVED",
+        group="reuters",
+        target="",
+        value="8",
+        unit="days",
+        event_at="2026-08-03T00:00:00+00:00",
+        interval_start_at="2026-07-26T00:00:00+00:00",
+        interval_end_at="2026-08-03T00:00:00+00:00",
+    )
+    breach = _claim(
+        spec,
+        article_id="event-level-breach",
+        assertion="QUALIFYING_BREACH",
+        group="associated_press",
+        target="",
+        event_at="2026-07-27T00:00:00+00:00",
+    )
+    evaluations = evaluate_rule(spec, [interval, breach])
+    assert evaluations[0].evidence_state == "AMBIGUOUS"
+    assert evaluations[1].evidence_state == "STRONG_NO"
+
+    later = replace(
+        interval,
+        article_id="event-level-later-interval",
+        event_at="2026-08-05T00:00:00+00:00",
+        interval_start_at="2026-07-28T00:00:00+00:00",
+        interval_end_at="2026-08-05T00:00:00+00:00",
+    )
+    evaluations = evaluate_rule(spec, [later, breach])
+    assert evaluations[0].evidence_state == "AMBIGUOUS"
+    assert evaluations[1].evidence_state == "TERMINAL_YES"
 
 
 class _Quotes:
