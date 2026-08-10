@@ -1,0 +1,272 @@
+{
+  "compiled_at": "2026-08-10T13:44:28.362140+00:00",
+  "compiler_model": "operator_review_draft",
+  "deadline_authority_policy": "VERBATIM_RULES_PAPER_ONLY_V1",
+  "event_slug": "will-hamaz-disarm-by-december-31",
+  "kind": "grouped",
+  "market_id": "will-hamaz-disarm-by-december-31",
+  "outcome_topology": "MONOTONE_DEADLINE_LADDER",
+  "outcomes": [
+    {
+      "condition_id": "0x11db077700a35d7415b6198c5e5a53adcf1db1819a09831f7eaf148f88243c40",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2025-12-31T23:59:00-05:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2025-12-31T20:00:00Z",
+      "label": "December 31",
+      "market_slug": "will-hamaz-disarm-by-december-31-858",
+      "name": "december_31",
+      "no_token_id": "33553945367166725251175374412602170037894165758025042506237379564547625385037",
+      "resolution_source": "",
+      "rule_deadline_iso": "2025-12-31T23:59:00-05:00",
+      "rule_text_sha256": "964bbc337cc65b8d82b5bac8519d02c79b85f46f3ad36cfc626a476829e09079",
+      "start_iso": "2025-07-30T18:07:35.876736Z",
+      "yes_token_id": "90745857659327148773609688807318558478201557095351383313162258694341091010927"
+    },
+    {
+      "condition_id": "0xe253dbce3e4c4b635ff1986ad354cf5a138f34471f09b009884b0ff332235423",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2025-11-30T23:59:00-05:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2025-11-30T20:05:00Z",
+      "label": "November 30",
+      "market_slug": "will-hamas-agree-to-disarm-by-november-30-365",
+      "name": "november_30",
+      "no_token_id": "93370548962629944511067650377784171726724351917609846957428128280446210250415",
+      "resolution_source": "",
+      "rule_deadline_iso": "2025-11-30T23:59:00-05:00",
+      "rule_text_sha256": "546b70a8691b7220960b12434b22cb26b3e5a0248564387b53079e48664c69be",
+      "start_iso": "2025-10-30T21:16:16.777966Z",
+      "yes_token_id": "73101087308988803989128638731544390620987560542234445987718214984080665197315"
+    },
+    {
+      "condition_id": "0x48d65cfb64a9351ff56ca2377041f9bf558ae4755991080694b254a64917345b",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-03-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-03-31T20:00:00Z",
+      "label": "March 31, 2026",
+      "market_slug": "will-hamas-agree-to-disarm-by-march-31-966",
+      "name": "march_31,_2026",
+      "no_token_id": "82815234586911477177140615865628025765116384259118936449891184750454874874244",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-03-31T23:59:00-04:00",
+      "rule_text_sha256": "754f979017e3442471805b408487e0cdc6bc46cef36bf43977375370b29d2af8",
+      "start_iso": "2025-11-11T22:22:54.77472Z",
+      "yes_token_id": "71509936948005250299824886191637369678440589170453050864768530527695363193760"
+    },
+    {
+      "condition_id": "0x2cd4df599867b14e835436e67e524cd04bbd67eaa6454c07b294d9dd0470e6b7",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-06-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-06-30T20:00:00Z",
+      "label": "June 30, 2026",
+      "market_slug": "will-hamas-agree-to-disarm-by-june-30",
+      "name": "june_30,_2026",
+      "no_token_id": "104300001201805258182759143424803769933769056146338425343674625200737172871170",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-06-30T23:59:00-04:00",
+      "rule_text_sha256": "3178d508bbdcecb8724a917abd5b5871a957f11e8c1caf7bb6cd63c4e25f1412",
+      "start_iso": "2026-01-29T19:39:44.388361Z",
+      "yes_token_id": "63234707295320507667894309258849048700632767113302157839265845777836046390818"
+    },
+    {
+      "condition_id": "0xc00af5f1dddbf5b3d97d941eaf7c9515ecd3503ef64644b347e379abe768d046",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-02-28T23:59:00-05:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-03-31T20:00:00Z",
+      "label": "February 28, 2026",
+      "market_slug": "will-hamas-agree-to-disarm-by-february-28",
+      "name": "february_28,_2026",
+      "no_token_id": "69454592464935456062952294248645145750899842574796361722946293298317898887572",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-02-28T23:59:00-05:00",
+      "rule_text_sha256": "a69a53350a94d4c9ab1726b994bc54f3959803c770f7b93c129f9f4fa4fa40fd",
+      "start_iso": "2026-01-29T19:39:12.20682Z",
+      "yes_token_id": "46438504437603793079015767166908085221774603762158329883200591518440710857051"
+    },
+    {
+      "condition_id": "0x1e5204036bd51e6ca0e0da6221319c5839bd9940782adc6d0f6fa703aa8a3bf4",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-12-31T23:59:00-05:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-12-31T20:00:00Z",
+      "label": "December 31, 2026",
+      "market_slug": "will-hamas-agree-to-disarm-by-december-31",
+      "name": "december_31,_2026",
+      "no_token_id": "30676432546818066080538703205639237969080188796746196694446265523208566227883",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-12-31T23:59:00-05:00",
+      "rule_text_sha256": "9f416193323cbdb4b230c82038d46ba082009836adf0fcab859a6112817b2693",
+      "start_iso": "2026-06-30T21:13:55.721654Z",
+      "yes_token_id": "3833250547311424992805456252782158332407335422350263044535636678503072819141"
+    }
+  ],
+  "question": "Will Hamas agree to disarm by...?",
+  "rule_clauses": [
+    {
+      "clause_id": "clause_0836ac7e1e6d8c4e411e",
+      "text": "Otherwise, this market will resolve to \"No\"."
+    },
+    {
+      "clause_id": "clause_17ee068dda0e5a496e63",
+      "text": "Primary resolution sources will include official statements from Hamas leadership; however, a wide consensus of credible reporting confirming a policy of disarmament has been instituted will also qualify."
+    },
+    {
+      "clause_id": "clause_4038539d6bf4ab39b1ea",
+      "text": "For the purposes of this market, \"disarm\" refers to a public commitment to relinquish or dismantle its military, whether partially or completely, in the Gaza Strip."
+    },
+    {
+      "clause_id": "clause_574c0625bdd285cb0941",
+      "text": "Only official announcements will qualify."
+    },
+    {
+      "clause_id": "clause_5d2c83a19a9215a87d20",
+      "text": "Informal statements, plans contingent on future conditions, statements of intent without a formal policy directive, or any other statements that do not constitute a formal policy announcement will not be considered."
+    },
+    {
+      "clause_id": "clause_6b7485a6fcf7ae49278a",
+      "text": "Announcements of partial disarmament (e.g., surrendering a class of weapons or agreeing to disarm in stages or a certain region) will qualify as long as it is part of an acknowledged disarmament process."
+    },
+    {
+      "clause_id": "clause_b9e3f54dfc82059cd551",
+      "text": "Only credible announcements, for example by the widely acknowledged leadership of Hamas, will qualify."
+    },
+    {
+      "clause_id": "clause_e92b19a2ebf98da973ac",
+      "text": "This market will resolve to \"Yes\" if Hamas officially announces it will disarm in the Gaza Strip by December 31, 2026, 11:59 PM ET."
+    }
+  ],
+  "rule_text_sha256": "964bbc337cc65b8d82b5bac8519d02c79b85f46f3ad36cfc626a476829e09079",
+  "rule_version": 1,
+  "schema_version": 4,
+  "semantics": {
+    "exclusion_clause_ids": [
+      "clause_5d2c83a19a9215a87d20"
+    ],
+    "exclusions": [
+      "Informal statements, plans contingent on future conditions, statements of intent without a formal policy directive, or any other statements that do not constitute a formal policy announcement will not be considered."
+    ],
+    "predicate": {
+      "action": "officially announces",
+      "comparator": "ANNOUNCED",
+      "object": "it will disarm in the Gaza Strip",
+      "subjects": [
+        "hamas"
+      ],
+      "unit": "",
+      "value": ""
+    },
+    "qualifying_clause_ids": [
+      "clause_4038539d6bf4ab39b1ea",
+      "clause_574c0625bdd285cb0941",
+      "clause_6b7485a6fcf7ae49278a",
+      "clause_b9e3f54dfc82059cd551"
+    ],
+    "qualifying_conditions": [
+      "For the purposes of this market, \"disarm\" refers to a public commitment to relinquish or dismantle its military, whether partially or completely, in the Gaza Strip.",
+      "Only official announcements will qualify.",
+      "Announcements of partial disarmament (e.g., surrendering a class of weapons or agreeing to disarm in stages or a certain region) will qualify as long as it is part of an acknowledged disarmament process.",
+      "Only credible announcements, for example by the widely acknowledged leadership of Hamas, will qualify."
+    ],
+    "resolution_policy": {
+      "cancellation_behavior": "not specified by verbatim rules",
+      "cancellation_clause_ids": [],
+      "independent_confirmation_sources": 1,
+      "postponement_behavior": "not specified by verbatim rules",
+      "postponement_clause_ids": [],
+      "terminal_no": [
+        "Otherwise, this market will resolve to \"No\"."
+      ],
+      "terminal_no_clause_ids": [
+        "clause_0836ac7e1e6d8c4e411e"
+      ],
+      "terminal_no_monotonic": false,
+      "terminal_yes": [
+        "This market will resolve to \"Yes\" if Hamas officially announces it will disarm in the Gaza Strip by December 31, 2026, 11:59 PM ET."
+      ],
+      "terminal_yes_clause_ids": [
+        "clause_e92b19a2ebf98da973ac"
+      ],
+      "terminal_yes_monotonic": true
+    },
+    "rule_family": "SOURCE_LOCKED_ANNOUNCEMENT",
+    "source_policy": {
+      "branches": [
+        {
+          "minimum_independent_sources": 1,
+          "requirement_ids": [
+            "source_602986bb8d707c64ae10"
+          ],
+          "requirement_quorum": 1
+        },
+        {
+          "minimum_independent_sources": 1,
+          "requirement_ids": [
+            "source_b40f64c7469b52575110"
+          ],
+          "requirement_quorum": 1
+        }
+      ],
+      "fallback_condition": "",
+      "fallback_requirement_ids": [],
+      "policy_type": "ALTERNATIVE_QUORUM",
+      "primary_requirement_ids": [],
+      "quorum": 1,
+      "requirement_ids": [
+        "source_602986bb8d707c64ae10",
+        "source_b40f64c7469b52575110"
+      ]
+    },
+    "source_requirements": [
+      {
+        "clause_ids": [
+          "clause_17ee068dda0e5a496e63"
+        ],
+        "rationale": "a wide consensus of credible reporting confirming that a policy of disarmament has been instituted also qualifies for resolution.",
+        "required": true,
+        "requirement_id": "source_b40f64c7469b52575110",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "credible reporting"
+      },
+      {
+        "clause_ids": [
+          "clause_17ee068dda0e5a496e63",
+          "clause_b9e3f54dfc82059cd551"
+        ],
+        "rationale": "official statements from hamas leadership are identified as primary resolution sources and can establish a qualifying official credible announcement.",
+        "required": false,
+        "requirement_id": "source_602986bb8d707c64ae10",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "hamas leadership"
+      }
+    ],
+    "subjective_clause_ids": [
+      "clause_17ee068dda0e5a496e63",
+      "clause_6b7485a6fcf7ae49278a",
+      "clause_b9e3f54dfc82059cd551"
+    ],
+    "subjective_terms": [
+      "Primary resolution sources will include official statements from Hamas leadership; however, a wide consensus of credible reporting confirming a policy of disarmament has been instituted will also qualify.",
+      "Announcements of partial disarmament (e.g., surrendering a class of weapons or agreeing to disarm in stages or a certain region) will qualify as long as it is part of an acknowledged disarmament process.",
+      "Only credible announcements, for example by the widely acknowledged leadership of Hamas, will qualify."
+    ],
+    "window": {
+      "end_iso": "2027-01-01T04:59:00Z",
+      "start_iso": "",
+      "timezone": "America/New_York"
+    }
+  }
+}

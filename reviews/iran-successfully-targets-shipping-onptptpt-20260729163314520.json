@@ -1,0 +1,689 @@
+{
+  "compiled_at": "2026-08-10T13:51:49.139100+00:00",
+  "compiler_model": "operator_review_draft",
+  "deadline_authority_policy": "VERBATIM_RULES_PAPER_ONLY_V1",
+  "event_slug": "iran-successfully-targets-shipping-onptptpt-20260729163314520",
+  "kind": "grouped",
+  "market_id": "iran-successfully-targets-shipping-onptptpt-20260729163314520",
+  "outcome_topology": "INDEPENDENT_MULTI",
+  "outcomes": [
+    {
+      "condition_id": "0xde6f4918654a5a2f78a0a0d6d7338c82f12b5bf241db7b35354c77f38a506839",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-06T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-06T23:59:00Z",
+      "label": "August 6",
+      "market_slug": "iran-successfully-targets-shipping-on-august-6-2026-20260729163314526",
+      "name": "august_6",
+      "no_token_id": "84759194323729858362754434188035852450795480240684765001376600952412812057516",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-06T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:58.13361Z",
+      "yes_token_id": "50155188463630882523969916620563954975086261020734428200878787219933248145275"
+    },
+    {
+      "condition_id": "0x9073d75e91c18f8aca7f08e214b26325d2533c0da4c22b85a148e8b13d9f3426",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-07T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-07T23:59:00Z",
+      "label": "August 7",
+      "market_slug": "iran-successfully-targets-shipping-on-august-7-2026-20260729163314527",
+      "name": "august_7",
+      "no_token_id": "23281445265434068490970494879715440525520711697763996558643882977293797396724",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-07T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:58.31651Z",
+      "yes_token_id": "67874001432085429104582297721119949831531907920070937179741250342171802443708"
+    },
+    {
+      "condition_id": "0x064431f0070c22573604639e2fa993d68cdc548f49294e9c7e8e0352a40f373e",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-09T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-09T23:59:00Z",
+      "label": "August 9",
+      "market_slug": "iran-successfully-targets-shipping-on-august-9-2026-20260729163314529",
+      "name": "august_9",
+      "no_token_id": "80477737823920838023161571894230330183318059108550289131300240608253053397933",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-09T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:58.656573Z",
+      "yes_token_id": "79344694437990004032835781459815996981337315493988987127883721797842765322204"
+    },
+    {
+      "condition_id": "0xdd5c3244dbb8c2d3a52bafa7b62c3ff79ac13dbaf4c00190466abfb546ca30bd",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-11T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-11T23:59:00Z",
+      "label": "August 11",
+      "market_slug": "iran-successfully-targets-shipping-on-august-11-2026-20260729163314531",
+      "name": "august_11",
+      "no_token_id": "22919599131975225489896525837070573581893989530444731638330999009012431530902",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-11T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:59.032572Z",
+      "yes_token_id": "49866562604111050666801731648787061417265631505429492761716968964946408589432"
+    },
+    {
+      "condition_id": "0x99882ce312e82fae589cbac80da87231cf2d6e427b8d0f576d5aaae13097ff4a",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-12T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-12T23:59:00Z",
+      "label": "August 12",
+      "market_slug": "iran-successfully-targets-shipping-on-august-12-2026-20260729163314532",
+      "name": "august_12",
+      "no_token_id": "85786674754136163578789985241337625678971042561759870375535728294440028265689",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-12T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:59.292296Z",
+      "yes_token_id": "44790121191057697717688066307967911108620870077015450299621195443803203679579"
+    },
+    {
+      "condition_id": "0x70eb62d0bf257d05a4116df2471cbe7a59fa2a504d09f48211e450d0b45a90ff",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-01T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-01T23:59:00Z",
+      "label": "August 1",
+      "market_slug": "iran-successfully-targets-shipping-on-august-1-2026-20260729163314521",
+      "name": "august_1",
+      "no_token_id": "28352222811743737027380267220116564578480937255890003884431715968508325229108",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-01T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:57.280155Z",
+      "yes_token_id": "16552382211889148795306732960411399911954207163867976405234837681728437114461"
+    },
+    {
+      "condition_id": "0xf21714353d12051055286a52a6a4651f76bb86397faf31975b4af9fe0b639387",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-02T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-02T23:59:00Z",
+      "label": "August 2",
+      "market_slug": "iran-successfully-targets-shipping-on-august-2-2026-20260729163314522",
+      "name": "august_2",
+      "no_token_id": "12657204374306046765274913094676848805653926242245911857270853415520506069216",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-02T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:57.445147Z",
+      "yes_token_id": "24484107433900312729559429242123898836616614567966006223014055893192835635979"
+    },
+    {
+      "condition_id": "0x165a4fdf83dae69d5c9857e215215c024e4ad54b5d747db7886b64346284bdaa",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-03T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-03T23:59:00Z",
+      "label": "August 3",
+      "market_slug": "iran-successfully-targets-shipping-on-august-3-2026-20260729163314523",
+      "name": "august_3",
+      "no_token_id": "22884468038523168505829318765865305274152922419910122732064505811044272294227",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-03T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:57.60748Z",
+      "yes_token_id": "79522329011356372375810951929718259505940600439641976161032385583186985401107"
+    },
+    {
+      "condition_id": "0x75a58af77f6ba68ce374c44607f7acf6667c297f02aad84559a3730c6212b9a4",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-04T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-04T23:59:00Z",
+      "label": "August 4",
+      "market_slug": "iran-successfully-targets-shipping-on-august-4-2026-20260729163314524",
+      "name": "august_4",
+      "no_token_id": "45007088790695334189009815112216861278436071068859404640392132537690416644370",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-04T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:57.796717Z",
+      "yes_token_id": "107621697307038933574708550680404369060819343023910181838361608013993357352790"
+    },
+    {
+      "condition_id": "0x69779797febc311bf8377630a5ef34f6d2b24f447ff6ef0ab488bcb4ba21c884",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-05T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-05T23:59:00Z",
+      "label": "August 5",
+      "market_slug": "iran-successfully-targets-shipping-on-august-5-2026-20260729163314525",
+      "name": "august_5",
+      "no_token_id": "13552155631820866266052943391566696717812636904089265500973563833908975210752",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-05T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:57.954311Z",
+      "yes_token_id": "32953968799796793728318863621795265940435824366658708638811291865676697189870"
+    },
+    {
+      "condition_id": "0xded2c0435a16fa0b499788398972c180f8a069952548def0f38d455065590243",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-08T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-08T23:59:00Z",
+      "label": "August 8",
+      "market_slug": "iran-successfully-targets-shipping-on-august-8-2026-20260729163314528",
+      "name": "august_8",
+      "no_token_id": "101237931482750253362937960928871696353774574322379310004502536779787448496729",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-08T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:58.482394Z",
+      "yes_token_id": "4211983228417987965606203902003450022801855016821862641164765522130180392273"
+    },
+    {
+      "condition_id": "0x9129c11557dc9fd8f2c72800334f9bd388941fbd4bb9c742c6ae2f48f8e36ac9",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-10T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-10T23:59:00Z",
+      "label": "August 10",
+      "market_slug": "iran-successfully-targets-shipping-on-august-10-2026-20260729163314530",
+      "name": "august_10",
+      "no_token_id": "53246721571797291527855647100455424945876877090094775518507247254520925456263",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-10T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:58.828356Z",
+      "yes_token_id": "112176114767207125216407713657683224816026147702594341115941805718104239076163"
+    },
+    {
+      "condition_id": "0x26c411a8856581c875c201f09fb7ecf6e11e5d830b9c409f984ec1874c56dd2c",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-13T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-13T23:59:00Z",
+      "label": "August 13",
+      "market_slug": "iran-successfully-targets-shipping-on-august-13-2026-20260729163314533",
+      "name": "august_13",
+      "no_token_id": "13809496140468498724493545598340430735068897506906206458363103939389826236118",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-13T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:59.4809Z",
+      "yes_token_id": "81552857270094946581479332881509551197811821995185700623257615976454717430510"
+    },
+    {
+      "condition_id": "0xe2a9f030a6e538d681553ebaf979f48a1efa68a66cf7b28611a37634997e25cb",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-14T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-14T23:59:00Z",
+      "label": "August 14",
+      "market_slug": "iran-successfully-targets-shipping-on-august-14-2026-20260729163314534",
+      "name": "august_14",
+      "no_token_id": "65717014307660936922004257809611703465902502033026688467847062465692816726035",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-14T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:59.659704Z",
+      "yes_token_id": "64749321636727382850266355532340891831777667790658723644105189649664347627540"
+    },
+    {
+      "condition_id": "0x0e42154af2c14ec9ba4cd9b34a4f93b47b135bb866702b5213072bc52a7a53bd",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-15T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-15T23:59:00Z",
+      "label": "August 15",
+      "market_slug": "iran-successfully-targets-shipping-on-august-15-2026-20260729163314535",
+      "name": "august_15",
+      "no_token_id": "111656778064931920776112863748643276968158400896814127551416094563794092265102",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-15T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:59.81767Z",
+      "yes_token_id": "77993406429814429613278700210501715573435655889425850944946469153980114989249"
+    },
+    {
+      "condition_id": "0xd7fd2859b352f807123a120efd6cd439c3a06ad9a80ebca4d85328d59b6c66a9",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-16T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-16T23:59:00Z",
+      "label": "August 16",
+      "market_slug": "iran-successfully-targets-shipping-on-august-16-2026-20260729163314536",
+      "name": "august_16",
+      "no_token_id": "65387306260610753282585030616357401636939697801934584404055848395613037601009",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-16T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:10:59.987177Z",
+      "yes_token_id": "2301022725961910787061707783114997077519080989862485481788321426698728888631"
+    },
+    {
+      "condition_id": "0x4dc337c787bb32512b5564326042b8e7dbd96fb9cab97f470c833777ed4e99de",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-17T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-17T23:59:00Z",
+      "label": "August 17",
+      "market_slug": "iran-successfully-targets-shipping-on-august-17-2026-20260729163314537",
+      "name": "august_17",
+      "no_token_id": "27047942164011157728999111622388308977491387769670137533089396587683940626852",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-17T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:00.346963Z",
+      "yes_token_id": "23745169692638404881895406916359213893485544377731035649206244331596070897729"
+    },
+    {
+      "condition_id": "0xf224161cad7ca05e4566ba0dfe42df1e8c208cdd9f3a945259e6df1a31584d00",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-18T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-18T23:59:00Z",
+      "label": "August 18",
+      "market_slug": "iran-successfully-targets-shipping-on-august-18-2026-20260729163314538",
+      "name": "august_18",
+      "no_token_id": "4520849237198018597642616282427270104138934347556900366383767086133711687142",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-18T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:00.513145Z",
+      "yes_token_id": "27140454460169858848475361500150267243238684826030812201689907150350193558507"
+    },
+    {
+      "condition_id": "0x3e6bb020a1a25d80c3bf143a567b3a08f1fbb5e6c3cea5e84fa8acaf918ee802",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-19T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-19T23:59:00Z",
+      "label": "August 19",
+      "market_slug": "iran-successfully-targets-shipping-on-august-19-2026-20260729163314539",
+      "name": "august_19",
+      "no_token_id": "47765037101700387435836048735376604411308041324935045413061516653767043736777",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-19T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:00.688762Z",
+      "yes_token_id": "62674702957025756995769358482253274169286013404045600518940333083807943542456"
+    },
+    {
+      "condition_id": "0x127b864793c1c85a8bacafc5622ebfcbdbf80b96e0391468c3be112b5b001547",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-20T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-20T23:59:00Z",
+      "label": "August 20",
+      "market_slug": "iran-successfully-targets-shipping-on-august-20-2026-20260729163314540",
+      "name": "august_20",
+      "no_token_id": "108978166050176035685989527981773899208468537024725758057899641860933447832642",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-20T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:00.859594Z",
+      "yes_token_id": "72785722124742210681217599532601678796597012700379330365711946390443082721183"
+    },
+    {
+      "condition_id": "0x17f9e4627e1e5b15fd0e842fd33f008bcd372133ba392175970504d8a0ed1bee",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-21T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-21T23:59:00Z",
+      "label": "August 21",
+      "market_slug": "iran-successfully-targets-shipping-on-august-21-2026-20260729163314541",
+      "name": "august_21",
+      "no_token_id": "59473384908242100366922249918991072955878473046277887303527623662337584479830",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-21T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:01.049315Z",
+      "yes_token_id": "57279447563707352258559342528807709862653019229593598886583582081046421829486"
+    },
+    {
+      "condition_id": "0x8e706f992d618e836e484e4d23195d89577e3c2b0e766ba43f2a4e8ec0d44374",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-22T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-22T23:59:00Z",
+      "label": "August 22",
+      "market_slug": "iran-successfully-targets-shipping-on-august-22-2026-20260729163314542",
+      "name": "august_22",
+      "no_token_id": "18959789475770958716601968585448810894708410762096955840800051913173765695299",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-22T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:01.22153Z",
+      "yes_token_id": "90828193379873443424792643032740032814252810998118300189381415892278247101064"
+    },
+    {
+      "condition_id": "0xd0f20bf191a6c16c1838db7d2e43a536c02e1d567aaa2e22a4305962b7681aa5",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-23T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-23T23:59:00Z",
+      "label": "August 23",
+      "market_slug": "iran-successfully-targets-shipping-on-august-23-2026-20260729163314543",
+      "name": "august_23",
+      "no_token_id": "33142959699446404612472370242947349764410209123831524302899200152071548090471",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-23T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:01.383434Z",
+      "yes_token_id": "90222880064967040193373055848743482264085513951643566356709792156683251003332"
+    },
+    {
+      "condition_id": "0x73172dca030e795eda6c916ec134fcdcabaa71ea158afb781bb9760a81529bd5",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-24T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-24T23:59:00Z",
+      "label": "August 24",
+      "market_slug": "iran-successfully-targets-shipping-on-august-24-2026-20260729163314544",
+      "name": "august_24",
+      "no_token_id": "28955358451028655422526949399171412135808238850795178994518949230033731060944",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-24T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:01.576659Z",
+      "yes_token_id": "35616375813966952075070212015330046174083841115166675912918682988554025343602"
+    },
+    {
+      "condition_id": "0x9b93deb657f6ba731d96f1b1608aacedd3f5ac1e86ebfd3a318dc743c9ac905f",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-25T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-25T23:59:00Z",
+      "label": "August 25",
+      "market_slug": "iran-successfully-targets-shipping-on-august-25-2026-20260729163314545",
+      "name": "august_25",
+      "no_token_id": "1118974643395921357085586037870033517788274319252732613304125922488856504632",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-25T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:01.737955Z",
+      "yes_token_id": "25813262903011954494148049545188963916303864510635357865768342865878015010307"
+    },
+    {
+      "condition_id": "0xa56de529b50bd3ea2a1a49000391bf6704d9fcb27cce71ab5ec5c86d048c68ce",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-26T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-26T23:59:00Z",
+      "label": "August 26",
+      "market_slug": "iran-successfully-targets-shipping-on-august-26-2026-20260729163314546",
+      "name": "august_26",
+      "no_token_id": "47807626354218776088987132041114425253320499895852825925976400467091262072248",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-26T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:01.888759Z",
+      "yes_token_id": "110604619643496782003606170695091423851939782448398248685401856616957871498058"
+    },
+    {
+      "condition_id": "0x5132d17fa94fdb57e7c77e063b708e20da0fb224c4f76a66e267ddab23ba70e4",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-27T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-27T23:59:00Z",
+      "label": "August 27",
+      "market_slug": "iran-successfully-targets-shipping-on-august-27-2026-20260729163314547",
+      "name": "august_27",
+      "no_token_id": "72522659128250613451478669754081870145123001429956352917434655415424064104958",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-27T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:02.141424Z",
+      "yes_token_id": "37297879246894839204955268618260988200081211142520321827625601974016758329733"
+    },
+    {
+      "condition_id": "0xe75eeb6d8e084495956ce461de56d35990305a92860947663091429dec348f3a",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-28T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-28T23:59:00Z",
+      "label": "August 28",
+      "market_slug": "iran-successfully-targets-shipping-on-august-28-2026-20260729163314548",
+      "name": "august_28",
+      "no_token_id": "94434781023536715200697259568821110993383586484279779013466729208522062752401",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-28T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:02.336467Z",
+      "yes_token_id": "101092608486216050055741118395831999360177389503527158944744271554816706974522"
+    },
+    {
+      "condition_id": "0x7e08f0fd7774e1d37e6dbf7949708f740aa0cbc576558b096e2ae217ebe139f7",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-29T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-29T23:59:00Z",
+      "label": "August 29",
+      "market_slug": "iran-successfully-targets-shipping-on-august-29-2026-20260729163314549",
+      "name": "august_29",
+      "no_token_id": "21409266820341526066194082026723214257447037354970398167512240500974001236368",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-29T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:02.535702Z",
+      "yes_token_id": "79175777037298088891743745551242821775032599684622919700227675260678644724226"
+    },
+    {
+      "condition_id": "0x9984bdb0616146d7c71931d81c017e932cccf73707a31af199b4b16fb723917c",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-30T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-30T23:59:00Z",
+      "label": "August 30",
+      "market_slug": "iran-successfully-targets-shipping-on-august-30-2026-20260729163314550",
+      "name": "august_30",
+      "no_token_id": "18857465008912972102851592557276380946858951113471222495421108729062003455176",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-30T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:02.730627Z",
+      "yes_token_id": "14479327789559230530641826238801143727504476564802756282139979362678194109252"
+    },
+    {
+      "condition_id": "0x8c0548080bad228af5d29cc9babd9a146a5b23979cea4b5277144e49401f3d5d",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-31T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-31T23:59:00Z",
+      "label": "August 31",
+      "market_slug": "iran-successfully-targets-shipping-on-august-31-2026-20260729163314551",
+      "name": "august_31",
+      "no_token_id": "64520244172314706877530778222794658545092304219805274831202888161931290524146",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-31T23:59:00+03:30",
+      "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+      "start_iso": "2026-07-29T19:11:02.956797Z",
+      "yes_token_id": "86780678452913854643334781407983949973017302798092887672309367498496008492458"
+    }
+  ],
+  "question": "Iran successfully targets shipping on...?",
+  "rule_clauses": [
+    {
+      "clause_id": "clause_0836ac7e1e6d8c4e411e",
+      "text": "Otherwise, this market will resolve to \"No\"."
+    },
+    {
+      "clause_id": "clause_1153e56963af3f272d99",
+      "text": "Missile/drone strikes targeting a ship that are intercepted or otherwise do not directly impact the vessel will not be considered, regardless of damage through debris."
+    },
+    {
+      "clause_id": "clause_13d9e5d4f4d0050ed1e2",
+      "text": "Only military actions by Iranian forces explicitly claimed by the Islamic Republic of Iran or confirmed to have originated from Iranian territory or been carried out by Iranian forces will count toward the resolution of this market."
+    },
+    {
+      "clause_id": "clause_5538f808d20ed06d39d7",
+      "text": "Attacks by proxy forces (i.e."
+    },
+    {
+      "clause_id": "clause_65b885fe9b17cb622f6d",
+      "text": "This market will resolve to \"Yes\" if Iranian forces conduct a kinetic strike on or seize control of a commercial ship on the specified date IRST (UTC +3:30)."
+    },
+    {
+      "clause_id": "clause_af029e4516f4a5ac9da8",
+      "text": "If, at such time, the attribution or timing of the incident still cannot be confirmed, this market will resolve to \u201cNo\u201d."
+    },
+    {
+      "clause_id": "clause_b8bf20d3ecd229437728",
+      "text": "Hezbollah, Houthis, etc.) will not count toward the resolution of this market."
+    },
+    {
+      "clause_id": "clause_c87827428e2748bb8c4c",
+      "text": "Attacks on military vessels will not be considered."
+    },
+    {
+      "clause_id": "clause_d52c5e622b0b6882214f",
+      "text": "Seize control refers to Iranian forces forcefully boarding and taking control of a commercial ship."
+    },
+    {
+      "clause_id": "clause_eebe96fa575c2f13ee3d",
+      "text": "Qualifying incidents include, but are not limited to, drone and missile strikes, aerial bombings, and kinetic actions carried out by Iranian operatives in person, such as seizing a ship by force."
+    },
+    {
+      "clause_id": "clause_f03a5a0afaa5523a91cc",
+      "text": "If a kinetic incident occurs, but, on the specified date, 11:59 PM IRST, material ambiguity remains as to the exact timing of the incident, or whether the incident can be attributed to Iran, this market may remain open for an additional 3 calendar days, IRST."
+    },
+    {
+      "clause_id": "clause_f945a8a3e5dd8d73d7ab",
+      "text": "The primary resolution source for this market will be a consensus of credible reporting."
+    }
+  ],
+  "rule_text_sha256": "6990ac64f389f01cc996f8cee21887f08b21e85414572b5b99d89ce45528f873",
+  "rule_version": 1,
+  "schema_version": 4,
+  "semantics": {
+    "exclusion_clause_ids": [
+      "clause_1153e56963af3f272d99",
+      "clause_5538f808d20ed06d39d7",
+      "clause_b8bf20d3ecd229437728",
+      "clause_c87827428e2748bb8c4c"
+    ],
+    "exclusions": [
+      "Missile/drone strikes targeting a ship that are intercepted or otherwise do not directly impact the vessel will not be considered, regardless of damage through debris.",
+      "Attacks by proxy forces (i.e.",
+      "Hezbollah, Houthis, etc.) will not count toward the resolution of this market.",
+      "Attacks on military vessels will not be considered."
+    ],
+    "predicate": {
+      "action": "conduct a kinetic strike on or seize control of",
+      "comparator": "OCCURRED",
+      "object": "a commercial ship",
+      "subjects": [
+        "iranian forces"
+      ],
+      "unit": "",
+      "value": ""
+    },
+    "qualifying_clause_ids": [
+      "clause_13d9e5d4f4d0050ed1e2",
+      "clause_65b885fe9b17cb622f6d",
+      "clause_d52c5e622b0b6882214f",
+      "clause_eebe96fa575c2f13ee3d"
+    ],
+    "qualifying_conditions": [
+      "Only military actions by Iranian forces explicitly claimed by the Islamic Republic of Iran or confirmed to have originated from Iranian territory or been carried out by Iranian forces will count toward the resolution of this market.",
+      "This market will resolve to \"Yes\" if Iranian forces conduct a kinetic strike on or seize control of a commercial ship on the specified date IRST (UTC +3:30).",
+      "Seize control refers to Iranian forces forcefully boarding and taking control of a commercial ship.",
+      "Qualifying incidents include, but are not limited to, drone and missile strikes, aerial bombings, and kinetic actions carried out by Iranian operatives in person, such as seizing a ship by force."
+    ],
+    "resolution_policy": {
+      "cancellation_behavior": "not specified by verbatim rules",
+      "cancellation_clause_ids": [],
+      "independent_confirmation_sources": 1,
+      "postponement_behavior": "If a kinetic incident occurs, but, on the specified date, 11:59 PM IRST, material ambiguity remains as to the exact timing of the incident, or whether the incident can be attributed to Iran, this market may remain open for an additional 3 calendar days, IRST.",
+      "postponement_clause_ids": [
+        "clause_f03a5a0afaa5523a91cc"
+      ],
+      "terminal_no": [
+        "Otherwise, this market will resolve to \"No\".",
+        "If, at such time, the attribution or timing of the incident still cannot be confirmed, this market will resolve to \u201cNo\u201d."
+      ],
+      "terminal_no_clause_ids": [
+        "clause_0836ac7e1e6d8c4e411e",
+        "clause_af029e4516f4a5ac9da8"
+      ],
+      "terminal_no_monotonic": false,
+      "terminal_yes": [
+        "This market will resolve to \"Yes\" if Iranian forces conduct a kinetic strike on or seize control of a commercial ship on the specified date IRST (UTC +3:30)."
+      ],
+      "terminal_yes_clause_ids": [
+        "clause_65b885fe9b17cb622f6d"
+      ],
+      "terminal_yes_monotonic": true
+    },
+    "rule_family": "OCCURRENCE_BEFORE_DEADLINE",
+    "source_policy": {
+      "fallback_condition": "",
+      "fallback_requirement_ids": [],
+      "policy_type": "ALL_OF",
+      "primary_requirement_ids": [],
+      "quorum": 1,
+      "requirement_ids": [
+        "source_dbfc603e9e2e1632d7bd"
+      ]
+    },
+    "source_requirements": [
+      {
+        "clause_ids": [
+          "clause_f945a8a3e5dd8d73d7ab"
+        ],
+        "rationale": "the rules identify consensus of credible reporting as the primary resolution source.",
+        "required": true,
+        "requirement_id": "source_dbfc603e9e2e1632d7bd",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "consensus of credible reporting"
+      }
+    ],
+    "subjective_clause_ids": [
+      "clause_f03a5a0afaa5523a91cc"
+    ],
+    "subjective_terms": [
+      "If a kinetic incident occurs, but, on the specified date, 11:59 PM IRST, material ambiguity remains as to the exact timing of the incident, or whether the incident can be attributed to Iran, this market may remain open for an additional 3 calendar days, IRST."
+    ],
+    "window": {
+      "end_iso": "2026-08-31T20:29:00Z",
+      "start_iso": "",
+      "timezone": "Asia/Tehran"
+    }
+  }
+}

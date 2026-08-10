@@ -499,6 +499,44 @@ def test_rule_spec_binding_ignores_gamma_outcome_list_reordering() -> None:
     )
 
 
+def test_exclusive_rule_spec_excludes_inactive_and_closed_placeholders() -> None:
+    case = next(item for item in _golden_rules() if item["kind"] == "grouped")
+    context = context_for_case(case, strong_analysis=True)
+    first, second = context.outcomes
+    inactive = replace(
+        second,
+        name="inactive_placeholder",
+        market_slug="inactive-placeholder",
+        condition_id="inactive-condition",
+        yes_token_id="inactive-yes-token",
+        no_token_id="inactive-no-token",
+        active=False,
+    )
+    closed = replace(
+        second,
+        name="closed_placeholder",
+        market_slug="closed-placeholder",
+        condition_id="closed-condition",
+        yes_token_id="closed-yes-token",
+        no_token_id="closed-no-token",
+        closed=True,
+    )
+    context = replace(
+        context,
+        outcomes=[first, second, inactive, closed],
+    )
+
+    spec = RuleSpec.from_context(
+        context,
+        fixture_semantics(context),
+        compiler_model="anthropic:test",
+        compiled_at="2026-07-25T00:00:00+00:00",
+    )
+
+    assert [item.name for item in spec.outcomes] == ["yes", "other"]
+    spec.validate_context_binding(context)
+
+
 def test_family_specific_contract_validation_fails_closed() -> None:
     context = context_for_case(_golden_rules()[0], strong_analysis=True)
     raw = fixture_semantics(context).as_dict()

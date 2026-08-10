@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -463,6 +465,28 @@ def test_scorer_hard_states() -> None:
 
     discretionary = grade_market(_analyzed_context(_binary_event(description=RULES + " sole discretion.")), scoring)
     assert discretionary.state == "MONITOR_ONLY"
+
+
+def test_grouped_parent_deadline_does_not_close_a_later_active_leg() -> None:
+    context = _analyzed_context(_grouped_event())
+    context = replace(
+        context,
+        deadline_iso="2026-09-30T23:59:00Z",
+        outcomes=[
+            context.outcomes[0],
+            replace(
+                context.outcomes[1],
+                deadline_iso="2026-12-31T23:59:00Z",
+            ),
+        ],
+    )
+    graded = grade_market(
+        context,
+        ScoringConfig(allow_fixture_analysis_live=True),
+        now=datetime(2026, 10, 1, tzinfo=timezone.utc),
+    )
+    assert graded.state != "CLOSED"
+    assert graded.scores["time_horizon_days"] > 90
 
 
 def test_grouped_market_requires_verified_mapping_for_every_outcome() -> None:

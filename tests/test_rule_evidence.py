@@ -824,6 +824,7 @@ def test_independent_multi_evaluates_only_explicitly_targeted_outcome() -> None:
             assertion="PREDICATE_SATISFIED",
             group=group,
             target=spec.outcomes[0].name,
+            event_at="2026-07-25T12:00:00+00:00",
         )
         for article_id, group in (
             ("first-wire", "reuters"),
@@ -924,6 +925,45 @@ def test_status_report_before_leg_deadline_never_becomes_terminal_by_aging() -> 
     assert evaluation.terminal is False
 
 
+def test_status_monotonic_breach_is_terminal_no_before_deadline() -> None:
+    _context, base = _spec("STATUS_AT_DEADLINE")
+    spec = RuleSpec.from_dict(
+        replace(
+            base,
+            semantics=replace(
+                base.semantics,
+                resolution_policy=replace(
+                    base.semantics.resolution_policy,
+                    terminal_no_monotonic=True,
+                ),
+            ),
+        ).as_dict()
+    )
+    breach = _claim(
+        spec,
+        article_id="qualifying-breach",
+        assertion="QUALIFYING_BREACH",
+        group="reuters",
+        event_at="2026-07-20T12:00:00+00:00",
+    )
+    evaluation = evaluate_rule(
+        spec,
+        [breach],
+        as_of=datetime(2026, 7, 20, 13, 0, tzinfo=timezone.utc),
+    )[0]
+    assert evaluation.evidence_state == "TERMINAL_NO"
+    assert evaluation.terminal is True
+
+    conflicting = replace(
+        breach,
+        article_id="contradicted-breach",
+        assertion="CONFLICTING",
+    )
+    evaluation = evaluate_rule(spec, [breach, conflicting])[0]
+    assert evaluation.evidence_state == "AMBIGUOUS"
+    assert evaluation.terminal is False
+
+
 def test_exclusive_topology_forecloses_other_legs_for_occurrence_family() -> None:
     spec = _multi_spec("OCCURRENCE_BEFORE_DEADLINE", "EXCLUSIVE_ONE_OF_N")
     winner_claims = [
@@ -947,6 +987,45 @@ def test_exclusive_topology_forecloses_other_legs_for_occurrence_family() -> Non
     assert all(item.terminal for item in evaluations)
 
 
+def test_independent_daily_outcomes_require_the_target_local_date() -> None:
+    spec = _multi_spec("OCCURRENCE_BEFORE_DEADLINE", "INDEPENDENT_MULTI")
+    wrong_day = [
+        _claim(
+            spec,
+            article_id=article_id,
+            assertion="PREDICATE_SATISFIED",
+            group=group,
+            target=spec.outcomes[1].name,
+            event_at="2026-07-27T12:00:00+00:00",
+        )
+        for article_id, group in (
+            ("wrong-day-wire", "reuters"),
+            ("wrong-day-independent", "associated_press"),
+        )
+    ]
+    evaluations = evaluate_rule(spec, wrong_day)
+    assert evaluations[1].evidence_state == "AMBIGUOUS"
+    assert evaluations[1].terminal is False
+
+    missing_time = [
+        replace(claim, article_id=f"missing-{index}", event_at="")
+        for index, claim in enumerate(wrong_day)
+    ]
+    assert evaluate_rule(spec, missing_time)[1].evidence_state == "AMBIGUOUS"
+
+    correct_day = [
+        replace(
+            claim,
+            article_id=f"correct-{index}",
+            event_at="2026-08-31T12:00:00+00:00",
+        )
+        for index, claim in enumerate(wrong_day)
+    ]
+    evaluation = evaluate_rule(spec, correct_day)[1]
+    assert evaluation.evidence_state == "TERMINAL_YES"
+    assert evaluation.terminal is True
+
+
 def test_numeric_duration_and_status_evaluators() -> None:
     _context, numeric = _spec("NUMERIC_THRESHOLD")
     count = _claim(
@@ -958,6 +1037,38 @@ def test_numeric_duration_and_status_evaluators() -> None:
         unit=numeric.semantics.predicate.unit,
     )
     evaluated = evaluate_rule(numeric, [count])[0]
+    assert evaluated.evidence_state == "TERMINAL_YES"
+    assert evaluated.terminal is True
+
+    less_than = RuleSpec.from_dict(
+        replace(
+            numeric,
+            semantics=replace(
+                numeric.semantics,
+                predicate=replace(
+                    numeric.semantics.predicate,
+                    comparator="LESS_THAN_OR_EQUAL",
+                    value="10",
+                ),
+                resolution_policy=replace(
+                    numeric.semantics.resolution_policy,
+                    terminal_yes_monotonic=True,
+                ),
+            ),
+        ).as_dict()
+    )
+    low = replace(
+        _claim(
+            less_than,
+            article_id="low-count",
+            assertion="COUNT_OBSERVED",
+            group="reuters",
+            value="9",
+            unit=less_than.semantics.predicate.unit,
+        ),
+        rule_spec_sha256=less_than.spec_sha256,
+    )
+    evaluated = evaluate_rule(less_than, [low])[0]
     assert evaluated.evidence_state == "TERMINAL_YES"
     assert evaluated.terminal is True
 

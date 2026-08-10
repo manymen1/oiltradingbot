@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Callable
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .contracts import (
     EVIDENCE_STATES,
@@ -14,7 +15,7 @@ from .contracts import (
     RuleSpec,
 )
 
-EVALUATOR_VERSION = "rules-evaluator-v3"
+EVALUATOR_VERSION = "rules-evaluator-v4"
 SUPPORTED_OUTCOME_TOPOLOGIES = {
     "SINGLE_BINARY",
     "EXCLUSIVE_ONE_OF_N",
@@ -371,11 +372,10 @@ def _status_outcome(
     *,
     as_of: datetime | None,
 ) -> RuleEvaluation:
-    deadline = _outcome_deadline(spec, outcome)
     relevant = [
         claim
         for claim in _claims_for_outcome(spec, claims, outcome)
-        if _claim_matches_outcome_window(claim, deadline)
+        if _claim_matches_outcome_window(spec, outcome, claim)
     ]
     observations = [
         claim
@@ -393,15 +393,45 @@ def _status_outcome(
             blockers=["conflicting_status_evidence"],
             as_of=as_of,
         )
+    breaches = [
+        claim
+        for claim in relevant
+        if claim.assertion == "QUALIFYING_BREACH"
+        and claim.predicate_matches
+    ]
+    if (
+        breaches
+        and spec.semantics.resolution_policy.terminal_no_monotonic
+    ):
+        latest_breach = breaches[-1]
+        blockers = (
+            []
+            if _authorized_for_terminal([latest_breach])
+            else ["status_source_not_authorized"]
+        )
+        return _evaluation(
+            spec,
+            outcome_name=outcome,
+            state="TERMINAL_NO" if not blockers else "AMBIGUOUS",
+            terminal=not blockers,
+            claims=[latest_breach],
+            required=1,
+            blockers=blockers,
+            as_of=as_of,
+        )
     if not observations:
         return _fallback_evaluation(spec, outcome, relevant, as_of=as_of)
     latest = observations[-1]
     at_measurement = latest.temporal_relation == "AT_DEADLINE"
+    monotonic_no = (
+        spec.semantics.resolution_policy.terminal_no_monotonic
+        and not latest.predicate_matches
+    )
     state = (
         "TERMINAL_YES"
         if at_measurement and latest.predicate_matches
         else "TERMINAL_NO"
-        if at_measurement
+        if at_measurement or monotonic_no
         else "STRONG_YES"
         if latest.predicate_matches
         else "STRONG_NO"
@@ -447,17 +477,15 @@ def _numeric_outcome(
     *,
     as_of: datetime | None,
 ) -> RuleEvaluation:
-    deadline = _outcome_deadline(spec, outcome)
     relevant = [
         claim
         for claim in _claims_for_outcome(spec, claims, outcome)
-        if _claim_matches_outcome_window(claim, deadline)
+        if _claim_matches_outcome_window(spec, outcome, claim)
     ]
     measurements = [
         claim
         for claim in relevant
         if claim.assertion == "COUNT_OBSERVED"
-        and claim.predicate_matches
     ]
     if not measurements:
         return _fallback_evaluation(spec, outcome, relevant, as_of=as_of)
@@ -485,10 +513,9 @@ def _numeric_outcome(
         blockers = ["numeric_range_straddles_threshold"]
     else:
         after_deadline = latest.temporal_relation == "AT_DEADLINE"
-        monotonic_yes = comparator in {
-            "GREATER_THAN",
-            "GREATER_THAN_OR_EQUAL",
-        }
+        monotonic_yes = (
+            spec.semantics.resolution_policy.terminal_yes_monotonic
+        )
         if low_result and (monotonic_yes or after_deadline):
             state = "TERMINAL_YES"
             terminal = True
@@ -554,7 +581,7 @@ def _duration_outcome(
         for claim in relevant
         if claim.assertion == "QUALIFYING_BREACH"
         and claim.predicate_matches
-        and _claim_matches_outcome_window(claim, deadline)
+        and _claim_matches_outcome_window(spec, outcome.name, claim)
     ]
     measurements = [
         claim
@@ -847,7 +874,7 @@ def _event_evaluation(
     in_window_claims = [
         claim
         for claim in claims
-        if _claim_matches_outcome_window(claim, deadline)
+        if _claim_matches_outcome_window(spec, outcome, claim)
     ]
     if any(claim.assertion == "CONFLICTING" for claim in claims):
         return _evaluation(
@@ -1156,15 +1183,85 @@ def _ladder_claim_applies_to_leg(
 
 
 def _claim_matches_outcome_window(
+    spec: RuleSpec,
+    outcome_name: str,
     claim: EvidenceClaim,
-    deadline: datetime | None,
 ) -> bool:
     if claim.temporal_relation in {"BEFORE_WINDOW", "AFTER_WINDOW"}:
         return False
-    if deadline is None or not claim.event_at:
-        return True
+    binding = next(
+        (
+            outcome
+            for outcome in spec.outcomes
+            if outcome.name == outcome_name
+        ),
+        None,
+    )
+    deadline = _outcome_deadline(spec, outcome_name)
     event_at = _stamp(claim.event_at)
-    return event_at is not None and event_at <= deadline
+    date_local = _uses_date_local_independent_windows(spec)
+    if event_at is None:
+        # Independent daily-bin markets require an occurrence timestamp.  A
+        # model-selected target label is not proof that the event happened on
+        # that label's local calendar day.
+        return not date_local
+    if binding is not None:
+        start = _stamp(binding.start_iso)
+        if start is not None:
+            if claim.assertion == "COUNT_OBSERVED":
+                try:
+                    start_zone = ZoneInfo(
+                        binding.deadline_timezone
+                        or spec.semantics.window.timezone
+                        or "UTC"
+                    )
+                except ZoneInfoNotFoundError:
+                    return False
+                if (
+                    event_at.astimezone(start_zone).date()
+                    < start.astimezone(start_zone).date()
+                ):
+                    return False
+            elif event_at < start:
+                return False
+    if deadline is not None and event_at > deadline:
+        return False
+    if not date_local or binding is None or deadline is None:
+        return True
+    try:
+        zone = ZoneInfo(
+            binding.deadline_timezone
+            or spec.semantics.window.timezone
+            or "UTC"
+        )
+    except ZoneInfoNotFoundError:
+        return False
+    return event_at.astimezone(zone).date() == deadline.astimezone(zone).date()
+
+
+def _uses_date_local_independent_windows(spec: RuleSpec) -> bool:
+    if (
+        spec.outcome_topology != "INDEPENDENT_MULTI"
+        or spec.semantics.rule_family != "OCCURRENCE_BEFORE_DEADLINE"
+        or len(spec.outcomes) < 2
+    ):
+        return False
+    local_dates: set[tuple[str, str]] = set()
+    for outcome in spec.outcomes:
+        deadline = _stamp(outcome.deadline_iso)
+        zone_name = (
+            outcome.deadline_timezone
+            or spec.semantics.window.timezone
+            or "UTC"
+        )
+        if deadline is None:
+            return False
+        try:
+            zone = ZoneInfo(zone_name)
+        except ZoneInfoNotFoundError:
+            return False
+        local_dates.add((zone_name, deadline.astimezone(zone).date().isoformat()))
+    return len(local_dates) == len(spec.outcomes)
 
 
 def _authorized_terminal_claims(

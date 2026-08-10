@@ -41,6 +41,8 @@ def test_codex_output_schema_uses_supported_strict_json_keywords() -> None:
     # it is valid general JSON Schema. Runtime validation still enforces role
     # uniqueness after the model returns.
     assert '"uniqueItems"' not in json.dumps(_SEMANTIC_SCHEMA)
+    source_policy = _SEMANTIC_SCHEMA["properties"]["source_policy"]
+    assert set(source_policy["required"]) == set(source_policy["properties"])
 
 
 def test_two_pass_compiler_binds_instrument_and_caches(tmp_path: Path) -> None:

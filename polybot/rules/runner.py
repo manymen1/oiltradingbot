@@ -50,6 +50,7 @@ from .decision import (
 )
 from .evaluators import SUPPORTED_EVALUATOR_FAMILIES, evaluate_rule
 from .evidence import EvidenceExtractor
+from .portwatch import is_portwatch_spec, sync_portwatch_claims
 from .store import RuleStore
 
 
@@ -229,6 +230,26 @@ class GenericRuleMarketRunner:
         if using_central_feed and self.feed_reader is not None and not budget_blocked:
             self.feed_reader.ack_pending()
 
+        oracle_claims = 0
+        oracle_error = ""
+        if is_portwatch_spec(self.spec):
+            try:
+                oracle_claims = len(
+                    sync_portwatch_claims(
+                        spec=self.spec,
+                        rule_store=self.rule_store,
+                        data_dir=self.data_dir,
+                        as_of=replay_now,
+                    )
+                )
+            except Exception as exc:  # fail closed on oracle/network failure
+                oracle_error = f"{type(exc).__name__}: {exc}"
+                log_event(
+                    "portwatch_evidence_sync_failed",
+                    market_id=self.context.market_id,
+                    error=oracle_error,
+                )
+
         claims = self.rule_store.claims_for_spec(self.spec.spec_sha256)
         semantic_key = self._semantic_key(claims, as_of=replay_now)
         if (
@@ -241,6 +262,8 @@ class GenericRuleMarketRunner:
                 "articles": len(batch_articles),
                 "extraction_results": extraction_results,
                 "claims": len(claims),
+                "oracle_claims": oracle_claims,
+                "oracle_error": oracle_error,
                 "evaluations": 0,
                 "proofs": 0,
                 "executed": 0,
@@ -331,6 +354,8 @@ class GenericRuleMarketRunner:
             "articles": len(batch_articles),
             "extraction_results": extraction_results,
             "claims": len(claims),
+            "oracle_claims": oracle_claims,
+            "oracle_error": oracle_error,
             "evaluations": len(saved_evaluations),
             "proofs": len(proofs),
             "executed": sum(1 for proof in proofs if proof.executed),

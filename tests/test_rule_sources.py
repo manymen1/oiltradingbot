@@ -23,6 +23,7 @@ from polybot.rules.compiler import fixture_semantics
 from polybot.rules.contracts import (
     RuleSpec,
     SourcePolicy,
+    SourcePolicyBranch,
     SourceRequirement,
     source_requirement_id,
 )
@@ -205,6 +206,110 @@ def test_named_iran_government_source_resolves_to_one_official_group() -> None:
     assert {item.independence_group for item in sources} == {
         "government:iran"
     }
+
+
+@pytest.mark.parametrize(
+    "source_ref",
+    [
+        "credible reporting",
+        "consensus of credible reporting",
+        "wide consensus of credible reporting",
+        "major news agencies of record",
+    ],
+)
+def test_credible_reporting_aliases_resolve_policy_requirements(
+    source_ref: str,
+) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    base = fixture_semantics(context)
+    requirement_id = source_requirement_id(
+        source_ref,
+        ["SETTLEMENT"],
+        False,
+    )
+    semantics = replace(
+        base,
+        source_requirements=[
+            SourceRequirement(
+                requirement_id=requirement_id,
+                source_ref=source_ref,
+                roles=["SETTLEMENT"],
+                required=False,
+                rationale="publisher evidence branch named by the rules",
+            )
+        ],
+        source_policy=SourcePolicy(
+            policy_type="ANY_OF",
+            requirement_ids=[requirement_id],
+            quorum=1,
+        ),
+    )
+    spec = _spec(context, semantics)
+    plan = build_source_plan(context, spec)
+
+    assert any(
+        requirement_id in item.requirement_ids
+        for item in plan.source_records
+    )
+    validate_source_plan_freshness(context, plan, spec)
+
+
+def test_unresolved_optional_alternative_does_not_disable_resolved_path() -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    base = fixture_semantics(context)
+    unknown_id = source_requirement_id(
+        "Official Channel Without Endpoint",
+        ["SETTLEMENT"],
+        False,
+    )
+    reporting_id = source_requirement_id(
+        "credible reporting",
+        ["SETTLEMENT"],
+        False,
+    )
+    semantics = replace(
+        base,
+        source_requirements=[
+            SourceRequirement(
+                requirement_id=unknown_id,
+                source_ref="Official Channel Without Endpoint",
+                roles=["SETTLEMENT"],
+                required=False,
+            ),
+            SourceRequirement(
+                requirement_id=reporting_id,
+                source_ref="credible reporting",
+                roles=["SETTLEMENT"],
+                required=False,
+            ),
+        ],
+        source_policy=SourcePolicy(
+            policy_type="ALTERNATIVE_QUORUM",
+            requirement_ids=[unknown_id, reporting_id],
+            quorum=1,
+            branches=[
+                SourcePolicyBranch(
+                    requirement_ids=[unknown_id],
+                    requirement_quorum=1,
+                    minimum_independent_sources=1,
+                ),
+                SourcePolicyBranch(
+                    requirement_ids=[reporting_id],
+                    requirement_quorum=1,
+                    minimum_independent_sources=1,
+                ),
+            ],
+        ),
+    )
+    spec = _spec(context, semantics)
+    plan = build_source_plan(context, spec)
+
+    assert unknown_id not in {
+        requirement_id
+        for source in plan.source_records
+        for requirement_id in source.requirement_ids
+    }
+    validate_source_plan_freshness(context, plan, spec)
 
 
 def test_unpromoted_family_is_paper_only_then_can_be_promoted() -> None:

@@ -291,6 +291,7 @@ _SEMANTIC_SCHEMA: dict[str, Any] = {
                 "primary_requirement_ids",
                 "fallback_requirement_ids",
                 "fallback_condition",
+                "branches",
             ],
             "additionalProperties": False,
         },

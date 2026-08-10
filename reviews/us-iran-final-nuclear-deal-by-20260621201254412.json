@@ -1,0 +1,434 @@
+{
+  "compiled_at": "2026-08-10T13:44:28.483996+00:00",
+  "compiler_model": "operator_review_draft",
+  "deadline_authority_policy": "VERBATIM_RULES_PAPER_ONLY_V1",
+  "event_slug": "us-iran-final-nuclear-deal-by-20260621201254412",
+  "kind": "grouped",
+  "market_id": "us-iran-final-nuclear-deal-by-20260621201254412",
+  "outcome_topology": "MONOTONE_DEADLINE_LADDER",
+  "outcomes": [
+    {
+      "condition_id": "0x17c1591393e9bfcaa68c89086af37ffc1b44db673c56c8bebe07480759c6038a",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-06-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-06-30T23:59:00Z",
+      "label": "June 30",
+      "market_slug": "us-iran-final-nuclear-deal-by-june-30-2026-20260621201255150",
+      "name": "june_30",
+      "no_token_id": "25499259271551893044047014082390012845946547553034217941957396721179121905676",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-06-30T23:59:00-04:00",
+      "rule_text_sha256": "310b99fcaeb4610990f96596c669349cf780f3be09d4aeec559dc7722804b607",
+      "start_iso": "2026-06-21T21:39:08.821466Z",
+      "yes_token_id": "7401275535376116479707483307374920226313579952439489218160836087954075991296"
+    },
+    {
+      "condition_id": "0x659bff8b341ee3f74dfd82b1608bf37dff28501774f25dd48f93076621aa8f8a",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-13T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-08-13T23:59:00Z",
+      "label": "August 13",
+      "market_slug": "us-iran-final-nuclear-deal-by-august-13-2026-20260621201255152",
+      "name": "august_13",
+      "no_token_id": "26726533453610341293199260699472070552559579281472031422787409111057595790597",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-13T23:59:00-04:00",
+      "rule_text_sha256": "310b99fcaeb4610990f96596c669349cf780f3be09d4aeec559dc7722804b607",
+      "start_iso": "2026-06-21T21:39:09.628512Z",
+      "yes_token_id": "29430262678395537319199326140215396124984682262418982262247273209405979834308"
+    },
+    {
+      "condition_id": "0x61dcae8107169382527c8dac1fcd0e214b4b4267b65d0e6fd4872736d373f360",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-07-31T23:59:00Z",
+      "label": "July 31",
+      "market_slug": "us-iran-final-nuclear-deal-by-july-31-2026-20260621201255151",
+      "name": "july_31",
+      "no_token_id": "107829615395930134590785039912266494110425242574243460473016157222501660881900",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-31T23:59:00-04:00",
+      "rule_text_sha256": "310b99fcaeb4610990f96596c669349cf780f3be09d4aeec559dc7722804b607",
+      "start_iso": "2026-06-21T21:39:09.234727Z",
+      "yes_token_id": "59540726726105191759377646221923566586595020352558312380615459160189274262446"
+    },
+    {
+      "condition_id": "0xc0aed6d5d893988b4bef5a8242435bbc7c3b45b1e438bcffc9e9bf71d173ae46",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-18T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-08-18T23:59:00Z",
+      "label": "August 18",
+      "market_slug": "us-iran-final-nuclear-deal-by-august-18-2026-20260621201255153",
+      "name": "august_18",
+      "no_token_id": "24789279481705812837057932935693826732883239464040323924510539194300325407682",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-18T23:59:00-04:00",
+      "rule_text_sha256": "310b99fcaeb4610990f96596c669349cf780f3be09d4aeec559dc7722804b607",
+      "start_iso": "2026-06-21T21:39:09.889717Z",
+      "yes_token_id": "43309871302492165728353651979262158707997256645855453970045994908642223910419"
+    },
+    {
+      "condition_id": "0xa1b3158fedfddaf2a0d8b364f6a57ee68146fb6ad458222aa8e02bcf0abbb099",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-08-31T23:59:00Z",
+      "label": "August 31",
+      "market_slug": "us-iran-final-nuclear-deal-by-august-31-2026-20260621201255154",
+      "name": "august_31",
+      "no_token_id": "96011621726517584870166448716525831020662124871593355814762549708680109101202",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-31T23:59:00-04:00",
+      "rule_text_sha256": "310b99fcaeb4610990f96596c669349cf780f3be09d4aeec559dc7722804b607",
+      "start_iso": "2026-06-21T21:39:10.501233Z",
+      "yes_token_id": "37071201064004867793384227173951609485390907960072244087184888120714199352869"
+    },
+    {
+      "condition_id": "0x23667427b34ca1c7144d50540beba9e7ffb608443a84252c194bb8b40919a0cb",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "September 30",
+      "market_slug": "us-iran-final-nuclear-deal-by-september-30-2026",
+      "name": "september_30",
+      "no_token_id": "96617355657240891513273770775614816471287728266266102664567788573610349264687",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "310b99fcaeb4610990f96596c669349cf780f3be09d4aeec559dc7722804b607",
+      "start_iso": "2026-06-26T18:24:08.535474Z",
+      "yes_token_id": "14466055037608627931561046129222135087821973151712155655664112537759623167836"
+    },
+    {
+      "condition_id": "0x79b7408f02df2eba4034ca4c06ddf17b8dbeacc5adbe8595969e7573912c4e3b",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-12-31T23:59:00-05:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "December 31",
+      "market_slug": "us-iran-final-nuclear-deal-by-december-31-2026",
+      "name": "december_31",
+      "no_token_id": "33676235249742435565729532483122262800369378774892710387888607855248244773045",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-12-31T23:59:00-05:00",
+      "rule_text_sha256": "310b99fcaeb4610990f96596c669349cf780f3be09d4aeec559dc7722804b607",
+      "start_iso": "2026-06-26T18:24:31.145897Z",
+      "yes_token_id": "31155599200443620024532103683912072563894181253510224263086924270624693692711"
+    }
+  ],
+  "question": "US-Iran Final Nuclear Deal by\u2026?",
+  "rule_clauses": [
+    {
+      "clause_id": "clause_111c19a2ac1287b89412",
+      "text": "A qualifying written diplomatic instrument must:"
+    },
+    {
+      "clause_id": "clause_11df31a95a33ff58091f",
+      "text": "A qualifying instrument must be signed or formally adopted by both the United States and Iran by the specified date, 11:59 PM ET."
+    },
+    {
+      "clause_id": "clause_1b8962fa59a27d7ded51",
+      "text": "If the written instrument is recognized by the United States and Iran as not requiring signature for execution, formal adoption of the instrument by both countries without signature will qualify."
+    },
+    {
+      "clause_id": "clause_1f597043e2e62a9862e8",
+      "text": "(ii) a provision explicitly framed as a minimum requirement for a future negotiation, rather than a present obligation;"
+    },
+    {
+      "clause_id": "clause_21dcdf38cfefb30feb6b",
+      "text": "A definite and unconditional obligation may qualify, even if technical or procedural details, including the exact implementation date, timeframe, or sequencing, remain subject to future arrangements, provided that the obligation still establishes a concrete, measurable benchmark against which compliance could be tested."
+    },
+    {
+      "clause_id": "clause_2965e43102e7d7a30b7f",
+      "text": "(i) a provision the substantive obligation of which remains explicitly subject to a future agreement, negotiation process, or mutually agreed follow-on instrument;"
+    },
+    {
+      "clause_id": "clause_38020ff1979f12bbe703",
+      "text": "If the text has still not been released after 28 calendar days, official and definitive announcements from the United States or Iran, and a consensus of credible reporting, will be used to determine whether the instrument qualifies."
+    },
+    {
+      "clause_id": "clause_38e18bead7aafacdd485",
+      "text": "(i) Be identified as the final deal contemplated by the June 14, 2026, memorandum of understanding, either in official United States or Iranian communications, or by a consensus of credible reporting;"
+    },
+    {
+      "clause_id": "clause_41bfa4b9965edfc736b0",
+      "text": "Otherwise, this market resolves to \u201cNo.\u201d"
+    },
+    {
+      "clause_id": "clause_4d8bebb9dcbbcc433b71",
+      "text": "(iv) an exchange of official diplomatic notes or letters confirming acceptance of the same instrument."
+    },
+    {
+      "clause_id": "clause_696da3daa3d86214f445",
+      "text": "Formal adoption may be established by official actions, including:"
+    },
+    {
+      "clause_id": "clause_6c2899a2152bb366cf3c",
+      "text": "Whether an instrument qualifies will be primarily determined by its officially released text."
+    },
+    {
+      "clause_id": "clause_6cee53c9b5bfbd6fb7e7",
+      "text": "(iii) adoption, approval, or endorsement through an official resolution, ministerial decision, executive decision, or equivalent institutional act, where that act is the mechanism by which the relevant country adopts the instrument; or"
+    },
+    {
+      "clause_id": "clause_79651a5107a460e5e7b8",
+      "text": "An instrument to which parties other than the United States and Iran are also party will qualify, provided that both the United States and Iran are parties to the instrument and all other requirements are satisfied."
+    },
+    {
+      "clause_id": "clause_849b391695063c9d6000",
+      "text": "This market resolves to \u201cYes\u201d if a qualifying written diplomatic instrument between the United States and Iran has been mutually signed or adopted by the specified date, 11:59 PM ET."
+    },
+    {
+      "clause_id": "clause_8db4cd31f41d3c318e51",
+      "text": "(ii) mutual official confirmation that the same published instrument has been agreed to, adopted, approved, executed, or concluded by both countries;"
+    },
+    {
+      "clause_id": "clause_8fdcff3c07389bf0c2e4",
+      "text": "Unless the written instrument is formally adopted without signature as described below, the instrument must be signed by both the United States and Iran."
+    },
+    {
+      "clause_id": "clause_90b55ad40a83f12090a6",
+      "text": "On June 14, 2026, the United States and Iran announced a written diplomatic agreement, including a 60-day extendable period in which both countries committed to negotiate toward a \u201cfinal deal\u201d regarding Iran\u2019s nuclear program and other topics."
+    },
+    {
+      "clause_id": "clause_99bab73350f332cd23d9",
+      "text": "(iii) a floor, placeholder, or minimum standard established explicitly for the purpose of structuring ongoing or future talks."
+    },
+    {
+      "clause_id": "clause_9ddc8c0ef20506a12761",
+      "text": "Both parties must either sign the same document or sign individual documents that substantively and directly indicate acceptance of the same underlying instrument, regardless of minor formatting, wording, or translation differences between the signed versions."
+    },
+    {
+      "clause_id": "clause_a3e5aa28e87c048f9be8",
+      "text": "A consensus of credible reporting from major news agencies of record may also be used."
+    },
+    {
+      "clause_id": "clause_a3ed40b6cd7a5952d23b",
+      "text": "If such an instrument is signed or formally adopted by that time, but the complete text has not been released, and genuine material ambiguity remains as to whether it satisfies this market\u2019s requirements, this market may remain open for up to 28 calendar days after the specified date pending release of the text."
+    },
+    {
+      "clause_id": "clause_a77e7d918fe02c515a69",
+      "text": "Non-specific or vague restrictions, with no defined metric (e.g., a pledge not to pursue nuclear weapons, a commitment to maintain the status quo, or an agreement to abide IAEA monitoring or inspections requirements that do not specifically restrict Iran\u2019s nuclear program) will not qualify."
+    },
+    {
+      "clause_id": "clause_aa4dbc22e98e79386dc4",
+      "text": "The following do not qualify:"
+    },
+    {
+      "clause_id": "clause_b0eca0ca80035958d4b0",
+      "text": "The primary resolution sources for this market will be official communications from the governments of the United States and Iran, or their authorized representatives."
+    },
+    {
+      "clause_id": "clause_b5ea71f4773b004a14e7",
+      "text": "(i) an official joint statement announcing that the United States and Iran have adopted, approved, executed, concluded, or otherwise finalized the instrument;"
+    },
+    {
+      "clause_id": "clause_bb32fea171b3dd0de998",
+      "text": "Conditional obligations do not qualify."
+    },
+    {
+      "clause_id": "clause_c545abdc8adccc5fbea5",
+      "text": "Both physical signatures and officially-issued electronic signatures will qualify as signatures."
+    },
+    {
+      "clause_id": "clause_cd43d75ed6823d1a6de3",
+      "text": "(ii) Establish at least one specific obligation limiting Iran's nuclear program through a concrete, measurable benchmark against which compliance could be tested, which may take the form of a defined limit, prohibition, or quantity (e.g., a specific cap on the purity level to which Iran may enrich uranium, or an explicit commitment for Iran to surrender, destroy, or dilute its enriched uranium stockpile)."
+    },
+    {
+      "clause_id": "clause_f0c1bea16b2c1ebf7cf7",
+      "text": "Once a diplomatic instrument has been signed or formally adopted without signature by both the United States and Iran and confirmed to satisfy the requirements of a qualifying written diplomatic instrument, this market\u2019s condition is met, regardless of whether the instrument later enters into force, is ratified, receives legislative or treaty consent, or is subsequently repudiated, withdrawn from, or not implemented by the United States or Iran."
+    },
+    {
+      "clause_id": "clause_f4ff946ead946ecbc8ef",
+      "text": "The content of the qualifying instrument must be expressed as an agreed obligation to be implemented."
+    }
+  ],
+  "rule_text_sha256": "310b99fcaeb4610990f96596c669349cf780f3be09d4aeec559dc7722804b607",
+  "rule_version": 1,
+  "schema_version": 4,
+  "semantics": {
+    "exclusion_clause_ids": [
+      "clause_1f597043e2e62a9862e8",
+      "clause_2965e43102e7d7a30b7f",
+      "clause_99bab73350f332cd23d9",
+      "clause_a77e7d918fe02c515a69",
+      "clause_bb32fea171b3dd0de998"
+    ],
+    "exclusions": [
+      "(ii) a provision explicitly framed as a minimum requirement for a future negotiation, rather than a present obligation;",
+      "(i) a provision the substantive obligation of which remains explicitly subject to a future agreement, negotiation process, or mutually agreed follow-on instrument;",
+      "(iii) a floor, placeholder, or minimum standard established explicitly for the purpose of structuring ongoing or future talks.",
+      "Non-specific or vague restrictions, with no defined metric (e.g., a pledge not to pursue nuclear weapons, a commitment to maintain the status quo, or an agreement to abide IAEA monitoring or inspections requirements that do not specifically restrict Iran\u2019s nuclear program) will not qualify.",
+      "Conditional obligations do not qualify."
+    ],
+    "predicate": {
+      "action": "mutually signed or formally adopted without signature",
+      "comparator": "OCCURRED",
+      "object": "a qualifying written diplomatic instrument between the United States and Iran",
+      "subjects": [
+        "iran",
+        "united states"
+      ],
+      "unit": "",
+      "value": ""
+    },
+    "qualifying_clause_ids": [
+      "clause_11df31a95a33ff58091f",
+      "clause_1b8962fa59a27d7ded51",
+      "clause_21dcdf38cfefb30feb6b",
+      "clause_38e18bead7aafacdd485",
+      "clause_4d8bebb9dcbbcc433b71",
+      "clause_6c2899a2152bb366cf3c",
+      "clause_6cee53c9b5bfbd6fb7e7",
+      "clause_79651a5107a460e5e7b8",
+      "clause_849b391695063c9d6000",
+      "clause_8db4cd31f41d3c318e51",
+      "clause_8fdcff3c07389bf0c2e4",
+      "clause_9ddc8c0ef20506a12761",
+      "clause_b5ea71f4773b004a14e7",
+      "clause_c545abdc8adccc5fbea5",
+      "clause_cd43d75ed6823d1a6de3",
+      "clause_f0c1bea16b2c1ebf7cf7",
+      "clause_f4ff946ead946ecbc8ef"
+    ],
+    "qualifying_conditions": [
+      "A qualifying instrument must be signed or formally adopted by both the United States and Iran by the specified date, 11:59 PM ET.",
+      "If the written instrument is recognized by the United States and Iran as not requiring signature for execution, formal adoption of the instrument by both countries without signature will qualify.",
+      "A definite and unconditional obligation may qualify, even if technical or procedural details, including the exact implementation date, timeframe, or sequencing, remain subject to future arrangements, provided that the obligation still establishes a concrete, measurable benchmark against which compliance could be tested.",
+      "(i) Be identified as the final deal contemplated by the June 14, 2026, memorandum of understanding, either in official United States or Iranian communications, or by a consensus of credible reporting;",
+      "(iv) an exchange of official diplomatic notes or letters confirming acceptance of the same instrument.",
+      "Whether an instrument qualifies will be primarily determined by its officially released text.",
+      "(iii) adoption, approval, or endorsement through an official resolution, ministerial decision, executive decision, or equivalent institutional act, where that act is the mechanism by which the relevant country adopts the instrument; or",
+      "An instrument to which parties other than the United States and Iran are also party will qualify, provided that both the United States and Iran are parties to the instrument and all other requirements are satisfied.",
+      "This market resolves to \u201cYes\u201d if a qualifying written diplomatic instrument between the United States and Iran has been mutually signed or adopted by the specified date, 11:59 PM ET.",
+      "(ii) mutual official confirmation that the same published instrument has been agreed to, adopted, approved, executed, or concluded by both countries;",
+      "Unless the written instrument is formally adopted without signature as described below, the instrument must be signed by both the United States and Iran.",
+      "Both parties must either sign the same document or sign individual documents that substantively and directly indicate acceptance of the same underlying instrument, regardless of minor formatting, wording, or translation differences between the signed versions.",
+      "(i) an official joint statement announcing that the United States and Iran have adopted, approved, executed, concluded, or otherwise finalized the instrument;",
+      "Both physical signatures and officially-issued electronic signatures will qualify as signatures.",
+      "(ii) Establish at least one specific obligation limiting Iran's nuclear program through a concrete, measurable benchmark against which compliance could be tested, which may take the form of a defined limit, prohibition, or quantity (e.g., a specific cap on the purity level to which Iran may enrich uranium, or an explicit commitment for Iran to surrender, destroy, or dilute its enriched uranium stockpile).",
+      "Once a diplomatic instrument has been signed or formally adopted without signature by both the United States and Iran and confirmed to satisfy the requirements of a qualifying written diplomatic instrument, this market\u2019s condition is met, regardless of whether the instrument later enters into force, is ratified, receives legislative or treaty consent, or is subsequently repudiated, withdrawn from, or not implemented by the United States or Iran.",
+      "The content of the qualifying instrument must be expressed as an agreed obligation to be implemented."
+    ],
+    "resolution_policy": {
+      "cancellation_behavior": "not specified by verbatim rules",
+      "cancellation_clause_ids": [],
+      "independent_confirmation_sources": 1,
+      "postponement_behavior": "If such an instrument is signed or formally adopted by that time, but the complete text has not been released, and genuine material ambiguity remains as to whether it satisfies this market\u2019s requirements, this market may remain open for up to 28 calendar days after the specified date pending release of the text.",
+      "postponement_clause_ids": [
+        "clause_a3ed40b6cd7a5952d23b"
+      ],
+      "terminal_no": [
+        "Otherwise, this market resolves to \u201cNo.\u201d"
+      ],
+      "terminal_no_clause_ids": [
+        "clause_41bfa4b9965edfc736b0"
+      ],
+      "terminal_no_monotonic": false,
+      "terminal_yes": [
+        "This market resolves to \u201cYes\u201d if a qualifying written diplomatic instrument between the United States and Iran has been mutually signed or adopted by the specified date, 11:59 PM ET.",
+        "Once a diplomatic instrument has been signed or formally adopted without signature by both the United States and Iran and confirmed to satisfy the requirements of a qualifying written diplomatic instrument, this market\u2019s condition is met, regardless of whether the instrument later enters into force, is ratified, receives legislative or treaty consent, or is subsequently repudiated, withdrawn from, or not implemented by the United States or Iran."
+      ],
+      "terminal_yes_clause_ids": [
+        "clause_849b391695063c9d6000",
+        "clause_f0c1bea16b2c1ebf7cf7"
+      ],
+      "terminal_yes_monotonic": true
+    },
+    "rule_family": "OCCURRENCE_BEFORE_DEADLINE",
+    "source_policy": {
+      "fallback_condition": "",
+      "fallback_requirement_ids": [],
+      "policy_type": "ANY_OF",
+      "primary_requirement_ids": [],
+      "quorum": 1,
+      "requirement_ids": [
+        "source_a041f1d47b01d5491ac7",
+        "source_a5c734573298da98cbd6",
+        "source_fb01a8b76cac2b27276e"
+      ]
+    },
+    "source_requirements": [
+      {
+        "clause_ids": [
+          "clause_38020ff1979f12bbe703",
+          "clause_38e18bead7aafacdd485",
+          "clause_b0eca0ca80035958d4b0"
+        ],
+        "rationale": "official iranian communications or authorized representatives are a primary resolution source and can identify or definitively announce whether the instrument qualifies.",
+        "required": false,
+        "requirement_id": "source_a041f1d47b01d5491ac7",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "government of iran"
+      },
+      {
+        "clause_ids": [
+          "clause_38020ff1979f12bbe703",
+          "clause_38e18bead7aafacdd485",
+          "clause_b0eca0ca80035958d4b0"
+        ],
+        "rationale": "official united states communications or authorized representatives are a primary resolution source and can identify or definitively announce whether the instrument qualifies.",
+        "required": false,
+        "requirement_id": "source_a5c734573298da98cbd6",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "governments of the united states"
+      },
+      {
+        "clause_ids": [
+          "clause_38020ff1979f12bbe703",
+          "clause_38e18bead7aafacdd485",
+          "clause_a3e5aa28e87c048f9be8"
+        ],
+        "rationale": "a consensus of credible reporting from major news agencies of record may be used to identify the final deal and, where the text remains unreleased after 28 calendar days, determine whether the instrument qualifies.",
+        "required": false,
+        "requirement_id": "source_fb01a8b76cac2b27276e",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "major news agencies of record"
+      }
+    ],
+    "subjective_clause_ids": [
+      "clause_21dcdf38cfefb30feb6b",
+      "clause_38020ff1979f12bbe703",
+      "clause_38e18bead7aafacdd485",
+      "clause_849b391695063c9d6000",
+      "clause_a3e5aa28e87c048f9be8",
+      "clause_a3ed40b6cd7a5952d23b",
+      "clause_a77e7d918fe02c515a69",
+      "clause_cd43d75ed6823d1a6de3",
+      "clause_f4ff946ead946ecbc8ef"
+    ],
+    "subjective_terms": [
+      "A definite and unconditional obligation may qualify, even if technical or procedural details, including the exact implementation date, timeframe, or sequencing, remain subject to future arrangements, provided that the obligation still establishes a concrete, measurable benchmark against which compliance could be tested.",
+      "If the text has still not been released after 28 calendar days, official and definitive announcements from the United States or Iran, and a consensus of credible reporting, will be used to determine whether the instrument qualifies.",
+      "(i) Be identified as the final deal contemplated by the June 14, 2026, memorandum of understanding, either in official United States or Iranian communications, or by a consensus of credible reporting;",
+      "This market resolves to \u201cYes\u201d if a qualifying written diplomatic instrument between the United States and Iran has been mutually signed or adopted by the specified date, 11:59 PM ET.",
+      "A consensus of credible reporting from major news agencies of record may also be used.",
+      "If such an instrument is signed or formally adopted by that time, but the complete text has not been released, and genuine material ambiguity remains as to whether it satisfies this market\u2019s requirements, this market may remain open for up to 28 calendar days after the specified date pending release of the text.",
+      "Non-specific or vague restrictions, with no defined metric (e.g., a pledge not to pursue nuclear weapons, a commitment to maintain the status quo, or an agreement to abide IAEA monitoring or inspections requirements that do not specifically restrict Iran\u2019s nuclear program) will not qualify.",
+      "(ii) Establish at least one specific obligation limiting Iran's nuclear program through a concrete, measurable benchmark against which compliance could be tested, which may take the form of a defined limit, prohibition, or quantity (e.g., a specific cap on the purity level to which Iran may enrich uranium, or an explicit commitment for Iran to surrender, destroy, or dilute its enriched uranium stockpile).",
+      "The content of the qualifying instrument must be expressed as an agreed obligation to be implemented."
+    ],
+    "window": {
+      "end_iso": "2027-01-01T04:59:00Z",
+      "start_iso": "",
+      "timezone": "America/New_York"
+    }
+  }
+}

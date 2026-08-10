@@ -1,0 +1,653 @@
+{
+  "compiled_at": "2026-08-10T13:51:48.997003+00:00",
+  "compiler_model": "operator_review_draft",
+  "deadline_authority_policy": "VERBATIM_RULES_PAPER_ONLY_V1",
+  "event_slug": "iran-military-action-against-a-gulf-state-onptptpt-20260708212328295",
+  "kind": "grouped",
+  "market_id": "iran-military-action-against-a-gulf-state-onptptpt-20260708212328295",
+  "outcome_topology": "INDEPENDENT_MULTI",
+  "outcomes": [
+    {
+      "condition_id": "0xeb9f5707eabf3c272097196b137d841fda958ec64aecff36283cc448a7e3e40b",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-09T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-09T23:59:00Z",
+      "label": "July 9",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-9-20260708212322934",
+      "name": "july_9",
+      "no_token_id": "57735052456855662469680638991345252822075573241262899451505016817218542639621",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-09T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:32.573181Z",
+      "yes_token_id": "115147204977117737874154803841181012449146941275699745556479997448531136943728"
+    },
+    {
+      "condition_id": "0x18c398c97deddabe1f3900e0d4c58472a19c7c33ffcb7d09ea6979cdda3eb0ac",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-10T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-10T23:59:00Z",
+      "label": "July 10",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-10-20260708212322935",
+      "name": "july_10",
+      "no_token_id": "88213467491636871218400069037311720848632737749261329227688911835172465095520",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-10T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:32.753011Z",
+      "yes_token_id": "22470067561511105858172189470447344013815256872133753171887542599472470489508"
+    },
+    {
+      "condition_id": "0xaacb2d891e50062ab341f0ea450adef245e1a44f502207accbc07ce5dbf307e9",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-11T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-11T23:59:00Z",
+      "label": "July 11",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-11-20260708212322936",
+      "name": "july_11",
+      "no_token_id": "18767955555435343594056762042569363912413848899795532702514177456730609589083",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-11T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:32.957109Z",
+      "yes_token_id": "89252596722278675063490859986518869736887103855589660585321055731925559384917"
+    },
+    {
+      "condition_id": "0xbea088d2cfa887c5985be2b3feea2ea5ef8fdede3933ec0a415d1de3813a48a1",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-12T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-12T23:59:00Z",
+      "label": "July 12",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-12-20260708212322937",
+      "name": "july_12",
+      "no_token_id": "10704884697649005085524657976090584908643325317140881720937947937733396768613",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-12T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:33.236517Z",
+      "yes_token_id": "8709035425304608717633078221679777301318104015900761735264882237273152358903"
+    },
+    {
+      "condition_id": "0x83a77ebdd51de03302e736ba66c9d2285da508f7b282814a84ab5129b3098e4f",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-13T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-13T23:59:00Z",
+      "label": "July 13",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-13-20260708212322938",
+      "name": "july_13",
+      "no_token_id": "36398173413921360033964103461538189256774748277034257367087078747601866036118",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-13T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:33.444033Z",
+      "yes_token_id": "86235953329386432460672469030315509538354077418001466432980979104051625649671"
+    },
+    {
+      "condition_id": "0x9b657c83de4d0142ab99818031f3f8490253aa328ec1ead75045520a60c85170",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-14T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-14T23:59:00Z",
+      "label": "July 14",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-14-20260708212322939",
+      "name": "july_14",
+      "no_token_id": "98154023299559322384539297834860773408786664261945160644448477362486017877355",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-14T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:33.590761Z",
+      "yes_token_id": "94521935446796114035277114642344610790711587346100488341944638455326379648454"
+    },
+    {
+      "condition_id": "0xea34f37974c5f80aac8d52143d6089ae80300c863219952370f437f4317c420c",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-15T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-15T23:59:00Z",
+      "label": "July 15",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-15-20260708212322940",
+      "name": "july_15",
+      "no_token_id": "23872536422987847708549184645256266714188562438439423005806428098846917130585",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-15T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:33.803174Z",
+      "yes_token_id": "11316524974845914493674451187888678614629115208634773719129175992673812821702"
+    },
+    {
+      "condition_id": "0x76a8d25cb68a81ff5f36264ff4d74ba09000db7b469877967bd255fc00d3cdac",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-16T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-16T23:59:00Z",
+      "label": "July 16",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-16-20260708212322941",
+      "name": "july_16",
+      "no_token_id": "93847514119215760843743293464740615575395730764484563464821660421815814231190",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-16T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:34.026352Z",
+      "yes_token_id": "15383573996457559653695724538322220459018722205367567147773941611007063460155"
+    },
+    {
+      "condition_id": "0x436d9d06828e37aeb8056bae347f879a506c898c8dd893aa049c65942a3664bb",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-17T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-17T23:59:00Z",
+      "label": "July 17",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-17-20260708212322942",
+      "name": "july_17",
+      "no_token_id": "79942782983590763571806230422069280987308029049382794888794492400629325668217",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-17T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:34.228377Z",
+      "yes_token_id": "40346301504959260673994506715683563690918302533479485952427690103733332353696"
+    },
+    {
+      "condition_id": "0x8d2086d979dd61ad63374caf155a31ad4137f7a5e2562a0b5ea464f831b5ef8d",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-18T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-18T23:59:00Z",
+      "label": "July 18",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-18-20260708212322943",
+      "name": "july_18",
+      "no_token_id": "51369203848054132898097894269402131830587314505070742027547039308459729594918",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-18T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:34.375267Z",
+      "yes_token_id": "44023908313028429860206737774541001005536901634200148326714737620765736943472"
+    },
+    {
+      "condition_id": "0x27712cb667d3e589ae890dd01ccb744c5346741a1361d37025b55ae78bd8d97a",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-19T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-19T23:59:00Z",
+      "label": "July 19",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-19-20260708212322944",
+      "name": "july_19",
+      "no_token_id": "29712432541386151395497526987675256547181503740186382119990706836501276997669",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-19T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:34.569887Z",
+      "yes_token_id": "60575817539806759941846705720372810649523436439614823841552698526493799390035"
+    },
+    {
+      "condition_id": "0xe1392afa5a8528ed21382736dd808c190019b7d638e619c1f97f0258ada7a2df",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-20T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-20T23:59:00Z",
+      "label": "July 20",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-20-20260708212322945",
+      "name": "july_20",
+      "no_token_id": "70752534070173123983607648700450031377021698438725710874720922239392290964423",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-20T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:34.752466Z",
+      "yes_token_id": "26200848093962890271666876148218993995385329651543834868496581438376329103946"
+    },
+    {
+      "condition_id": "0xa807e5a89d5371adc5b2d62310374dc1a58b34b28276f8d91108d419cee01b51",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-21T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-21T23:59:00Z",
+      "label": "July 21",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-21-20260708212322946",
+      "name": "july_21",
+      "no_token_id": "95265777532145698208837728933681562521619488914909220026194707289354561416186",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-21T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:34.9394Z",
+      "yes_token_id": "66905572552423463226946584732616521344922124485659770391758988136052883702655"
+    },
+    {
+      "condition_id": "0x6f5b0c11d2ca15f24e8ec8da647fed7db927d1f5ea6f83b51054a032930f4b49",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-22T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-22T23:59:00Z",
+      "label": "July 22",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-22-20260708212322947",
+      "name": "july_22",
+      "no_token_id": "53251577813346624396260036679467132361332686872177799548802345669054224000090",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-22T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:35.14733Z",
+      "yes_token_id": "62448827455670838065197792737925352027960337050623413822721871544497420997976"
+    },
+    {
+      "condition_id": "0xe50789ae873f89bf41daa5791bb6242d33c37466c7ab19ad8c6ec82633a3e6cf",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-23T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-23T23:59:00Z",
+      "label": "July 23",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-23-20260708212322948",
+      "name": "july_23",
+      "no_token_id": "73570547768346822780802346386684001478490009014553579007297890714984461415005",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-23T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:35.333231Z",
+      "yes_token_id": "30332287428473371939809122710717309958348149769714444343716300345938663641188"
+    },
+    {
+      "condition_id": "0x1e97a760229f1b1d9a1682d0f4d0c659cfb9e386baacc010f57f5f52be4dff95",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-24T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-24T23:59:00Z",
+      "label": "July 24",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-24-20260708212322949",
+      "name": "july_24",
+      "no_token_id": "114571299780453802665975372653186968343007954479921489572405377925716649640988",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-24T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:35.529051Z",
+      "yes_token_id": "9637026597112847742961213113184336947134624351333493088309192610730129864031"
+    },
+    {
+      "condition_id": "0xbaab28e6ebff145d042ecfc46aa9eaab3552d6d1351c50c68714e8198e94f6b6",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-25T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-25T23:59:00Z",
+      "label": "July 25",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-25-20260708212322950",
+      "name": "july_25",
+      "no_token_id": "29043170293372966657317885023924443234640851264030966675155142741904368032789",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-25T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:35.743788Z",
+      "yes_token_id": "49617337781020188307768274303415556976496999110763601267415889730857715789721"
+    },
+    {
+      "condition_id": "0x1b98ff3ef0422c7c37c03f17ab586b5e27fc46a2c006f2aa092042f5cef98fae",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-26T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-26T23:59:00Z",
+      "label": "July 26",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-26-20260708212322951",
+      "name": "july_26",
+      "no_token_id": "51791585261933630523426964692668791503472743234656562841177663691109990835836",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-26T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:35.988524Z",
+      "yes_token_id": "69401251047730223542817225186371298775231892162035033757063918782833197412305"
+    },
+    {
+      "condition_id": "0x03ee7e5103cd121c0cd5e77fd07da606a13b0b96f14744762033a2b01cfc785d",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-27T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-27T23:59:00Z",
+      "label": "July 27",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-27-20260708212322952",
+      "name": "july_27",
+      "no_token_id": "17696735131952071263256299985926345914780029471184358633467130010448526850281",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-27T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:36.16721Z",
+      "yes_token_id": "42572027724280184121847638399904797292478435149428561301702316767118852132839"
+    },
+    {
+      "condition_id": "0xe17f375e232325b713db9d909b35c9b7e46784e7d221a4b901b5c0ef617c6f2a",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-28T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-28T23:59:00Z",
+      "label": "July 28",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-28-20260708212322953",
+      "name": "july_28",
+      "no_token_id": "24137511833420001167573959568718279712480540434845201271184367489192019496990",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-28T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:36.353269Z",
+      "yes_token_id": "106762104678810243546106471758169012176603450257706306940389134162797698906024"
+    },
+    {
+      "condition_id": "0x73250e6360cdfda3f655298f3bce39ad820edeb2d9d340d765d3a0664310988f",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-29T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-29T23:59:00Z",
+      "label": "July 29",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-29-20260708212322954",
+      "name": "july_29",
+      "no_token_id": "52016302299763275966614586309113858869243738027704945435951377870173377717324",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-29T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:36.557127Z",
+      "yes_token_id": "75254689111693420659251259927067825374267364439634599193510178189761460984447"
+    },
+    {
+      "condition_id": "0x1c143e33cb924ee4390e7a249894582a0c2be01d4c56483d494788845f77def1",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-30T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-30T23:59:00Z",
+      "label": "July 30",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-30-20260708212322955",
+      "name": "july_30",
+      "no_token_id": "86433194875461461203965504842518877863314419780352425772516771340809391445516",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-30T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:36.771322Z",
+      "yes_token_id": "85640694375214073984632279085551552809997536450507923582782965440244856427849"
+    },
+    {
+      "condition_id": "0xd705a4a30361064ff57dfced2c0b1e2decb312e5f9ba083cc06a8c76c228f788",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-31T23:59:00+03:00",
+      "deadline_timezone": "Asia/Riyadh",
+      "gamma_deadline_iso": "2026-07-31T23:59:00Z",
+      "label": "July 31",
+      "market_slug": "iran-military-action-against-a-gulf-state-on-july-31-20260708212322956",
+      "name": "july_31",
+      "no_token_id": "21013015538412439029578415700924665461893044976822234743169426472047687304183",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-31T23:59:00+03:00",
+      "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+      "start_iso": "2026-07-08T22:17:36.936457Z",
+      "yes_token_id": "94532098304557005230109539107582681809482927354674657947564550849622637600215"
+    }
+  ],
+  "question": "Iran military action against a gulf state on...?",
+  "rule_clauses": [
+    {
+      "clause_id": "clause_03486d7b0303d22e4461",
+      "text": "The occurrence, attribution, and timing of a qualifying military action will be primarily determined based on a consensus of information available from the resolution sources."
+    },
+    {
+      "clause_id": "clause_0eda50c7da9a3cd19261",
+      "text": "Small-arms fire;"
+    },
+    {
+      "clause_id": "clause_0ffdb3cc370dba12eeea",
+      "text": "Where territorial borders are disputed, all territory claimed by and under the de facto control of the relevant state as of market creation will qualify."
+    },
+    {
+      "clause_id": "clause_14dbefd2720c8d1a036f",
+      "text": "MLRS systems);"
+    },
+    {
+      "clause_id": "clause_195868344eca2da2851a",
+      "text": "A military action will be considered to impact a Gulf State if it directly impacts the terrestrial territory of a Gulf State, including any internal waters."
+    },
+    {
+      "clause_id": "clause_30325fa9a5ce51658e90",
+      "text": "The following actions do not constitute a qualifying military action:"
+    },
+    {
+      "clause_id": "clause_32c1757a5bd22124f238",
+      "text": "Qualifying Gulf States are as follows: Bahrain, Kuwait, Oman, Qatar, Saudi Arabia, and the United Arab Emirates."
+    },
+    {
+      "clause_id": "clause_41c08418d25cdab6b0a6",
+      "text": "A surface-to-surface missile strike includes one-way attack drones and surface-to-surface missiles such as cruise or ballistic missiles."
+    },
+    {
+      "clause_id": "clause_4e39b59f4f17e8501c75",
+      "text": "This market will resolve to \u201cYes\u201d if Iran takes a qualifying military action against a Gulf State on the specified date Arabia Standard Time (AST)."
+    },
+    {
+      "clause_id": "clause_68bcff37d9c40bd63fd8",
+      "text": "Cyber operations;"
+    },
+    {
+      "clause_id": "clause_695ea41681bb109fa61b",
+      "text": "Ground incursions;"
+    },
+    {
+      "clause_id": "clause_6afd93e1e0d15657bab8",
+      "text": "Maritime territory and airspace are not encompassed."
+    },
+    {
+      "clause_id": "clause_6c9692e2b0c779dae256",
+      "text": "Any threat, authorization, or announcement of force that has not been executed."
+    },
+    {
+      "clause_id": "clause_6d351f38f8d15ae36f22",
+      "text": "If, at the end of the third calendar day, conflicting reports remain as to the occurrence, attribution, or timing of the action, this market will resolve based on the totality of information available from the resolution sources at that time."
+    },
+    {
+      "clause_id": "clause_7a6f8b56f1514e1e328e",
+      "text": "If this period would extend past the end date, this market will remain open to allow for 3 full calendar days to pass."
+    },
+    {
+      "clause_id": "clause_7d497f31b56158834347",
+      "text": "An air strike includes bombs, air-to-surface missiles, and air-launched drones."
+    },
+    {
+      "clause_id": "clause_87fee254a5cb3eadce33",
+      "text": "Otherwise this market will resolve to \u201cNo.\u201d"
+    },
+    {
+      "clause_id": "clause_8fab4814b6ae33217223",
+      "text": "The resolution sources for this market will be official information from the governments and militaries of Iran and the relevant Gulf States and a consensus of credible reporting."
+    },
+    {
+      "clause_id": "clause_989f40937d44e658bc60",
+      "text": "Howitzers, artillery pieces, mortars, and rocket artillery (e.g."
+    },
+    {
+      "clause_id": "clause_99fce67be42f6dfe4d5b",
+      "text": "Debris, fragments, or any wreckage from intercepted munitions that land on a Gulf State do not constitute a military action regardless of any damage incurred."
+    },
+    {
+      "clause_id": "clause_9a9e34f274b6fc947603",
+      "text": "A qualifying military action refers to an air strike or a surface-to-surface missile strike, initiated by Iran, that directly impacts a Gulf State."
+    },
+    {
+      "clause_id": "clause_abfd9f46d207b57a9c9d",
+      "text": "Where multiple sources conflict regarding the occurrence, attribution, or timing of a relevant military action, this market will remain open until the earlier of: i) the confirmation of the occurrence, attribution, and timing of the action based on a consensus of information available from the resolution sources or ii) 3 full calendar days (AST) from the date of the first credibly reported evidence of the action."
+    },
+    {
+      "clause_id": "clause_af1a3e74b42d83fe4fe9",
+      "text": "Surface-to-air missile strikes;"
+    },
+    {
+      "clause_id": "clause_b192e6bf825955162703",
+      "text": "Munitions destroyed or intercepted before impact;"
+    },
+    {
+      "clause_id": "clause_bd8925ae4e4b5eff5b63",
+      "text": "Any munition that is intercepted or destroyed before impact does not constitute a qualifying military action."
+    },
+    {
+      "clause_id": "clause_cb15fa4473ff55398442",
+      "text": "Naval gunfire and artillery fire;"
+    },
+    {
+      "clause_id": "clause_eb95e95275d55676a648",
+      "text": "No single statement, denial, or presentation of evidence will govern where it is contradicted by the totality of information."
+    },
+    {
+      "clause_id": "clause_eff4ef24b8014a09ba7b",
+      "text": "Minor surface-to-surface strikes, including short range loitering munitions, FPV drones, and ATGM strikes;"
+    }
+  ],
+  "rule_text_sha256": "af41f8a16c4b5c734a0c31568bc7b096b02e88fc3ea679b2ad969ce4ba81a376",
+  "rule_version": 1,
+  "schema_version": 4,
+  "semantics": {
+    "exclusion_clause_ids": [
+      "clause_0eda50c7da9a3cd19261",
+      "clause_14dbefd2720c8d1a036f",
+      "clause_68bcff37d9c40bd63fd8",
+      "clause_695ea41681bb109fa61b",
+      "clause_6afd93e1e0d15657bab8",
+      "clause_6c9692e2b0c779dae256",
+      "clause_989f40937d44e658bc60",
+      "clause_99fce67be42f6dfe4d5b",
+      "clause_af1a3e74b42d83fe4fe9",
+      "clause_b192e6bf825955162703",
+      "clause_bd8925ae4e4b5eff5b63",
+      "clause_cb15fa4473ff55398442",
+      "clause_eff4ef24b8014a09ba7b"
+    ],
+    "exclusions": [
+      "Small-arms fire;",
+      "MLRS systems);",
+      "Cyber operations;",
+      "Ground incursions;",
+      "Maritime territory and airspace are not encompassed.",
+      "Any threat, authorization, or announcement of force that has not been executed.",
+      "Howitzers, artillery pieces, mortars, and rocket artillery (e.g.",
+      "Debris, fragments, or any wreckage from intercepted munitions that land on a Gulf State do not constitute a military action regardless of any damage incurred.",
+      "Surface-to-air missile strikes;",
+      "Munitions destroyed or intercepted before impact;",
+      "Any munition that is intercepted or destroyed before impact does not constitute a qualifying military action.",
+      "Naval gunfire and artillery fire;",
+      "Minor surface-to-surface strikes, including short range loitering munitions, FPV drones, and ATGM strikes;"
+    ],
+    "predicate": {
+      "action": "takes a qualifying military action",
+      "comparator": "OCCURRED",
+      "object": "a Gulf State on the specified date Arabia Standard Time (AST)",
+      "subjects": [
+        "iran"
+      ],
+      "unit": "",
+      "value": ""
+    },
+    "qualifying_clause_ids": [
+      "clause_0ffdb3cc370dba12eeea",
+      "clause_195868344eca2da2851a",
+      "clause_32c1757a5bd22124f238",
+      "clause_41c08418d25cdab6b0a6",
+      "clause_4e39b59f4f17e8501c75",
+      "clause_7d497f31b56158834347",
+      "clause_9a9e34f274b6fc947603"
+    ],
+    "qualifying_conditions": [
+      "Where territorial borders are disputed, all territory claimed by and under the de facto control of the relevant state as of market creation will qualify.",
+      "A military action will be considered to impact a Gulf State if it directly impacts the terrestrial territory of a Gulf State, including any internal waters.",
+      "Qualifying Gulf States are as follows: Bahrain, Kuwait, Oman, Qatar, Saudi Arabia, and the United Arab Emirates.",
+      "A surface-to-surface missile strike includes one-way attack drones and surface-to-surface missiles such as cruise or ballistic missiles.",
+      "This market will resolve to \u201cYes\u201d if Iran takes a qualifying military action against a Gulf State on the specified date Arabia Standard Time (AST).",
+      "An air strike includes bombs, air-to-surface missiles, and air-launched drones.",
+      "A qualifying military action refers to an air strike or a surface-to-surface missile strike, initiated by Iran, that directly impacts a Gulf State."
+    ],
+    "resolution_policy": {
+      "cancellation_behavior": "not specified by verbatim rules",
+      "cancellation_clause_ids": [],
+      "independent_confirmation_sources": 1,
+      "postponement_behavior": "If this period would extend past the end date, this market will remain open to allow for 3 full calendar days to pass. | Where multiple sources conflict regarding the occurrence, attribution, or timing of a relevant military action, this market will remain open until the earlier of: i) the confirmation of the occurrence, attribution, and timing of the action based on a consensus of information available from the resolution sources or ii) 3 full calendar days (AST) from the date of the first credibly reported evidence of the action.",
+      "postponement_clause_ids": [
+        "clause_7a6f8b56f1514e1e328e",
+        "clause_abfd9f46d207b57a9c9d"
+      ],
+      "terminal_no": [
+        "If, at the end of the third calendar day, conflicting reports remain as to the occurrence, attribution, or timing of the action, this market will resolve based on the totality of information available from the resolution sources at that time.",
+        "Otherwise this market will resolve to \u201cNo.\u201d",
+        "No single statement, denial, or presentation of evidence will govern where it is contradicted by the totality of information."
+      ],
+      "terminal_no_clause_ids": [
+        "clause_6d351f38f8d15ae36f22",
+        "clause_87fee254a5cb3eadce33",
+        "clause_eb95e95275d55676a648"
+      ],
+      "terminal_no_monotonic": false,
+      "terminal_yes": [
+        "This market will resolve to \u201cYes\u201d if Iran takes a qualifying military action against a Gulf State on the specified date Arabia Standard Time (AST)."
+      ],
+      "terminal_yes_clause_ids": [
+        "clause_4e39b59f4f17e8501c75"
+      ],
+      "terminal_yes_monotonic": false
+    },
+    "rule_family": "OCCURRENCE_BEFORE_DEADLINE",
+    "source_policy": {
+      "fallback_condition": "",
+      "fallback_requirement_ids": [],
+      "policy_type": "ANY_OF",
+      "primary_requirement_ids": [],
+      "quorum": 1,
+      "requirement_ids": [
+        "source_90d69cf75c908b5ec7f7",
+        "source_f9c72b29d4ef96391cb5"
+      ]
+    },
+    "source_requirements": [
+      {
+        "clause_ids": [
+          "clause_8fab4814b6ae33217223"
+        ],
+        "rationale": "a consensus of credible reporting is an independently named resolution source for occurrence, attribution, and timing.",
+        "required": false,
+        "requirement_id": "source_f9c72b29d4ef96391cb5",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "credible reporting"
+      },
+      {
+        "clause_ids": [
+          "clause_8fab4814b6ae33217223"
+        ],
+        "rationale": "official information from Iran and the relevant Gulf-state governments or militaries is a resolution-source category for occurrence, attribution, and timing.",
+        "required": false,
+        "requirement_id": "source_90d69cf75c908b5ec7f7",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "official government"
+      }
+    ],
+    "subjective_clause_ids": [],
+    "subjective_terms": [],
+    "window": {
+      "end_iso": "2026-07-31T20:59:00Z",
+      "start_iso": "",
+      "timezone": "Asia/Riyadh"
+    }
+  }
+}

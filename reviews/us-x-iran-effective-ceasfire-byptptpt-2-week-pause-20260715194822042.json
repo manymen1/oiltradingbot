@@ -1,0 +1,432 @@
+{
+  "compiled_at": "2026-08-10T13:55:17.319737+00:00",
+  "compiler_model": "operator_review_draft",
+  "deadline_authority_policy": "VERBATIM_RULES_PAPER_ONLY_V1",
+  "event_slug": "us-x-iran-effective-ceasfire-byptptpt-2-week-pause-20260715194822042",
+  "kind": "grouped",
+  "market_id": "us-x-iran-effective-ceasfire-byptptpt-2-week-pause-20260715194822042",
+  "outcome_topology": "MONOTONE_DEADLINE_LADDER",
+  "outcomes": [
+    {
+      "condition_id": "0xb9a254366a32ce3b274363d9dad3cc45c96127a62c1309cb47d50f3d39243bac",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-18T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-07-18T23:59:00Z",
+      "label": "July 18",
+      "market_slug": "us-x-iran-effective-ceasfire-by-july-18-20260715194822043",
+      "name": "july_18",
+      "no_token_id": "107333396918225203487669029946540801804960822786749665476621797947386070462233",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-18T23:59:00-04:00",
+      "rule_text_sha256": "085e3539c47b96761d618f96cf7d3d5e6a7e81bd2eb6f1dca483812867e46893",
+      "start_iso": "2026-07-15T19:52:20.170267Z",
+      "yes_token_id": "102717832851526487607259761550395213245173324504071303087065059560797978698722"
+    },
+    {
+      "condition_id": "0x58180f4a69651f67c23ac92845721b2320cc0c76effeb5e79db5288d8d8e6b28",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-24T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-07-24T23:59:00Z",
+      "label": "July 24",
+      "market_slug": "us-x-iran-effective-ceasfire-by-july-24-20260715194822044",
+      "name": "july_24",
+      "no_token_id": "86061825988167227130786985582830419834226509797189675226118388137342919202672",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-24T23:59:00-04:00",
+      "rule_text_sha256": "085e3539c47b96761d618f96cf7d3d5e6a7e81bd2eb6f1dca483812867e46893",
+      "start_iso": "2026-07-15T19:52:20.303031Z",
+      "yes_token_id": "113410960838036610177054042201506207817797370827970598802492258356512540837137"
+    },
+    {
+      "condition_id": "0x5a9395dae6c7643ea06e7a555580a5526e81073aea9c9306363529c5b76a8f8b",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-07-31T23:59:00Z",
+      "label": "July 31",
+      "market_slug": "us-x-iran-effective-ceasfire-by-july-31-20260715194822045",
+      "name": "july_31",
+      "no_token_id": "34707224416470630443022501916513884846577205082389077639001965749737041106571",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-31T23:59:00-04:00",
+      "rule_text_sha256": "085e3539c47b96761d618f96cf7d3d5e6a7e81bd2eb6f1dca483812867e46893",
+      "start_iso": "2026-07-15T19:52:20.438578Z",
+      "yes_token_id": "95577979648711137561778638101766617213130581085760544385254830392377913395624"
+    },
+    {
+      "condition_id": "0x833f0bac240ad7d5c947d58a8acac0f77a74cf03dccd8f9b72a28811836a920f",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-14T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-08-14T23:59:00Z",
+      "label": "August 14",
+      "market_slug": "us-x-iran-effective-ceasfire-by-august-14-20260715194822046",
+      "name": "august_14",
+      "no_token_id": "74471063197076776334391254341065793842427098559384116332065016354576255944164",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-14T23:59:00-04:00",
+      "rule_text_sha256": "085e3539c47b96761d618f96cf7d3d5e6a7e81bd2eb6f1dca483812867e46893",
+      "start_iso": "2026-07-15T19:52:20.594093Z",
+      "yes_token_id": "60736604095974956194543682313156464544142668961532964567135396949190081432607"
+    },
+    {
+      "condition_id": "0x61c2b9e70f7fdf3441fd1cfa2c8fa93308fefe3f5ecc2db87c393efab3a207a3",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-08-31T23:59:00Z",
+      "label": "August 31",
+      "market_slug": "us-x-iran-effective-ceasfire-by-august-31-20260715194822047",
+      "name": "august_31",
+      "no_token_id": "19481059675849073197346646944327368414853269458422440354312650320744503267393",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-31T23:59:00-04:00",
+      "rule_text_sha256": "085e3539c47b96761d618f96cf7d3d5e6a7e81bd2eb6f1dca483812867e46893",
+      "start_iso": "2026-07-15T19:52:20.75676Z",
+      "yes_token_id": "71362371729199006098022300209907327715487157091100600861193647274302527146623"
+    }
+  ],
+  "question": "US x Iran Effective Ceasefire by...? (2 week pause)",
+  "rule_clauses": [
+    {
+      "clause_id": "clause_03486d7b0303d22e4461",
+      "text": "The occurrence, attribution, and timing of a qualifying military action will be primarily determined based on a consensus of information available from the resolution sources."
+    },
+    {
+      "clause_id": "clause_06cbfffcc4d5c49ba23a",
+      "text": "A qualifying military action refers to an air strike or a surface-to-surface missile strike, initiated by the United States, that directly impacts Iran."
+    },
+    {
+      "clause_id": "clause_082a9bb66c308233c3b4",
+      "text": "The resolution sources for this market will be official information from the governments and militaries of the United States and Iran and credible reporting."
+    },
+    {
+      "clause_id": "clause_0eda50c7da9a3cd19261",
+      "text": "Small-arms fire;"
+    },
+    {
+      "clause_id": "clause_14dbefd2720c8d1a036f",
+      "text": "MLRS systems);"
+    },
+    {
+      "clause_id": "clause_30325fa9a5ce51658e90",
+      "text": "The following actions do not constitute a qualifying military action:"
+    },
+    {
+      "clause_id": "clause_40ed55e0a74abe349461",
+      "text": "This market resolves to \u201cYes\u201d if any such period is completed where the most recent qualifying military action occurred on or before the specified end date (ET)."
+    },
+    {
+      "clause_id": "clause_41c08418d25cdab6b0a6",
+      "text": "A surface-to-surface missile strike includes one-way attack drones and surface-to-surface missiles such as cruise or ballistic missiles."
+    },
+    {
+      "clause_id": "clause_58a0d19b350d87eea8fd",
+      "text": "The period runs through 12:00 PM ET on the 14th calendar day."
+    },
+    {
+      "clause_id": "clause_68bcff37d9c40bd63fd8",
+      "text": "Cyber operations;"
+    },
+    {
+      "clause_id": "clause_695ea41681bb109fa61b",
+      "text": "Ground incursions;"
+    },
+    {
+      "clause_id": "clause_6afd93e1e0d15657bab8",
+      "text": "Maritime territory and airspace are not encompassed."
+    },
+    {
+      "clause_id": "clause_6c9692e2b0c779dae256",
+      "text": "Any threat, authorization, or announcement of force that has not been executed."
+    },
+    {
+      "clause_id": "clause_7a6f8b56f1514e1e328e",
+      "text": "If this period would extend past the end date, this market will remain open to allow for 3 full calendar days to pass."
+    },
+    {
+      "clause_id": "clause_7d174a94d60a9e75c323",
+      "text": "If, at the end of the third calendar day, conflicting reports remain as to the occurrence, attribution, or timing of the action, the action will be judged based on the totality of information available from the resolution sources at that time."
+    },
+    {
+      "clause_id": "clause_7d497f31b56158834347",
+      "text": "An air strike includes bombs, air-to-surface missiles, and air-launched drones."
+    },
+    {
+      "clause_id": "clause_87fee254a5cb3eadce33",
+      "text": "Otherwise this market will resolve to \u201cNo.\u201d"
+    },
+    {
+      "clause_id": "clause_989f40937d44e658bc60",
+      "text": "Howitzers, artillery pieces, mortars, and rocket artillery (e.g."
+    },
+    {
+      "clause_id": "clause_9c7738bc32403a87074c",
+      "text": "A military action will be considered to impact Iran if it directly impacts the terrestrial territory of Iran, including any internal waters."
+    },
+    {
+      "clause_id": "clause_a6dd0a63e07376e92f1a",
+      "text": "Where multiple sources conflict regarding the occurrence, attribution, or timing of a relevant military action, this market will remain open until the earlier of: i) the confirmation of the occurrence, attribution, and timing of the action based on a consensus of information available from the resolution sources or ii) 3 full calendar days (ET) from the date of the first credibly reported evidence of the action."
+    },
+    {
+      "clause_id": "clause_af1a3e74b42d83fe4fe9",
+      "text": "Surface-to-air missile strikes;"
+    },
+    {
+      "clause_id": "clause_b192e6bf825955162703",
+      "text": "Munitions destroyed or intercepted before impact;"
+    },
+    {
+      "clause_id": "clause_bc276522851c470c17a9",
+      "text": "The first day of the 14-day period will be the calendar date (ET) after the most recent qualifying military action (or the date of market creation, if no qualifying action has occurred)."
+    },
+    {
+      "clause_id": "clause_bd8925ae4e4b5eff5b63",
+      "text": "Any munition that is intercepted or destroyed before impact does not constitute a qualifying military action."
+    },
+    {
+      "clause_id": "clause_cb15fa4473ff55398442",
+      "text": "Naval gunfire and artillery fire;"
+    },
+    {
+      "clause_id": "clause_cc8d489456284fa3596f",
+      "text": "Where territorial borders are disputed, all territory claimed by and under the de facto control of Iran as of market creation will qualify."
+    },
+    {
+      "clause_id": "clause_cd5e6cb033576d8ad2f2",
+      "text": "Debris, fragments, or any wreckage from intercepted munitions that land on Iran do not constitute a military action regardless of any damage incurred."
+    },
+    {
+      "clause_id": "clause_eb95e95275d55676a648",
+      "text": "No single statement, denial, or presentation of evidence will govern where it is contradicted by the totality of information."
+    },
+    {
+      "clause_id": "clause_ede4819649c7cf805ecc",
+      "text": "This market will resolve to \u201cYes\u201d if there is a continuous 14-day period during which the United States does not take a qualifying military action against Iran that begins at any time between market creation and the specified end date, 11:59 PM ET."
+    },
+    {
+      "clause_id": "clause_eff4ef24b8014a09ba7b",
+      "text": "Minor surface-to-surface strikes, including short range loitering munitions, FPV drones, and ATGM strikes;"
+    }
+  ],
+  "rule_text_sha256": "085e3539c47b96761d618f96cf7d3d5e6a7e81bd2eb6f1dca483812867e46893",
+  "rule_version": 1,
+  "schema_version": 4,
+  "semantics": {
+    "exclusion_clause_ids": [
+      "clause_0eda50c7da9a3cd19261",
+      "clause_14dbefd2720c8d1a036f",
+      "clause_68bcff37d9c40bd63fd8",
+      "clause_695ea41681bb109fa61b",
+      "clause_6afd93e1e0d15657bab8",
+      "clause_6c9692e2b0c779dae256",
+      "clause_989f40937d44e658bc60",
+      "clause_af1a3e74b42d83fe4fe9",
+      "clause_b192e6bf825955162703",
+      "clause_bd8925ae4e4b5eff5b63",
+      "clause_cb15fa4473ff55398442",
+      "clause_cd5e6cb033576d8ad2f2",
+      "clause_eff4ef24b8014a09ba7b"
+    ],
+    "exclusions": [
+      "Small-arms fire;",
+      "MLRS systems);",
+      "Cyber operations;",
+      "Ground incursions;",
+      "Maritime territory and airspace are not encompassed.",
+      "Any threat, authorization, or announcement of force that has not been executed.",
+      "Howitzers, artillery pieces, mortars, and rocket artillery (e.g.",
+      "Surface-to-air missile strikes;",
+      "Munitions destroyed or intercepted before impact;",
+      "Any munition that is intercepted or destroyed before impact does not constitute a qualifying military action.",
+      "Naval gunfire and artillery fire;",
+      "Debris, fragments, or any wreckage from intercepted munitions that land on Iran do not constitute a military action regardless of any damage incurred.",
+      "Minor surface-to-surface strikes, including short range loitering munitions, FPV drones, and ATGM strikes;"
+    ],
+    "predicate": {
+      "action": "does not take a qualifying military action against Iran during a continuous period",
+      "comparator": "DURATION_AT_LEAST",
+      "object": "continuous 14-day period beginning at any time between market creation and the specified end date, 11:59 PM ET",
+      "subjects": [
+        "united states"
+      ],
+      "unit": "calendar days",
+      "value": "14"
+    },
+    "qualifying_clause_ids": [
+      "clause_06cbfffcc4d5c49ba23a",
+      "clause_40ed55e0a74abe349461",
+      "clause_41c08418d25cdab6b0a6",
+      "clause_58a0d19b350d87eea8fd",
+      "clause_7d497f31b56158834347",
+      "clause_9c7738bc32403a87074c",
+      "clause_bc276522851c470c17a9",
+      "clause_cc8d489456284fa3596f",
+      "clause_ede4819649c7cf805ecc"
+    ],
+    "qualifying_conditions": [
+      "A qualifying military action refers to an air strike or a surface-to-surface missile strike, initiated by the United States, that directly impacts Iran.",
+      "This market resolves to \u201cYes\u201d if any such period is completed where the most recent qualifying military action occurred on or before the specified end date (ET).",
+      "A surface-to-surface missile strike includes one-way attack drones and surface-to-surface missiles such as cruise or ballistic missiles.",
+      "The period runs through 12:00 PM ET on the 14th calendar day.",
+      "An air strike includes bombs, air-to-surface missiles, and air-launched drones.",
+      "A military action will be considered to impact Iran if it directly impacts the terrestrial territory of Iran, including any internal waters.",
+      "The first day of the 14-day period will be the calendar date (ET) after the most recent qualifying military action (or the date of market creation, if no qualifying action has occurred).",
+      "Where territorial borders are disputed, all territory claimed by and under the de facto control of Iran as of market creation will qualify.",
+      "This market will resolve to \u201cYes\u201d if there is a continuous 14-day period during which the United States does not take a qualifying military action against Iran that begins at any time between market creation and the specified end date, 11:59 PM ET."
+    ],
+    "resolution_policy": {
+      "cancellation_behavior": "not specified by verbatim rules",
+      "cancellation_clause_ids": [],
+      "independent_confirmation_sources": 1,
+      "postponement_behavior": "If this period would extend past the end date, this market will remain open to allow for 3 full calendar days to pass. | If, at the end of the third calendar day, conflicting reports remain as to the occurrence, attribution, or timing of the action, the action will be judged based on the totality of information available from the resolution sources at that time. | Where multiple sources conflict regarding the occurrence, attribution, or timing of a relevant military action, this market will remain open until the earlier of: i) the confirmation of the occurrence, attribution, and timing of the action based on a consensus of information available from the resolution sources or ii) 3 full calendar days (ET) from the date of the first credibly reported evidence of the action. | No single statement, denial, or presentation of evidence will govern where it is contradicted by the totality of information.",
+      "postponement_clause_ids": [
+        "clause_7a6f8b56f1514e1e328e",
+        "clause_7d174a94d60a9e75c323",
+        "clause_a6dd0a63e07376e92f1a",
+        "clause_eb95e95275d55676a648"
+      ],
+      "terminal_no": [
+        "Otherwise this market will resolve to \u201cNo.\u201d"
+      ],
+      "terminal_no_clause_ids": [
+        "clause_87fee254a5cb3eadce33"
+      ],
+      "terminal_no_monotonic": false,
+      "terminal_yes": [
+        "This market resolves to \u201cYes\u201d if any such period is completed where the most recent qualifying military action occurred on or before the specified end date (ET).",
+        "This market will resolve to \u201cYes\u201d if there is a continuous 14-day period during which the United States does not take a qualifying military action against Iran that begins at any time between market creation and the specified end date, 11:59 PM ET."
+      ],
+      "terminal_yes_clause_ids": [
+        "clause_40ed55e0a74abe349461",
+        "clause_ede4819649c7cf805ecc"
+      ],
+      "terminal_yes_monotonic": true
+    },
+    "rule_family": "DURATION_REQUIREMENT",
+    "source_policy": {
+      "fallback_condition": "",
+      "fallback_requirement_ids": [],
+      "policy_type": "QUORUM",
+      "primary_requirement_ids": [],
+      "quorum": 1,
+      "requirement_ids": [
+        "source_09fb6ee640ed92983abe",
+        "source_55b94b600e5f444504c2",
+        "source_81a38a06ece589e7995d",
+        "source_a041f1d47b01d5491ac7",
+        "source_f9c72b29d4ef96391cb5"
+      ]
+    },
+    "source_requirements": [
+      {
+        "clause_ids": [
+          "clause_03486d7b0303d22e4461",
+          "clause_082a9bb66c308233c3b4",
+          "clause_7d174a94d60a9e75c323",
+          "clause_a6dd0a63e07376e92f1a",
+          "clause_eb95e95275d55676a648"
+        ],
+        "rationale": "credible reporting is a resolution source for occurrence, attribution, and timing, considered within consensus or totality of information.",
+        "required": false,
+        "requirement_id": "source_f9c72b29d4ef96391cb5",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "credible reporting"
+      },
+      {
+        "clause_ids": [
+          "clause_03486d7b0303d22e4461",
+          "clause_082a9bb66c308233c3b4",
+          "clause_7d174a94d60a9e75c323",
+          "clause_a6dd0a63e07376e92f1a",
+          "clause_eb95e95275d55676a648"
+        ],
+        "rationale": "official information from the government of iran is a resolution source for occurrence, attribution, and timing, considered within consensus or totality of information.",
+        "required": false,
+        "requirement_id": "source_a041f1d47b01d5491ac7",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "government of iran"
+      },
+      {
+        "clause_ids": [
+          "clause_03486d7b0303d22e4461",
+          "clause_082a9bb66c308233c3b4",
+          "clause_7d174a94d60a9e75c323",
+          "clause_a6dd0a63e07376e92f1a",
+          "clause_eb95e95275d55676a648"
+        ],
+        "rationale": "official information from the government of the united states is a resolution source for occurrence, attribution, and timing, considered within consensus or totality of information.",
+        "required": false,
+        "requirement_id": "source_55b94b600e5f444504c2",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "government of the united states"
+      },
+      {
+        "clause_ids": [
+          "clause_03486d7b0303d22e4461",
+          "clause_082a9bb66c308233c3b4",
+          "clause_7d174a94d60a9e75c323",
+          "clause_a6dd0a63e07376e92f1a",
+          "clause_eb95e95275d55676a648"
+        ],
+        "rationale": "official information from the military of iran is a resolution source for occurrence, attribution, and timing, considered within consensus or totality of information.",
+        "required": false,
+        "requirement_id": "source_81a38a06ece589e7995d",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "military of iran"
+      },
+      {
+        "clause_ids": [
+          "clause_03486d7b0303d22e4461",
+          "clause_082a9bb66c308233c3b4",
+          "clause_7d174a94d60a9e75c323",
+          "clause_a6dd0a63e07376e92f1a",
+          "clause_eb95e95275d55676a648"
+        ],
+        "rationale": "official information from the military of the united states is a resolution source for occurrence, attribution, and timing, considered within consensus or totality of information.",
+        "required": false,
+        "requirement_id": "source_09fb6ee640ed92983abe",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "military of the united states"
+      }
+    ],
+    "subjective_clause_ids": [
+      "clause_03486d7b0303d22e4461",
+      "clause_06cbfffcc4d5c49ba23a",
+      "clause_082a9bb66c308233c3b4",
+      "clause_7d174a94d60a9e75c323",
+      "clause_a6dd0a63e07376e92f1a",
+      "clause_eb95e95275d55676a648"
+    ],
+    "subjective_terms": [
+      "The occurrence, attribution, and timing of a qualifying military action will be primarily determined based on a consensus of information available from the resolution sources.",
+      "A qualifying military action refers to an air strike or a surface-to-surface missile strike, initiated by the United States, that directly impacts Iran.",
+      "The resolution sources for this market will be official information from the governments and militaries of the United States and Iran and credible reporting.",
+      "If, at the end of the third calendar day, conflicting reports remain as to the occurrence, attribution, or timing of the action, the action will be judged based on the totality of information available from the resolution sources at that time.",
+      "Where multiple sources conflict regarding the occurrence, attribution, or timing of a relevant military action, this market will remain open until the earlier of: i) the confirmation of the occurrence, attribution, and timing of the action based on a consensus of information available from the resolution sources or ii) 3 full calendar days (ET) from the date of the first credibly reported evidence of the action.",
+      "No single statement, denial, or presentation of evidence will govern where it is contradicted by the totality of information."
+    ],
+    "window": {
+      "end_iso": "2026-09-01T03:59:00Z",
+      "start_iso": "",
+      "timezone": "America/New_York"
+    }
+  }
+}

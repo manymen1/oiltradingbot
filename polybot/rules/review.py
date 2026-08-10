@@ -371,15 +371,20 @@ def _alternate_passes(
         if item.get("error"):
             entry["error"] = item["error"]
         if selected_payload is not None and item.get("normalized_output") is not None:
-            alternate_payload = _bind_semantic_payload(
-                context,
-                item["normalized_output"],
-                deadline_authority_policy=deadline_authority_policy,
-            )
-            entry["differing_fields"] = _differing_fields(
-                _critical_consensus_payload(selected_payload),
-                _critical_consensus_payload(alternate_payload),
-            )
+            try:
+                alternate_payload = _bind_semantic_payload(
+                    context,
+                    item["normalized_output"],
+                    deadline_authority_policy=deadline_authority_policy,
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                entry["usable"] = False
+                entry["error"] = f"invalid_normalized_output:{exc}"
+            else:
+                entry["differing_fields"] = _differing_fields(
+                    _critical_consensus_payload(selected_payload),
+                    _critical_consensus_payload(alternate_payload),
+                )
         alternates.append(entry)
     return alternates
 

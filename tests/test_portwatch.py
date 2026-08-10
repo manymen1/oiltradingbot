@@ -6,6 +6,7 @@ from polybot.discovery.portwatch import (
     chokepoint_reading,
     evidence_line,
     match_chokepoint,
+    moving_average_series,
     parse_features,
 )
 
@@ -55,6 +56,19 @@ def test_chokepoint_reading_short_series_averages_available_days() -> None:
     rows = [("2026-07-12", 12), ("2026-07-11", 18)]
     reading = chokepoint_reading("Strait of Hormuz", fetcher=lambda _url: _payload(rows))
     assert reading is not None and reading.ma7 == 15.0
+
+
+def test_moving_average_series_requires_consecutive_calendar_days() -> None:
+    complete = [
+        (f"2026-07-{day:02d}", day)
+        for day in range(1, 9)
+    ]
+    assert moving_average_series(complete) == [
+        ("2026-07-07", 4.0),
+        ("2026-07-08", 5.0),
+    ]
+    missing = [item for item in complete if item[0] != "2026-07-04"]
+    assert moving_average_series(missing) == []
 
 
 def test_chokepoint_reading_empty_returns_none() -> None:

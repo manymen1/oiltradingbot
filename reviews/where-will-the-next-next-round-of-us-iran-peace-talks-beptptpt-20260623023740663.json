@@ -1,0 +1,579 @@
+{
+  "compiled_at": "2026-08-10T16:47:44.732350+00:00",
+  "compiler_model": "operator_review_draft",
+  "deadline_authority_policy": "VERBATIM_RULES_PAPER_ONLY_V1",
+  "event_slug": "where-will-the-next-next-round-of-us-iran-peace-talks-beptptpt-20260623023740663",
+  "kind": "grouped",
+  "market_id": "where-will-the-next-next-round-of-us-iran-peace-talks-beptptpt-20260623023740663",
+  "outcome_topology": "EXCLUSIVE_ONE_OF_N",
+  "outcomes": [
+    {
+      "condition_id": "0x189e1fc1645c57b86a849ca1680aa9cd748aa1cab72c7e05b3a92be8d0977111",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "UAE",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-the-uae-by-september-30-2026-20260622185050765",
+      "name": "uae",
+      "no_token_id": "95101927668338752841193471907502294533828718684925959813808340686012856007997",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:22.935793Z",
+      "yes_token_id": "22380229442917794927086169575089512266282171303590949714167876001942645905216"
+    },
+    {
+      "condition_id": "0xe22e49d675a9b77b0526ca35333f76890eb7c28c7932b6f0fa80ce238f389e13",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Turkey",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-turkey-by-september-30-2026-20260622185050770",
+      "name": "turkey",
+      "no_token_id": "15229352874807775372986033552133067018487325612877501873230768043406140847690",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:24.70372Z",
+      "yes_token_id": "70171942838833063147158828969582139047883081138691866799639746076065203731450"
+    },
+    {
+      "condition_id": "0xe2c7cbfc0a5a9e86f65883b430393340659620a034a0e07fcf9566b2f4625275",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Iraq",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-iraq-by-september-30-2026-20260622185050775",
+      "name": "iraq",
+      "no_token_id": "103652274390106088220723444554438755148566750822586565380394890175216399598141",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:26.211488Z",
+      "yes_token_id": "55232033288949906941519741205678579400287102587213376737345062405136633443964"
+    },
+    {
+      "condition_id": "0x464af35d1def5794611bd957668aba74154d52296a3ac3be5f1beabeb3b927d9",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Other - Europe",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-another-european-country-by-september-30-2026-20260622185050780",
+      "name": "other_-_europe",
+      "no_token_id": "81156671681926935132901184154631201365954018938295113074030131720928581227764",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:27.66909Z",
+      "yes_token_id": "67346562719574279270405703943399752967967222447235458604412270971799390510058"
+    },
+    {
+      "condition_id": "0xcc3c7692775c0b6780a83f2ba9e649997cc6d1ef01f525768dfa58d1dc95f131",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Other",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-another-country-by-september-30-2026-20260622185050781",
+      "name": "other",
+      "no_token_id": "55064403000970252766139291867582736924558760236862403736057105487925232028317",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:28.00565Z",
+      "yes_token_id": "111725394656124390304389849846759059792244479028764165035453425691497937540212"
+    },
+    {
+      "condition_id": "0x8ffa35fb093a9c9e2ccbf865fc4f6725fa0d0eb65f4e661be0554f6e4bc536d5",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Iran",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-iran-by-september-30-2026-20260622185050771",
+      "name": "iran",
+      "no_token_id": "3964190471998658618178529896396856425249541643251817263750546162367779323773",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:25.119183Z",
+      "yes_token_id": "92594908630518098007933761492134380230895334047365701261282360138665210214695"
+    },
+    {
+      "condition_id": "0x22dcf54babee1ccfddf0b979da59d65047366729d90f6d1cee354d62d953ea51",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Egypt",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-egypt-by-september-30-2026-20260622185050773",
+      "name": "egypt",
+      "no_token_id": "87301609295796544412325624793522082020470874217006088645928363636732781148912",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:25.632933Z",
+      "yes_token_id": "10761516705282929244508943116616083460346359570562672461705253777461259053664"
+    },
+    {
+      "condition_id": "0x91d9fa582ed28a296b589dd7f91122a978498a26ff91c9d2cb36321e9bdd3f37",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Italy",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-italy-by-september-30-2026-20260622185050774",
+      "name": "italy",
+      "no_token_id": "56645016524178836308701471902590698736798914433285164609299423366573295422180",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:25.960541Z",
+      "yes_token_id": "4548989806834490653608404747878305735752394002524086912811381924507844935763"
+    },
+    {
+      "condition_id": "0x53b21e7ceccbda2e1f41b67de5d221f288528ed2f4f246354f667d4b3a9bd255",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Kazakhstan",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-kazakhstan-by-september-30-2026-20260622185050776",
+      "name": "kazakhstan",
+      "no_token_id": "61161867414915864988326880346268600964207236832431613386601621580026852433484",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:26.436312Z",
+      "yes_token_id": "64717059670444651990111872021241705649948468162598693264158994960747514427411"
+    },
+    {
+      "condition_id": "0x1ba55a9ab62aaa724cc52a06d5f5b90104cdd3b85bf4383f7ab4bd415a14d808",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "USA",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-the-united-states-by-september-30-2026-20260622185050772",
+      "name": "usa",
+      "no_token_id": "6674194343150981319993341641049078700703472727483304105404417875763243486320",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:25.385957Z",
+      "yes_token_id": "93674431672151592881526269530737753031173195722060442298616452975340700804315"
+    },
+    {
+      "condition_id": "0xcd2cab85a85d99ee450c2b7c469d8a2193465d244bfe9640eb7ee54ea5e60ac1",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Pakistan",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-pakistan-by-september-30-2026-20260622185050777",
+      "name": "pakistan",
+      "no_token_id": "77367739264004256169418384730155765456583387311115878502201923017150895638723",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:26.787291Z",
+      "yes_token_id": "22672968656988994606098532619796733342823589325740712455625503063290035111504"
+    },
+    {
+      "condition_id": "0x42742fa156da771a75cf8c7713ba0cfa4b2610112bae81a0ea8772fdeb50510b",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Oman",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-oman-by-september-30-2026-20260622185050764",
+      "name": "oman",
+      "no_token_id": "63777968062207903777122739351456891968596913478902437108476325432242316998706",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:22.628476Z",
+      "yes_token_id": "91840734237139041498960817888436272225264086454795750667979772033889359541751"
+    },
+    {
+      "condition_id": "0x55b51fa092cbeec95defc5445110b8bbcad2fe4a97e20f9f16166f2f38f2259e",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Saudi Arabia",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-saudi-arabia-by-september-30-2026-20260622185050766",
+      "name": "saudi_arabia",
+      "no_token_id": "47725862297566640336714598824643813860163538097143542953058926051588297125780",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:23.363807Z",
+      "yes_token_id": "107523124132372283644769807934735893728549188984130286890524409336235096888629"
+    },
+    {
+      "condition_id": "0x03c583dd10a5df0d57fd8b32452554da9bbb0dd212fe0e259e8561db3b4f9153",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Qatar",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-qatar-by-september-30-2026-20260622185050767",
+      "name": "qatar",
+      "no_token_id": "99952600763805697525399084013045967580973629159171323006721416362450383406906",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:23.668787Z",
+      "yes_token_id": "1465004187879250935275955729729298641755522437620780616285443313153147473640"
+    },
+    {
+      "condition_id": "0x66761ac9996b68a09f30cf135e91993cd48d94d1bd1eda3d0e57a6ffbf6da143",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Austria",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-austria-by-september-30-2026-20260622185050769",
+      "name": "austria",
+      "no_token_id": "67460825170983961439528318296997966844692373581279268421500612127871796693287",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:24.277485Z",
+      "yes_token_id": "65329730985665896243855327927890242820409440784205629149156547492264611911569"
+    },
+    {
+      "condition_id": "0xc4ebab9f2830f6df67ab1b98615d5a9be8eebd106fd0f37e9a25e4a4edcc427c",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "No Meeting by September 30",
+      "market_slug": "will-no-qualifying-diplomatic-us-iran-meeting-occur-by-september-30-2026-20260622185050763",
+      "name": "no_meeting_by_september_30",
+      "no_token_id": "101196087194368016189458797815389873667514776317865121691440084473605225222305",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:22.152126Z",
+      "yes_token_id": "10618696958805388450273982806566275602086720395274264354492776873006123003601"
+    },
+    {
+      "condition_id": "0xc65b037d40fd0d6783588e44ef94f712853e8b63186cda1f2213e529752f5cc4",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Switzerland",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-switzerland-by-september-30-2026-20260622185050768",
+      "name": "switzerland",
+      "no_token_id": "70774470297648913100245602604583045852285748739882928847227510743384502233247",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:23.925994Z",
+      "yes_token_id": "37361300921998084721016986683222160289313595253709044324613501742470698981971"
+    },
+    {
+      "condition_id": "0x455f5bc945aedf5ca1374e93187cfbb41be5cc5c0214738d1f7c9a96966d9b40",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Russia",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-russia-by-september-30-2026-20260622185050778",
+      "name": "russia",
+      "no_token_id": "14988255860072828481418275719350444974136636867335630928331572540415636779348",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:27.12026Z",
+      "yes_token_id": "1013944295668847705546061451050253921751788826090224157381821313453401769101"
+    },
+    {
+      "condition_id": "0xbe6553875f149f7dfea0f070ae76ca61c67c1d89f687b5c1127281d758d70fff",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "Other - Middle East/North Africa",
+      "market_slug": "will-the-next-diplomatic-us-iran-meeting-be-in-another-middle-eastnorth-africa-country-by-september-30-2026-20260622185050779",
+      "name": "other_-_middle_east/north_africa",
+      "no_token_id": "26264502146726691954599022809133047906392040227319754706451052134947240410814",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+      "start_iso": "2026-06-23T02:46:27.418379Z",
+      "yes_token_id": "53582227082258405829803036728651123579337750439803872440106342027985458752881"
+    }
+  ],
+  "question": "Where will the next next round of US-Iran peace talks be...?",
+  "rule_clauses": [
+    {
+      "clause_id": "clause_08b3b2b5e08873f4c7d8",
+      "text": "The representatives need not be in the same room at the same time."
+    },
+    {
+      "clause_id": "clause_0f8265c136cef99ff307",
+      "text": "If the next qualifying round begins in any country in Europe other than the listed options, this market will resolve to \u201cOther - Europe.\u201d"
+    },
+    {
+      "clause_id": "clause_0fd731814c5202214adb",
+      "text": "If a qualifying round occurs in more than one country, resolution will be based on the country where the first qualifying senior-level diplomatic session begins."
+    },
+    {
+      "clause_id": "clause_2c06acd161af3b230ea8",
+      "text": "Brief greetings, chance encounters, photo opportunities, ceremonial appearances, or talks not deliberately aimed at diplomacy or negotiation will not count."
+    },
+    {
+      "clause_id": "clause_396e9177f3d2197accb4",
+      "text": "Any country classified as part of \u201cNear East (Middle East and North Africa)\u201d will be considered to be in the Middle East/North Africa."
+    },
+    {
+      "clause_id": "clause_4d80ca6a63f75715deda",
+      "text": "State Department\u2019s regional classifications in the \u201cCountries and Areas List\u201d (https://www.state.gov/countries-and-areas-list)."
+    },
+    {
+      "clause_id": "clause_5594ac31509becc5a6fe",
+      "text": "Technical, staff-level, working-group, implementation, monitoring, preparatory, or deconfliction meetings will not qualify unless they occur as part of a new formally convened senior-level U.S.-Iran peace-talks round."
+    },
+    {
+      "clause_id": "clause_7f5a42957ee53a0ee0ec",
+      "text": "The resolution sources for this market will be official information from the governments of the United States and Iran, and a consensus of credible reporting."
+    },
+    {
+      "clause_id": "clause_84a9461663a8401f1797",
+      "text": "For purposes of this market, countries\u2019 regions will be determined based on the U.S."
+    },
+    {
+      "clause_id": "clause_8aebd5fbe780eebf478e",
+      "text": "The meeting must be in-person (including indirect in-person meetings) and must be publicly acknowledged by either government or reported by a consensus of credible media."
+    },
+    {
+      "clause_id": "clause_8db7886f32cbcf57c7dc",
+      "text": "Remote meetings, phone calls, or other meetings where the relevant parties are not present will not count."
+    },
+    {
+      "clause_id": "clause_9ca74d439f5a18da9b06",
+      "text": "This market will resolve according to the country in which the next formal senior-level round of peace talks between representatives of the United States and Iran begins by September 30, 2026, 11:59 PM ET."
+    },
+    {
+      "clause_id": "clause_a061cd3eb98f4fa2ced4",
+      "text": "If no qualifying round begins by September 30, 2026, 11:59 PM ET, this market will resolve to \u201cNo Meeting by September 30.\u201d"
+    },
+    {
+      "clause_id": "clause_c41a7ec400e38b78295a",
+      "text": "On June 22, the first round of U.S.-Iran diplomatic talks in Switzerland concluded, with mediators reporting progress toward a roadmap for a final deal and follow-on technical talks expected to continue (see: https://www.aljazeera.com/news/2026/6/22/us-iran-agree-on-roadmap-towards-final-deal-in-switzerland-talks)."
+    },
+    {
+      "clause_id": "clause_cd1751858bcabc3eea96",
+      "text": "If the next qualifying round begins in any unlisted country that is not classified in either specified region, this market will resolve to \u201cOther.\u201d"
+    },
+    {
+      "clause_id": "clause_cffa8c33555e237fa3f5",
+      "text": "Follow-on technical talks from the June 22 Switzerland round will not qualify by themselves."
+    },
+    {
+      "clause_id": "clause_e3adbf9c77a76a5ca4e1",
+      "text": "Any country classified as part of \u201cEurope and Eurasia\u201d will be considered to be in Europe."
+    },
+    {
+      "clause_id": "clause_e47152bb5b69d04cef63",
+      "text": "If the next qualifying round begins in any country in the Middle East or North Africa other than the listed options, this market will resolve to \u201cOther - Middle East/North Africa.\u201d"
+    },
+    {
+      "clause_id": "clause_ef566b4cafe82c872e63",
+      "text": "A qualifying round must be a deliberate in-person diplomatic meeting or negotiating round concerning US-Iran relations, involving senior representatives of both the United States and Iran who are acting in an official capacity and are authorized to conduct or materially direct diplomacy on behalf of their governments."
+    },
+    {
+      "clause_id": "clause_f341baa4ff09f92b9266",
+      "text": "Indirect in-person diplomacy through designated mediators, facilitators, or interlocutors will qualify, provided senior representatives of both the United States and Iran are participating in the same formal diplomatic process with the knowledge and authorization of their respective governments."
+    }
+  ],
+  "rule_text_sha256": "217d3c15d9d6a59756f157b6dc10d6f264479442e75587983defb7aa8489a960",
+  "rule_version": 1,
+  "schema_version": 4,
+  "semantics": {
+    "exclusion_clause_ids": [
+      "clause_2c06acd161af3b230ea8",
+      "clause_5594ac31509becc5a6fe",
+      "clause_8db7886f32cbcf57c7dc",
+      "clause_cffa8c33555e237fa3f5"
+    ],
+    "exclusions": [
+      "Brief greetings, chance encounters, photo opportunities, ceremonial appearances, or talks not deliberately aimed at diplomacy or negotiation will not count.",
+      "Technical, staff-level, working-group, implementation, monitoring, preparatory, or deconfliction meetings will not qualify unless they occur as part of a new formally convened senior-level U.S.-Iran peace-talks round.",
+      "Remote meetings, phone calls, or other meetings where the relevant parties are not present will not count.",
+      "Follow-on technical talks from the June 22 Switzerland round will not qualify by themselves."
+    ],
+    "predicate": {
+      "action": "begin",
+      "comparator": "EQUALS",
+      "object": "the next formal senior-level round of peace talks between representatives of the United States and Iran, resolved by the country where the first qualifying senior-level diplomatic session begins, or No Meeting by September 30 if no qualifying round begins by the deadline",
+      "subjects": [
+        "senior representatives of iran",
+        "senior representatives of the united states"
+      ],
+      "unit": "",
+      "value": ""
+    },
+    "qualifying_clause_ids": [
+      "clause_08b3b2b5e08873f4c7d8",
+      "clause_0f8265c136cef99ff307",
+      "clause_0fd731814c5202214adb",
+      "clause_396e9177f3d2197accb4",
+      "clause_4d80ca6a63f75715deda",
+      "clause_8aebd5fbe780eebf478e",
+      "clause_9ca74d439f5a18da9b06",
+      "clause_cd1751858bcabc3eea96",
+      "clause_e3adbf9c77a76a5ca4e1",
+      "clause_e47152bb5b69d04cef63",
+      "clause_ef566b4cafe82c872e63",
+      "clause_f341baa4ff09f92b9266"
+    ],
+    "qualifying_conditions": [
+      "The representatives need not be in the same room at the same time.",
+      "If the next qualifying round begins in any country in Europe other than the listed options, this market will resolve to \u201cOther - Europe.\u201d",
+      "If a qualifying round occurs in more than one country, resolution will be based on the country where the first qualifying senior-level diplomatic session begins.",
+      "Any country classified as part of \u201cNear East (Middle East and North Africa)\u201d will be considered to be in the Middle East/North Africa.",
+      "State Department\u2019s regional classifications in the \u201cCountries and Areas List\u201d (https://www.state.gov/countries-and-areas-list).",
+      "The meeting must be in-person (including indirect in-person meetings) and must be publicly acknowledged by either government or reported by a consensus of credible media.",
+      "This market will resolve according to the country in which the next formal senior-level round of peace talks between representatives of the United States and Iran begins by September 30, 2026, 11:59 PM ET.",
+      "If the next qualifying round begins in any unlisted country that is not classified in either specified region, this market will resolve to \u201cOther.\u201d",
+      "Any country classified as part of \u201cEurope and Eurasia\u201d will be considered to be in Europe.",
+      "If the next qualifying round begins in any country in the Middle East or North Africa other than the listed options, this market will resolve to \u201cOther - Middle East/North Africa.\u201d",
+      "A qualifying round must be a deliberate in-person diplomatic meeting or negotiating round concerning US-Iran relations, involving senior representatives of both the United States and Iran who are acting in an official capacity and are authorized to conduct or materially direct diplomacy on behalf of their governments.",
+      "Indirect in-person diplomacy through designated mediators, facilitators, or interlocutors will qualify, provided senior representatives of both the United States and Iran are participating in the same formal diplomatic process with the knowledge and authorization of their respective governments."
+    ],
+    "resolution_policy": {
+      "cancellation_behavior": "not specified by verbatim rules",
+      "cancellation_clause_ids": [],
+      "independent_confirmation_sources": 1,
+      "postponement_behavior": "not specified by verbatim rules",
+      "postponement_clause_ids": [],
+      "terminal_no": [
+        "If no qualifying round begins by September 30, 2026, 11:59 PM ET, this market will resolve to \u201cNo Meeting by September 30.\u201d"
+      ],
+      "terminal_no_clause_ids": [
+        "clause_a061cd3eb98f4fa2ced4"
+      ],
+      "terminal_no_monotonic": false,
+      "terminal_yes": [
+        "If the next qualifying round begins in any country in Europe other than the listed options, this market will resolve to \u201cOther - Europe.\u201d",
+        "If a qualifying round occurs in more than one country, resolution will be based on the country where the first qualifying senior-level diplomatic session begins.",
+        "This market will resolve according to the country in which the next formal senior-level round of peace talks between representatives of the United States and Iran begins by September 30, 2026, 11:59 PM ET.",
+        "If the next qualifying round begins in any unlisted country that is not classified in either specified region, this market will resolve to \u201cOther.\u201d",
+        "If the next qualifying round begins in any country in the Middle East or North Africa other than the listed options, this market will resolve to \u201cOther - Middle East/North Africa.\u201d"
+      ],
+      "terminal_yes_clause_ids": [
+        "clause_0f8265c136cef99ff307",
+        "clause_0fd731814c5202214adb",
+        "clause_9ca74d439f5a18da9b06",
+        "clause_cd1751858bcabc3eea96",
+        "clause_e47152bb5b69d04cef63"
+      ],
+      "terminal_yes_monotonic": true
+    },
+    "rule_family": "CATEGORICAL_EXCLUSIVE",
+    "source_policy": {
+      "fallback_condition": "",
+      "fallback_requirement_ids": [],
+      "policy_type": "ANY_OF",
+      "primary_requirement_ids": [],
+      "quorum": 1,
+      "requirement_ids": [
+        "source_55b94b600e5f444504c2",
+        "source_a041f1d47b01d5491ac7",
+        "source_f9c72b29d4ef96391cb5"
+      ]
+    },
+    "source_requirements": [
+      {
+        "clause_ids": [
+          "clause_7f5a42957ee53a0ee0ec",
+          "clause_8aebd5fbe780eebf478e"
+        ],
+        "rationale": "a consensus of credible reporting is an alternative settlement path; under the compiler instruction, one approved original credible publisher is sufficient for that reporting path.",
+        "required": false,
+        "requirement_id": "source_f9c72b29d4ef96391cb5",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "credible reporting"
+      },
+      {
+        "clause_ids": [
+          "clause_7f5a42957ee53a0ee0ec",
+          "clause_8aebd5fbe780eebf478e"
+        ],
+        "rationale": "official information from the government of iran can publicly acknowledge or resolve the qualifying meeting.",
+        "required": false,
+        "requirement_id": "source_a041f1d47b01d5491ac7",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "government of iran"
+      },
+      {
+        "clause_ids": [
+          "clause_7f5a42957ee53a0ee0ec",
+          "clause_8aebd5fbe780eebf478e"
+        ],
+        "rationale": "official information from the united states government can publicly acknowledge or resolve the qualifying meeting.",
+        "required": false,
+        "requirement_id": "source_55b94b600e5f444504c2",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "government of the united states"
+      }
+    ],
+    "subjective_clause_ids": [
+      "clause_2c06acd161af3b230ea8",
+      "clause_5594ac31509becc5a6fe",
+      "clause_7f5a42957ee53a0ee0ec",
+      "clause_8aebd5fbe780eebf478e",
+      "clause_9ca74d439f5a18da9b06",
+      "clause_ef566b4cafe82c872e63",
+      "clause_f341baa4ff09f92b9266"
+    ],
+    "subjective_terms": [
+      "Brief greetings, chance encounters, photo opportunities, ceremonial appearances, or talks not deliberately aimed at diplomacy or negotiation will not count.",
+      "Technical, staff-level, working-group, implementation, monitoring, preparatory, or deconfliction meetings will not qualify unless they occur as part of a new formally convened senior-level U.S.-Iran peace-talks round.",
+      "The resolution sources for this market will be official information from the governments of the United States and Iran, and a consensus of credible reporting.",
+      "The meeting must be in-person (including indirect in-person meetings) and must be publicly acknowledged by either government or reported by a consensus of credible media.",
+      "This market will resolve according to the country in which the next formal senior-level round of peace talks between representatives of the United States and Iran begins by September 30, 2026, 11:59 PM ET.",
+      "A qualifying round must be a deliberate in-person diplomatic meeting or negotiating round concerning US-Iran relations, involving senior representatives of both the United States and Iran who are acting in an official capacity and are authorized to conduct or materially direct diplomacy on behalf of their governments.",
+      "Indirect in-person diplomacy through designated mediators, facilitators, or interlocutors will qualify, provided senior representatives of both the United States and Iran are participating in the same formal diplomatic process with the knowledge and authorization of their respective governments."
+    ],
+    "window": {
+      "end_iso": "2026-10-01T03:59:00Z",
+      "start_iso": "",
+      "timezone": "America/New_York"
+    }
+  }
+}

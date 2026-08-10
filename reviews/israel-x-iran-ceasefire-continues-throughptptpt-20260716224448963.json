@@ -1,0 +1,684 @@
+{
+  "compiled_at": "2026-08-10T16:40:32.449668+00:00",
+  "compiler_model": "operator_review_draft",
+  "deadline_authority_policy": "VERBATIM_RULES_PAPER_ONLY_V1",
+  "event_slug": "israel-x-iran-ceasefire-continues-throughptptpt-20260716224448963",
+  "kind": "grouped",
+  "market_id": "israel-x-iran-ceasefire-continues-throughptptpt-20260716224448963",
+  "outcome_topology": "MONOTONE_DEADLINE_LADDER",
+  "outcomes": [
+    {
+      "condition_id": "0xcaf0965a8fef59b1838a0357eb7d6a9d878ecd0b4dae1bd44e48c27f7aa69958",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-24T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-24T23:59:00Z",
+      "label": "July 24",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-24",
+      "name": "july_24",
+      "no_token_id": "192313206379641299557986325342796008532578688433817159905625093211975343655",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-24T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-22T20:46:51.345911Z",
+      "yes_token_id": "81550871322336801322309189468015671938618863157862077518508196397668399397251"
+    },
+    {
+      "condition_id": "0x33c491023cecc6a42a70608427c2be37dfbe789ae1b08d8791f2450a3f9696f2",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-26T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-26T23:59:00Z",
+      "label": "July 26",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-26",
+      "name": "july_26",
+      "no_token_id": "52258090062694356689942461866619000657013852314797878048826790928772337787389",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-26T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-22T20:47:16.180971Z",
+      "yes_token_id": "95970203500150390696017820790991771432553030593132347633957312670362563399618"
+    },
+    {
+      "condition_id": "0xa6480903e54c68f2ee79cacb7861dfcc9b473e8b07d6dcaf2c9923034a5fb56f",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-31T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-31T23:59:00Z",
+      "label": "July 31",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-31-20260716224448968-384-155-519-798-243",
+      "name": "july_31",
+      "no_token_id": "86567202803696185629704724961398129231892610051254319801824623009047556217191",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-31T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-16T23:00:34.645581Z",
+      "yes_token_id": "107961194152792740725727064379230288293910546811577910480987951504293301797282"
+    },
+    {
+      "condition_id": "0x35737d4e921a4cb088704e21751c78e282a6a2ae3559fbc2455275b0340d1e7f",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-22T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-22T23:59:00Z",
+      "label": "July 22",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-22-20260716224448966",
+      "name": "july_22",
+      "no_token_id": "43233970120569059029439773582855012755642661873574007364217971047743131980098",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-22T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-16T23:00:33.689886Z",
+      "yes_token_id": "58261307118108936367430768346218679796444242208550226624418473434210861808681"
+    },
+    {
+      "condition_id": "0x514c3dd24cde8101ec8e3982b74fca425c592e3fe7526056a4d80aa269c98808",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-20T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-20T23:59:00Z",
+      "label": "July 20",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-20-20260716224448965",
+      "name": "july_20",
+      "no_token_id": "79966927342021061214273588153363426342906416125193450118767356845457808243839",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-20T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-16T23:00:33.49289Z",
+      "yes_token_id": "62074667087255747412382561081475311823484268378809285620641251664614873335395"
+    },
+    {
+      "condition_id": "0x7f47df08bd8b390e2d566761feead7cb20507e8e2ac37f7664f7e3a9d12b7f33",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-18T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-18T23:59:00Z",
+      "label": "July 18",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-18-20260716224448964",
+      "name": "july_18",
+      "no_token_id": "42261599540272625246999493980012960418805177663230798142763632595381784455552",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-18T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-16T23:00:33.09911Z",
+      "yes_token_id": "114937803941081877560961025721440367956127017940684514090246121694104479600905"
+    },
+    {
+      "condition_id": "0xf473c2e521258a81d44f16fd65e811de7bcb6646912561583969004b81c10ec1",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-25T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-25T23:59:00Z",
+      "label": "July 25",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-25-20260716224448967-454",
+      "name": "july_25",
+      "no_token_id": "78490650034715460452736990813572497306014595139693256665537363422066781784722",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-25T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-16T23:00:33.870359Z",
+      "yes_token_id": "68080778697884921540335032370654180051222428162809511382222697646266365598353"
+    },
+    {
+      "condition_id": "0x6acdc3316f0b43ca4fbc13623fc018e30f2fd20ae7b93bdc07c8193e99b0ac4d",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-15T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-15T23:59:00Z",
+      "label": "August 15",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-august-15-20260716224448969-246-815-987-693",
+      "name": "august_15",
+      "no_token_id": "31798323952461961650983638405389053740930972138111089234409584277872747279143",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-15T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-16T23:00:34.836291Z",
+      "yes_token_id": "77550960228341204288120509394963885549177211314903311399404330431381651171385"
+    },
+    {
+      "condition_id": "0xc1556ecbe613e403dfb9e38bf1b25a8aee2aa1687f2b343bc896dd2c9763ed74",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-31T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-31T23:59:00Z",
+      "label": "August 31",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-august-31-20260716224448970-754-896-823",
+      "name": "august_31",
+      "no_token_id": "89213299320340519312609800070963866900731006421290655419739582074858285792863",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-31T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-16T23:00:35.328566Z",
+      "yes_token_id": "10451124928493844849355057703558222404087423201197729105477623039880661055484"
+    },
+    {
+      "condition_id": "0xfd33195eb1aa52ea3206df9759432d3e00a058a59d0171ea2dd327b7de7fb464",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-23T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-23T23:59:00Z",
+      "label": "July 23",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-23",
+      "name": "july_23",
+      "no_token_id": "41740115735359181835874888265702454405074154199161312302800661079334304805337",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-23T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-22T20:46:24.324683Z",
+      "yes_token_id": "42949002876187767574757199648176932679215258199919532732580925377564379129450"
+    },
+    {
+      "condition_id": "0xc5ee7755714c6ce1e5a0514dfe888ebe8df262972d5f0fff1fee4d00ba2c6df9",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-30T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-30T23:59:00Z",
+      "label": "July 30",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-30",
+      "name": "july_30",
+      "no_token_id": "44926160595665680526827932945224421764132803336727507661252136189851218059224",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-30T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-24T16:06:45.359248Z",
+      "yes_token_id": "85120775770768568171037319691430512769043349724236381575493834592043972740948"
+    },
+    {
+      "condition_id": "0x93796dea2fe5dfc8da1a942448e6ab767d9bb3464a96ea3a527dfed0ef7bd958",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-02T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-02T23:59:00Z",
+      "label": "August 2",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-august-2-20260727170555149",
+      "name": "august_2",
+      "no_token_id": "69096949813045225336683960679829035937696902053122957721872788215708031375062",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-02T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-27T17:40:33.591317Z",
+      "yes_token_id": "112157595552502425360311365480557346272967836691353340001604809204498706086576"
+    },
+    {
+      "condition_id": "0xf4dbb49b91ca1ed740fda3fdabe621758062fdea8bd236fdf2e540fb6a12a594",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-28T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-28T23:59:00Z",
+      "label": "July 28",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-28",
+      "name": "july_28",
+      "no_token_id": "29324773843095974921382522468603198594048509962937431082215010009717465001422",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-28T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-24T16:05:53.197039Z",
+      "yes_token_id": "38886322264669784027672286592774757444905080686185967143832131463205582863002"
+    },
+    {
+      "condition_id": "0x0f5b0d1fe439c5562ce6e46a08e4f51b758ca0059fb338bb3eb9bb6ee5df5956",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-27T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-27T23:59:00Z",
+      "label": "July 27",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-27",
+      "name": "july_27",
+      "no_token_id": "45511554797827298307186215296063312563946760191758271326442863721031696659723",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-27T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-24T16:04:20.803948Z",
+      "yes_token_id": "90664643079633325229069388592013287463357580070351448429341061965362517324082"
+    },
+    {
+      "condition_id": "0xe70c3428d7d39579c7357aacc1fa31687e0323f782e13b1733ddabdbc6b1e9a4",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-29T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-07-29T23:59:00Z",
+      "label": "July 29",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-july-29",
+      "name": "july_29",
+      "no_token_id": "94743760346492168885071328052133300281844121158161961586598489798972396624408",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-29T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-24T16:06:25.139684Z",
+      "yes_token_id": "43783728297751003049731197784493047712213881171251242252606704800494333274628"
+    },
+    {
+      "condition_id": "0x68818a54ca4c49406bb28ada26ecf9ce732dba21505454ce874e7066da6d788c",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-09T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-09T23:59:00Z",
+      "label": "August 9",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-august-9-20260727170733638",
+      "name": "august_9",
+      "no_token_id": "54486775799097073350117703852347837482875366875903455982474565064932741563538",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-09T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-27T17:40:32.087415Z",
+      "yes_token_id": "51783880760599120440014289525159847949469877325479084384177696513850906603472"
+    },
+    {
+      "condition_id": "0x98f962ca4a21a47b73c8a914d08f224be31bc6dbdc609b3f0edd9654bbc802a1",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-01T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-01T23:59:00Z",
+      "label": "August 1",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-august-1",
+      "name": "august_1",
+      "no_token_id": "1872304650404147784550503304851162485683392318119990816630948128292622719797",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-01T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-31T21:44:32.073086Z",
+      "yes_token_id": "10286659768913348993358470598849242742860975803412404099275992956393149144886"
+    },
+    {
+      "condition_id": "0x2e47cff93eb647a0487879f781ec583f8849eeb397ff0ad5cb38f77ec916c8a7",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-03T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-03T23:59:00Z",
+      "label": "August 3",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-august-3",
+      "name": "august_3",
+      "no_token_id": "100155473240850078618785670806813289917389462761161316140442124731697292871825",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-03T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-31T21:51:25.078696Z",
+      "yes_token_id": "33031857528917237204569970205279313088825982927565857984494884985176333977929"
+    },
+    {
+      "condition_id": "0x2f738e4c227b83c08c490dc6618164d31315a6740b9a5a98c392fc3160810957",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-04T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-08-04T23:59:00Z",
+      "label": "August 4",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-august-4",
+      "name": "august_4",
+      "no_token_id": "18816325778928438054325353043304639699226418161175687313767904178681285294802",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-04T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-07-31T21:51:27.203619Z",
+      "yes_token_id": "33744138537867316771530492434898210310112816831581011996696181212558287270655"
+    },
+    {
+      "condition_id": "0x524ce344b80a160c237d91a33efdd8b82468b0dc0d33f60d500f8bf69b80b8bb",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "September 30",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-september-30",
+      "name": "september_30",
+      "no_token_id": "27584284826455438094347446510379196256289720442108190871721085592324191711749",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-08-07T14:26:26.222207Z",
+      "yes_token_id": "110124369154659006328320349797831539154282530245624469518430389053088403535939"
+    },
+    {
+      "condition_id": "0xc3d5708780de5528998aeb53ca90e7ade64804f9f2386392a681435d5c42b44d",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-10-31T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-10-31T23:59:00Z",
+      "label": "October 31",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-october-31",
+      "name": "october_31",
+      "no_token_id": "34386684966925037477701889915132575610574649191623462027976379158560146275115",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-10-31T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-08-07T14:27:19.254718Z",
+      "yes_token_id": "36595575197199846398267481972385180643951985822505187477756829088194676076340"
+    },
+    {
+      "condition_id": "0x1c4c6a698f0591ddf0c96e1beb56f8c75112ef849331bf3b0388f14830a7421d",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-12-31T23:59:00+03:30",
+      "deadline_timezone": "Asia/Tehran",
+      "gamma_deadline_iso": "2026-12-31T23:59:00Z",
+      "label": "December 31",
+      "market_slug": "israel-x-iran-ceasefire-continues-through-december-31",
+      "name": "december_31",
+      "no_token_id": "63915287271940688064870172991436489775587541335457370355314489349033951709373",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-12-31T23:59:00+03:30",
+      "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+      "start_iso": "2026-08-07T14:27:44.495095Z",
+      "yes_token_id": "34732988886981510167874389845708832808627284379840131351229635795767825787404"
+    }
+  ],
+  "question": "Israel x Iran ceasefire continues through...?",
+  "rule_clauses": [
+    {
+      "clause_id": "clause_03486d7b0303d22e4461",
+      "text": "The occurrence, attribution, and timing of a qualifying military action will be primarily determined based on a consensus of information available from the resolution sources."
+    },
+    {
+      "clause_id": "clause_0eda50c7da9a3cd19261",
+      "text": "Small-arms fire;"
+    },
+    {
+      "clause_id": "clause_0ffdb3cc370dba12eeea",
+      "text": "Where territorial borders are disputed, all territory claimed by and under the de facto control of the relevant state as of market creation will qualify."
+    },
+    {
+      "clause_id": "clause_14dbefd2720c8d1a036f",
+      "text": "MLRS systems);"
+    },
+    {
+      "clause_id": "clause_30325fa9a5ce51658e90",
+      "text": "The following actions do not constitute a qualifying military action:"
+    },
+    {
+      "clause_id": "clause_374aef8364f8ba26b6b3",
+      "text": "A state of ceasefire will be considered to no longer be in effect between Israel and Iran if either Israel or Iran takes a qualifying military action against the other country between market creation and the listed date, 11:59 PM IRST."
+    },
+    {
+      "clause_id": "clause_41c08418d25cdab6b0a6",
+      "text": "A surface-to-surface missile strike includes one-way attack drones and surface-to-surface missiles such as cruise or ballistic missiles."
+    },
+    {
+      "clause_id": "clause_68bcff37d9c40bd63fd8",
+      "text": "Cyber operations;"
+    },
+    {
+      "clause_id": "clause_695ea41681bb109fa61b",
+      "text": "Ground incursions;"
+    },
+    {
+      "clause_id": "clause_6afd93e1e0d15657bab8",
+      "text": "Maritime territory and airspace are not encompassed."
+    },
+    {
+      "clause_id": "clause_6c9692e2b0c779dae256",
+      "text": "Any threat, authorization, or announcement of force that has not been executed."
+    },
+    {
+      "clause_id": "clause_6d351f38f8d15ae36f22",
+      "text": "If, at the end of the third calendar day, conflicting reports remain as to the occurrence, attribution, or timing of the action, this market will resolve based on the totality of information available from the resolution sources at that time."
+    },
+    {
+      "clause_id": "clause_788ae0a602df76b0ef72",
+      "text": "Otherwise this market will resolve to \u201cNo\u201d."
+    },
+    {
+      "clause_id": "clause_7a6f8b56f1514e1e328e",
+      "text": "If this period would extend past the end date, this market will remain open to allow for 3 full calendar days to pass."
+    },
+    {
+      "clause_id": "clause_7d497f31b56158834347",
+      "text": "An air strike includes bombs, air-to-surface missiles, and air-launched drones."
+    },
+    {
+      "clause_id": "clause_7ed26c771d53071709f4",
+      "text": "Where multiple sources conflict regarding the occurrence, attribution, or timing of a relevant military action, this market will remain open until the earlier of: i) the confirmation of the occurrence, attribution, and timing of the action based on a consensus of information available from the resolution sources or ii) 3 full calendar days (IRST) from the date of the first credibly reported evidence of the action."
+    },
+    {
+      "clause_id": "clause_8232dd53fc654e296eb9",
+      "text": "A military action will be considered to impact Israel or Iran if it directly impacts the terrestrial territory of Israel or Iran, including any internal waters."
+    },
+    {
+      "clause_id": "clause_989f40937d44e658bc60",
+      "text": "Howitzers, artillery pieces, mortars, and rocket artillery (e.g."
+    },
+    {
+      "clause_id": "clause_98bd98177a69c16ec3a9",
+      "text": "The resolution sources for this market will be official information from the governments and militaries of Israel and Iran and credible reporting."
+    },
+    {
+      "clause_id": "clause_997cfe4228a6880c8a48",
+      "text": "This market will resolve to \"Yes\" if a state of ceasefire remains in effect between Israel and Iran through the listed date, 11:59 PM Iran Standard Time (IRST)."
+    },
+    {
+      "clause_id": "clause_af1a3e74b42d83fe4fe9",
+      "text": "Surface-to-air missile strikes;"
+    },
+    {
+      "clause_id": "clause_b192e6bf825955162703",
+      "text": "Munitions destroyed or intercepted before impact;"
+    },
+    {
+      "clause_id": "clause_bd8925ae4e4b5eff5b63",
+      "text": "Any munition that is intercepted or destroyed before impact does not constitute a qualifying military action."
+    },
+    {
+      "clause_id": "clause_c0c18a1fe9e53c39f3a3",
+      "text": "A qualifying military action refers to an air strike or a surface-to-surface missile strike, initiated by Israel or Iran, that directly impacts the other country."
+    },
+    {
+      "clause_id": "clause_cb15fa4473ff55398442",
+      "text": "Naval gunfire and artillery fire;"
+    },
+    {
+      "clause_id": "clause_e803ede47c92a9d1674b",
+      "text": "Debris, fragments, or any wreckage from intercepted munitions that land on Israel or Iran do not constitute a military action regardless of any damage incurred."
+    },
+    {
+      "clause_id": "clause_eb95e95275d55676a648",
+      "text": "No single statement, denial, or presentation of evidence will govern where it is contradicted by the totality of information."
+    },
+    {
+      "clause_id": "clause_eff4ef24b8014a09ba7b",
+      "text": "Minor surface-to-surface strikes, including short range loitering munitions, FPV drones, and ATGM strikes;"
+    }
+  ],
+  "rule_text_sha256": "f1e7e8b4c4e645a22d12180d4dfd4f768bb6199e41aef5d5b516da594f0933dd",
+  "rule_version": 1,
+  "schema_version": 4,
+  "semantics": {
+    "exclusion_clause_ids": [
+      "clause_0eda50c7da9a3cd19261",
+      "clause_14dbefd2720c8d1a036f",
+      "clause_68bcff37d9c40bd63fd8",
+      "clause_695ea41681bb109fa61b",
+      "clause_6afd93e1e0d15657bab8",
+      "clause_6c9692e2b0c779dae256",
+      "clause_989f40937d44e658bc60",
+      "clause_af1a3e74b42d83fe4fe9",
+      "clause_b192e6bf825955162703",
+      "clause_bd8925ae4e4b5eff5b63",
+      "clause_cb15fa4473ff55398442",
+      "clause_e803ede47c92a9d1674b",
+      "clause_eff4ef24b8014a09ba7b"
+    ],
+    "exclusions": [
+      "Small-arms fire;",
+      "MLRS systems);",
+      "Cyber operations;",
+      "Ground incursions;",
+      "Maritime territory and airspace are not encompassed.",
+      "Any threat, authorization, or announcement of force that has not been executed.",
+      "Howitzers, artillery pieces, mortars, and rocket artillery (e.g.",
+      "Surface-to-air missile strikes;",
+      "Munitions destroyed or intercepted before impact;",
+      "Any munition that is intercepted or destroyed before impact does not constitute a qualifying military action.",
+      "Naval gunfire and artillery fire;",
+      "Debris, fragments, or any wreckage from intercepted munitions that land on Israel or Iran do not constitute a military action regardless of any damage incurred.",
+      "Minor surface-to-surface strikes, including short range loitering munitions, FPV drones, and ATGM strikes;"
+    ],
+    "predicate": {
+      "action": "remains in effect",
+      "comparator": "STATUS_IS",
+      "object": "state of ceasefire between Israel and Iran through the listed date",
+      "subjects": [
+        "iran",
+        "israel"
+      ],
+      "unit": "",
+      "value": ""
+    },
+    "qualifying_clause_ids": [
+      "clause_0ffdb3cc370dba12eeea",
+      "clause_41c08418d25cdab6b0a6",
+      "clause_7d497f31b56158834347",
+      "clause_8232dd53fc654e296eb9",
+      "clause_c0c18a1fe9e53c39f3a3"
+    ],
+    "qualifying_conditions": [
+      "Where territorial borders are disputed, all territory claimed by and under the de facto control of the relevant state as of market creation will qualify.",
+      "A surface-to-surface missile strike includes one-way attack drones and surface-to-surface missiles such as cruise or ballistic missiles.",
+      "An air strike includes bombs, air-to-surface missiles, and air-launched drones.",
+      "A military action will be considered to impact Israel or Iran if it directly impacts the terrestrial territory of Israel or Iran, including any internal waters.",
+      "A qualifying military action refers to an air strike or a surface-to-surface missile strike, initiated by Israel or Iran, that directly impacts the other country."
+    ],
+    "resolution_policy": {
+      "cancellation_behavior": "not specified by verbatim rules",
+      "cancellation_clause_ids": [],
+      "independent_confirmation_sources": 1,
+      "postponement_behavior": "If, at the end of the third calendar day, conflicting reports remain as to the occurrence, attribution, or timing of the action, this market will resolve based on the totality of information available from the resolution sources at that time. | If this period would extend past the end date, this market will remain open to allow for 3 full calendar days to pass. | Where multiple sources conflict regarding the occurrence, attribution, or timing of a relevant military action, this market will remain open until the earlier of: i) the confirmation of the occurrence, attribution, and timing of the action based on a consensus of information available from the resolution sources or ii) 3 full calendar days (IRST) from the date of the first credibly reported evidence of the action. | No single statement, denial, or presentation of evidence will govern where it is contradicted by the totality of information.",
+      "postponement_clause_ids": [
+        "clause_6d351f38f8d15ae36f22",
+        "clause_7a6f8b56f1514e1e328e",
+        "clause_7ed26c771d53071709f4",
+        "clause_eb95e95275d55676a648"
+      ],
+      "terminal_no": [
+        "A state of ceasefire will be considered to no longer be in effect between Israel and Iran if either Israel or Iran takes a qualifying military action against the other country between market creation and the listed date, 11:59 PM IRST.",
+        "Otherwise this market will resolve to \u201cNo\u201d."
+      ],
+      "terminal_no_clause_ids": [
+        "clause_374aef8364f8ba26b6b3",
+        "clause_788ae0a602df76b0ef72"
+      ],
+      "terminal_no_monotonic": true,
+      "terminal_yes": [
+        "This market will resolve to \"Yes\" if a state of ceasefire remains in effect between Israel and Iran through the listed date, 11:59 PM Iran Standard Time (IRST)."
+      ],
+      "terminal_yes_clause_ids": [
+        "clause_997cfe4228a6880c8a48"
+      ],
+      "terminal_yes_monotonic": false
+    },
+    "rule_family": "STATUS_AT_DEADLINE",
+    "source_policy": {
+      "fallback_condition": "",
+      "fallback_requirement_ids": [],
+      "policy_type": "QUORUM",
+      "primary_requirement_ids": [],
+      "quorum": 1,
+      "requirement_ids": [
+        "source_72bdb2fc71facdbb0456",
+        "source_7c6a8fb3acc37ca44be8",
+        "source_81a38a06ece589e7995d",
+        "source_a041f1d47b01d5491ac7",
+        "source_f9c72b29d4ef96391cb5"
+      ]
+    },
+    "source_requirements": [
+      {
+        "clause_ids": [
+          "clause_98bd98177a69c16ec3a9"
+        ],
+        "rationale": "credible reporting is one of the resolution sources for occurrence, attribution, and timing.",
+        "required": false,
+        "requirement_id": "source_f9c72b29d4ef96391cb5",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "credible reporting"
+      },
+      {
+        "clause_ids": [
+          "clause_98bd98177a69c16ec3a9"
+        ],
+        "rationale": "official information from the government of iran is one of the resolution sources for occurrence, attribution, and timing.",
+        "required": false,
+        "requirement_id": "source_a041f1d47b01d5491ac7",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "government of iran"
+      },
+      {
+        "clause_ids": [
+          "clause_98bd98177a69c16ec3a9"
+        ],
+        "rationale": "official information from the government of israel is one of the resolution sources for occurrence, attribution, and timing.",
+        "required": false,
+        "requirement_id": "source_7c6a8fb3acc37ca44be8",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "government of israel"
+      },
+      {
+        "clause_ids": [
+          "clause_98bd98177a69c16ec3a9"
+        ],
+        "rationale": "official information from the military of iran is one of the resolution sources for occurrence, attribution, and timing.",
+        "required": false,
+        "requirement_id": "source_81a38a06ece589e7995d",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "military of iran"
+      },
+      {
+        "clause_ids": [
+          "clause_98bd98177a69c16ec3a9"
+        ],
+        "rationale": "official information from the military of israel is one of the resolution sources for occurrence, attribution, and timing.",
+        "required": false,
+        "requirement_id": "source_72bdb2fc71facdbb0456",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "military of israel"
+      }
+    ],
+    "subjective_clause_ids": [
+      "clause_03486d7b0303d22e4461",
+      "clause_6d351f38f8d15ae36f22",
+      "clause_98bd98177a69c16ec3a9",
+      "clause_997cfe4228a6880c8a48",
+      "clause_c0c18a1fe9e53c39f3a3"
+    ],
+    "subjective_terms": [
+      "The occurrence, attribution, and timing of a qualifying military action will be primarily determined based on a consensus of information available from the resolution sources.",
+      "If, at the end of the third calendar day, conflicting reports remain as to the occurrence, attribution, or timing of the action, this market will resolve based on the totality of information available from the resolution sources at that time.",
+      "The resolution sources for this market will be official information from the governments and militaries of Israel and Iran and credible reporting.",
+      "This market will resolve to \"Yes\" if a state of ceasefire remains in effect between Israel and Iran through the listed date, 11:59 PM Iran Standard Time (IRST).",
+      "A qualifying military action refers to an air strike or a surface-to-surface missile strike, initiated by Israel or Iran, that directly impacts the other country."
+    ],
+    "window": {
+      "end_iso": "2026-12-31T20:29:00Z",
+      "start_iso": "",
+      "timezone": "Asia/Tehran"
+    }
+  }
+}

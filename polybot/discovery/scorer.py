@@ -48,7 +48,11 @@ def grade_market(
     analysis = context.rule_analysis
     group = correlation_group(context)
 
-    days_left = _days_to_deadline(context.deadline_iso, now)
+    effective_deadline = _effective_deadline_iso(
+        context,
+        rule_spec=rule_spec,
+    )
+    days_left = _days_to_deadline(effective_deadline, now)
     scores["liquidity"] = context.liquidity
     scores["volume"] = context.volume
     if days_left is not None:
@@ -283,3 +287,61 @@ def _days_to_deadline(deadline_iso: str, now: datetime) -> float | None:
     if deadline.tzinfo is None:
         deadline = deadline.replace(tzinfo=timezone.utc)
     return (deadline - now).total_seconds() / 86400.0
+
+
+def _effective_deadline_iso(
+    context: MarketContext,
+    *,
+    rule_spec: RuleSpec | None,
+) -> str:
+    """Use the last active leg for grouped-market lifecycle decisions.
+
+    Gamma parent events can retain an obsolete endDate while newer child legs
+    remain open.  A reviewed verbatim-deadline spec is authoritative for its
+    bound legs; otherwise the immutable child Gamma deadlines are used.
+    """
+
+    if context.kind != "grouped":
+        return context.deadline_iso
+    active_ids = {
+        outcome.condition_id
+        for outcome in context.outcomes
+        if outcome.active and not outcome.closed and outcome.accepting_orders
+    }
+    if not active_ids:
+        return context.deadline_iso
+    candidates: list[str] = []
+    if (
+        rule_spec is not None
+        and rule_spec.deadline_authority_policy
+        == VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+    ):
+        candidates = [
+            outcome.deadline_iso
+            for outcome in rule_spec.outcomes
+            if outcome.condition_id in active_ids and outcome.deadline_iso
+        ]
+    if not candidates:
+        candidates = [
+            outcome.deadline_iso
+            for outcome in context.outcomes
+            if outcome.condition_id in active_ids and outcome.deadline_iso
+        ]
+    parsed = [
+        (value, _deadline_datetime(value))
+        for value in candidates
+    ]
+    valid = [(value, stamp) for value, stamp in parsed if stamp is not None]
+    if not valid:
+        return context.deadline_iso
+    return max(valid, key=lambda item: item[1])[0]
+
+
+def _deadline_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)

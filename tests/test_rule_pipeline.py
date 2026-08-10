@@ -444,6 +444,20 @@ def test_prepare_review_surfaces_the_competing_pass_and_its_diff(
             error="RuntimeError: codex CLI exited 1: 401 Unauthorized",
         )
     )
+    malformed = {
+        "rule_family": selected["rule_family"],
+        "qualifying_clause_ids": None,
+    }
+    rule_store.save_pass(
+        CompilationPass(
+            market_id=context.market_id,
+            rule_text_sha256=context.rule_text_sha256,
+            pass_index=2,
+            model="legacy:test",
+            raw_output=json.dumps(malformed),
+            normalized_output=malformed,
+        )
+    )
 
     assert (
         prepare_rule_review_command(
@@ -465,9 +479,13 @@ def test_prepare_review_surfaces_the_competing_pass_and_its_diff(
     # A pass that never produced semantics is reported, not silently dropped,
     # and carries no diff to compare against.
     failed = [item for item in alternates if not item["usable"]]
-    assert len(failed) == 1
-    assert "401 Unauthorized" in failed[0]["error"]
-    assert "differing_fields" not in failed[0]
+    assert len(failed) == 2
+    assert any("401 Unauthorized" in item["error"] for item in failed)
+    assert any(
+        item["error"].startswith("invalid_normalized_output:")
+        for item in failed
+    )
+    assert all("differing_fields" not in item for item in failed)
 
 
 def test_reviewed_rule_import_is_hash_confirmed_bound_and_audited(

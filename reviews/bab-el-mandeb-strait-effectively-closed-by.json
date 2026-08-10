@@ -1,0 +1,308 @@
+{
+  "compiled_at": "2026-08-10T16:58:02.821403+00:00",
+  "compiler_model": "operator_review_draft",
+  "deadline_authority_policy": "VERBATIM_RULES_PAPER_ONLY_V1",
+  "event_slug": "bab-el-mandeb-strait-effectively-closed-by",
+  "kind": "grouped",
+  "market_id": "bab-el-mandeb-strait-effectively-closed-by",
+  "outcome_topology": "MONOTONE_DEADLINE_LADDER",
+  "outcomes": [
+    {
+      "condition_id": "0x2d7ff3eaa920d560debfac34e360670462e1e5ab35f653c9da992b45a854058b",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-03-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-04-30T00:00:00Z",
+      "label": "March 31",
+      "market_slug": "bab-el-mandeb-strait-effectively-closed-by-march-31",
+      "name": "march_31",
+      "no_token_id": "72144287274956369240496150780787091482711945174734190368629188739039317360959",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-03-31T23:59:00-04:00",
+      "rule_text_sha256": "68b8f9fe6bfa1813fd3456f50273086c01fd3e65fd84b86427b3454da08717ad",
+      "start_iso": "2026-03-16T15:59:29.782399Z",
+      "yes_token_id": "99778214645114863668880041453529219633986641849591096749668602237070973011766"
+    },
+    {
+      "condition_id": "0xcd26bdb63b81dfcc5482c42e9372c8a46091b1de1123d2afefb83df83fe859fd",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-04-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-04-30T00:00:00Z",
+      "label": "April 30",
+      "market_slug": "bab-el-mandeb-strait-effectively-closed-by-april-30",
+      "name": "april_30",
+      "no_token_id": "84582313335492225037882788013498040721657815470535256827405672153879869687298",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-04-30T23:59:00-04:00",
+      "rule_text_sha256": "68b8f9fe6bfa1813fd3456f50273086c01fd3e65fd84b86427b3454da08717ad",
+      "start_iso": "2026-03-16T18:41:41.230835Z",
+      "yes_token_id": "68763178427006805567687963157205459368686336843492282974222563638371290392637"
+    },
+    {
+      "condition_id": "0x9647b0f18083245933f2d2ca09acbe7ce89ee60ba83ed01e984df4bc7888a214",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-05-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-04-30T00:00:00Z",
+      "label": "May 31",
+      "market_slug": "bab-el-mandeb-strait-effectively-closed-by-may-31",
+      "name": "may_31",
+      "no_token_id": "18315883317653952736078559145436077015082800264561996157051447413257028997421",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-05-31T23:59:00-04:00",
+      "rule_text_sha256": "7098aa56dc92e4e0226101f80fa5fc2cdb4de8414633af30fafe1ac504a179af",
+      "start_iso": "2026-04-14T14:28:10.207446Z",
+      "yes_token_id": "50593835060887644541304886936916227361253501730886355031778884057367095965579"
+    },
+    {
+      "condition_id": "0xa976dcc2fac50cf13968adbee89ce1de26df0191b8480b89d418280273197f53",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-06-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-04-30T00:00:00Z",
+      "label": "June 30",
+      "market_slug": "bab-el-mandeb-strait-effectively-closed-by-june-30-571",
+      "name": "june_30",
+      "no_token_id": "95580602988758783752712445121155191665286945527392197193712707520306862606842",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-06-30T23:59:00-04:00",
+      "rule_text_sha256": "7098aa56dc92e4e0226101f80fa5fc2cdb4de8414633af30fafe1ac504a179af",
+      "start_iso": "2026-05-06T00:24:36.340987Z",
+      "yes_token_id": "70979157952244849403592933535229643909731035328387913162617056140126772714735"
+    },
+    {
+      "condition_id": "0x95fc6a4ed7f6856d26aa7f21b9f902d05c9cf76b616fd3463de4d147f7a9126b",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-04-30T00:00:00Z",
+      "label": "September 30",
+      "market_slug": "bab-el-mandeb-strait-effectively-closed-by-september-30-999-671",
+      "name": "september_30",
+      "no_token_id": "79085628201281122481883578594811594592260824252373059797032000397035131450743",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "7098aa56dc92e4e0226101f80fa5fc2cdb4de8414633af30fafe1ac504a179af",
+      "start_iso": "2026-05-06T00:25:08.406865Z",
+      "yes_token_id": "79492971912420892776290893910148058147353983898749011679176479416889510526578"
+    },
+    {
+      "condition_id": "0x9b6f9eb121e43f6867a0855acae1354c569ce8ba32fbc48422d4dec9210161ae",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-06-15T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-06-15T00:00:00Z",
+      "label": "June 15",
+      "market_slug": "bab-el-mandeb-strait-effectively-closed-by-june-15",
+      "name": "june_15",
+      "no_token_id": "22813333167181952476913003462323119484686032415524153034271351423690418150204",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-06-15T23:59:00-04:00",
+      "rule_text_sha256": "7098aa56dc92e4e0226101f80fa5fc2cdb4de8414633af30fafe1ac504a179af",
+      "start_iso": "2026-06-08T20:14:43.99049Z",
+      "yes_token_id": "20196742749539509761661984106543638848820693100108903857245165416832601208204"
+    },
+    {
+      "condition_id": "0xcd22707a80bba2d2ce0622e9a3605d82b766285b50ef20745a1d4bb7435cbd27",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-06-22T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-06-22T00:00:00Z",
+      "label": "June 22",
+      "market_slug": "bab-el-mandeb-strait-effectively-closed-by-june-22-183",
+      "name": "june_22",
+      "no_token_id": "96932293339363407522722408520439786143777604952310595134404844289080717006534",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-06-22T23:59:00-04:00",
+      "rule_text_sha256": "7098aa56dc92e4e0226101f80fa5fc2cdb4de8414633af30fafe1ac504a179af",
+      "start_iso": "2026-06-08T20:15:24.826042Z",
+      "yes_token_id": "88959253385780434026013586354346797545069866320014190098649284105130211673753"
+    },
+    {
+      "condition_id": "0x8240c24b4ac5c954241ee6a10cffc627abf676d88b9d7de5b034c2f7c060b00a",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-07-31T00:00:00Z",
+      "label": "July 31",
+      "market_slug": "bab-el-mandeb-strait-effectively-closed-by-july-31",
+      "name": "july_31",
+      "no_token_id": "33752982532314842955867034258985568949958761450943043689987049583448528253590",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-31T23:59:00-04:00",
+      "rule_text_sha256": "7098aa56dc92e4e0226101f80fa5fc2cdb4de8414633af30fafe1ac504a179af",
+      "start_iso": "2026-07-13T19:27:43.292553Z",
+      "yes_token_id": "111696390093542777743372253154770633634026024336928078383991970477589503016483"
+    },
+    {
+      "condition_id": "0x31327c6fbdc70a44d97f8e8973f536b6a748e01b4c0ca5549ed0910c703b1d7b",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-08-31T00:00:00Z",
+      "label": "August 31",
+      "market_slug": "bab-el-mandeb-strait-effectively-closed-by-august-31",
+      "name": "august_31",
+      "no_token_id": "8310650677069487821478025416478130051168635736368290554555541536659374960027",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-31T23:59:00-04:00",
+      "rule_text_sha256": "7098aa56dc92e4e0226101f80fa5fc2cdb4de8414633af30fafe1ac504a179af",
+      "start_iso": "2026-07-13T19:29:30.632964Z",
+      "yes_token_id": "30774565298935121666763850272423963284589055313497974568971929195252437852383"
+    },
+    {
+      "condition_id": "0xd8659b58a90d0d69fb1170f25b2b896871a1328115fd11c6f4cfe2b01a2a8ba0",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-12-31T23:59:00-05:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-12-31T00:00:00Z",
+      "label": "December 31",
+      "market_slug": "bab-el-mandeb-strait-effectively-closed-by-december-31-983-117",
+      "name": "december_31",
+      "no_token_id": "33460385394344753109351907923235209397225125746318923726067817676780036931403",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-12-31T23:59:00-05:00",
+      "rule_text_sha256": "7098aa56dc92e4e0226101f80fa5fc2cdb4de8414633af30fafe1ac504a179af",
+      "start_iso": "2026-07-09T00:26:54.2029Z",
+      "yes_token_id": "43976511902268111041633866799555037330317427315454056847054364885183934986197"
+    }
+  ],
+  "question": "Bab el-Mandeb Strait effectively closed by...?",
+  "rule_clauses": [
+    {
+      "clause_id": "clause_672058a097f18d22a9be",
+      "text": "Otherwise, this market will resolve to \u201cNo\u201d."
+    },
+    {
+      "clause_id": "clause_889d9231e576c5063785",
+      "text": "This market will resolve to \u201cYes\u201d if IMF PortWatch publishes a 7-day moving average of transit calls (\u201cArrivals of Ships\u201d) for the Bab el-Mandeb Strait less than or equal to 10 for any date between market creation and the listed date."
+    },
+    {
+      "clause_id": "clause_90cf841ff02dbb6f994c",
+      "text": "If no data has been published for the listed date within 14 calendar days (ET) after that date, this market will resolve based on the data published up to that point."
+    },
+    {
+      "clause_id": "clause_95d7ed05e7988e9c19fe",
+      "text": "Revisions made after data has been published for the listed date will not be considered."
+    },
+    {
+      "clause_id": "clause_a3e4a59521d0da531089",
+      "text": "The resolution source for this market will be IMF PortWatch, specifically the \u201cArrivals of Ships\u201d data published for the Bab el-Mandeb Strait at https://portwatch.imf.org/pages/6b1814d64903461b98144a6cc25eb79c."
+    },
+    {
+      "clause_id": "clause_b56dc5a118e3eea37f8f",
+      "text": "This market will resolve as soon as IMF PortWatch publishes a 7-day moving average of transit calls for the Bab el-Mandeb Strait equal to or below 10, or once data has been published for the listed date and no such value has been published."
+    },
+    {
+      "clause_id": "clause_e15f5a98c5ee35581bf6",
+      "text": "Revisions to previously published data points made before data has been published for the listed date will be considered; however, they will not disqualify a previously published data point from qualifying."
+    }
+  ],
+  "rule_text_sha256": "b0d976bec31c4e347700e509a8c900e1a3301e2ab9cea1ec8498d4c9031b70c3",
+  "rule_version": 1,
+  "schema_version": 4,
+  "semantics": {
+    "exclusion_clause_ids": [
+      "clause_95d7ed05e7988e9c19fe"
+    ],
+    "exclusions": [
+      "Revisions made after data has been published for the listed date will not be considered."
+    ],
+    "predicate": {
+      "action": "publishes a 7-day moving average of transit calls (\u201cArrivals of Ships\u201d) for the Bab el-Mandeb Strait",
+      "comparator": "LESS_THAN_OR_EQUAL",
+      "object": "7-day moving average of transit calls (\u201cArrivals of Ships\u201d) for the Bab el-Mandeb Strait for any date between market creation and the listed date",
+      "subjects": [
+        "imf portwatch"
+      ],
+      "unit": "transit calls",
+      "value": "10"
+    },
+    "qualifying_clause_ids": [
+      "clause_889d9231e576c5063785",
+      "clause_b56dc5a118e3eea37f8f",
+      "clause_e15f5a98c5ee35581bf6"
+    ],
+    "qualifying_conditions": [
+      "This market will resolve to \u201cYes\u201d if IMF PortWatch publishes a 7-day moving average of transit calls (\u201cArrivals of Ships\u201d) for the Bab el-Mandeb Strait less than or equal to 10 for any date between market creation and the listed date.",
+      "This market will resolve as soon as IMF PortWatch publishes a 7-day moving average of transit calls for the Bab el-Mandeb Strait equal to or below 10, or once data has been published for the listed date and no such value has been published.",
+      "Revisions to previously published data points made before data has been published for the listed date will be considered; however, they will not disqualify a previously published data point from qualifying."
+    ],
+    "resolution_policy": {
+      "cancellation_behavior": "not specified by verbatim rules",
+      "cancellation_clause_ids": [],
+      "independent_confirmation_sources": 1,
+      "postponement_behavior": "If no data has been published for the listed date within 14 calendar days (ET) after that date, this market will resolve based on the data published up to that point.",
+      "postponement_clause_ids": [
+        "clause_90cf841ff02dbb6f994c"
+      ],
+      "terminal_no": [
+        "Otherwise, this market will resolve to \u201cNo\u201d.",
+        "If no data has been published for the listed date within 14 calendar days (ET) after that date, this market will resolve based on the data published up to that point.",
+        "This market will resolve as soon as IMF PortWatch publishes a 7-day moving average of transit calls for the Bab el-Mandeb Strait equal to or below 10, or once data has been published for the listed date and no such value has been published."
+      ],
+      "terminal_no_clause_ids": [
+        "clause_672058a097f18d22a9be",
+        "clause_90cf841ff02dbb6f994c",
+        "clause_b56dc5a118e3eea37f8f"
+      ],
+      "terminal_no_monotonic": false,
+      "terminal_yes": [
+        "This market will resolve to \u201cYes\u201d if IMF PortWatch publishes a 7-day moving average of transit calls (\u201cArrivals of Ships\u201d) for the Bab el-Mandeb Strait less than or equal to 10 for any date between market creation and the listed date.",
+        "This market will resolve as soon as IMF PortWatch publishes a 7-day moving average of transit calls for the Bab el-Mandeb Strait equal to or below 10, or once data has been published for the listed date and no such value has been published.",
+        "Revisions to previously published data points made before data has been published for the listed date will be considered; however, they will not disqualify a previously published data point from qualifying."
+      ],
+      "terminal_yes_clause_ids": [
+        "clause_889d9231e576c5063785",
+        "clause_b56dc5a118e3eea37f8f",
+        "clause_e15f5a98c5ee35581bf6"
+      ],
+      "terminal_yes_monotonic": true
+    },
+    "rule_family": "NUMERIC_THRESHOLD",
+    "source_policy": {
+      "fallback_condition": "",
+      "fallback_requirement_ids": [],
+      "policy_type": "ALL_OF",
+      "primary_requirement_ids": [],
+      "quorum": 1,
+      "requirement_ids": [
+        "source_297e2256dfccbd11f04b"
+      ]
+    },
+    "source_requirements": [
+      {
+        "clause_ids": [
+          "clause_889d9231e576c5063785",
+          "clause_a3e4a59521d0da531089",
+          "clause_b56dc5a118e3eea37f8f"
+        ],
+        "rationale": "imf portwatch is the specified resolution source and the publisher of the decision-critical arrivals of ships data for the bab el-mandeb strait.",
+        "required": true,
+        "requirement_id": "source_297e2256dfccbd11f04b",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "imf portwatch"
+      }
+    ],
+    "subjective_clause_ids": [],
+    "subjective_terms": [],
+    "window": {
+      "end_iso": "2027-01-01T04:59:00Z",
+      "start_iso": "",
+      "timezone": "America/New_York"
+    }
+  }
+}

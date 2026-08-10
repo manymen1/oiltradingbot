@@ -312,11 +312,34 @@ def _resolve_requirement(
     requirement_id: str,
 ) -> list[PlannedSource]:
     normalized = " ".join(source_ref.casefold().split())
+    if normalized == "imf portwatch":
+        from polybot.discovery.portwatch import FEATURE_SERVICE
+
+        return [
+            PlannedSource(
+                source_id="imf_portwatch",
+                organization_id="imf_portwatch",
+                independence_group="imf_portwatch",
+                domain="portwatch.imf.org",
+                source_tier="official",
+                poll_urls=[FEATURE_SERVICE + "?where=1%3D0&f=json"],
+                roles=sorted(set(roles)),
+                requirement_ids=[requirement_id],
+                timestamp_quality="observed_at_fetch",
+                syndication_notes=(
+                    "Official PortWatch ArcGIS dataset; revision history is "
+                    "preserved by the deterministic evidence adapter."
+                ),
+                required=required,
+            )
+        ]
     if normalized in {
         "wire",
         "wires",
         "credible reporting",
         "consensus of credible reporting",
+        "major news agencies of record",
+        "wide consensus of credible reporting",
     }:
         return [
             _with_requirement(item, roles, False, requirement_id)
@@ -519,11 +542,14 @@ def validate_source_plan_freshness(
         for source in plan.source_records
         for requirement_id in source.requirement_ids
     }
-    missing_policy_ids = sorted(policy_ids - resolved_policy_ids)
-    if missing_policy_ids:
+    unresolved_policy_ids = sorted(policy_ids - resolved_policy_ids)
+    if not _source_policy_has_resolved_path(
+        rule_spec.semantics.source_policy,
+        resolved_policy_ids,
+    ):
         raise ValueError(
-            "source plan has unresolved policy requirements: "
-            + ",".join(missing_policy_ids)
+            "source plan has no resolvable policy path; unresolved requirements: "
+            + ",".join(unresolved_policy_ids)
         )
 
     feed_domains = {
@@ -601,3 +627,35 @@ def _url_domain(url: str) -> str:
     from urllib.parse import urlparse
 
     return urlparse(url).netloc.casefold().removeprefix("www.")
+
+
+def _source_policy_has_resolved_path(
+    policy: SourcePolicy,
+    resolved_requirement_ids: set[str],
+) -> bool:
+    """Return whether at least one policy-authorized source path is usable.
+
+    Alternative source clauses often name an official channel that has no
+    stable machine-readable endpoint and a credible-reporting branch that
+    does. Requiring every optional alternative to resolve would disable the
+    usable branch. Required source requirements are still enforced earlier.
+    """
+
+    resolved = set(policy.requirement_ids) & resolved_requirement_ids
+    if policy.policy_type == "ALL_OF":
+        return resolved == set(policy.requirement_ids)
+    if policy.policy_type in {"ANY_OF", "QUORUM"}:
+        return len(resolved) >= policy.quorum
+    if policy.policy_type == "ALTERNATIVE_QUORUM":
+        return any(
+            len(set(branch.requirement_ids) & resolved)
+            >= branch.requirement_quorum
+            for branch in policy.branches
+        )
+    return any(
+        len(set(branch_ids) & resolved) >= policy.quorum
+        for branch_ids in (
+            policy.primary_requirement_ids,
+            policy.fallback_requirement_ids,
+        )
+    )

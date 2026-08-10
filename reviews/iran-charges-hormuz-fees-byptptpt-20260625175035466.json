@@ -1,0 +1,278 @@
+{
+  "compiled_at": "2026-08-10T13:50:20.256783+00:00",
+  "compiler_model": "operator_review_draft",
+  "deadline_authority_policy": "VERBATIM_RULES_PAPER_ONLY_V1",
+  "event_slug": "iran-charges-hormuz-fees-byptptpt-20260625175035466",
+  "kind": "grouped",
+  "market_id": "iran-charges-hormuz-fees-byptptpt-20260625175035466",
+  "outcome_topology": "MONOTONE_DEADLINE_LADDER",
+  "outcomes": [
+    {
+      "condition_id": "0x75dd98fa62a51db40b0349e5db1f6b5d0da7481287586752db91278a7822ef15",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-15T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-07-15T23:59:00Z",
+      "label": "July 15",
+      "market_slug": "iran-charges-hormuz-fees-by-july-15-20260625175039061",
+      "name": "july_15",
+      "no_token_id": "115193552758392474988032609284478753726357567407460390475561097065263355745328",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-15T23:59:00-04:00",
+      "rule_text_sha256": "2b7218197ca674e41a5151f8101bb253dac891d6a5f48e2a3668868e958002ac",
+      "start_iso": "2026-06-25T23:20:39.836323Z",
+      "yes_token_id": "19248118701345337783027862126645802354931513041374671216864060975949935504627"
+    },
+    {
+      "condition_id": "0xceb73b756d1dffbb60452a86efbca93efea9453a6f5078b2c8fd49dda3f5ccee",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-08-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-08-31T23:59:00Z",
+      "label": "August 31",
+      "market_slug": "iran-charges-hormuz-fees-by-august-31-20260625175039062-177",
+      "name": "august_31",
+      "no_token_id": "104628309488587616237515900963758328926363798303475209280258444561216878013118",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-08-31T23:59:00-04:00",
+      "rule_text_sha256": "2b7218197ca674e41a5151f8101bb253dac891d6a5f48e2a3668868e958002ac",
+      "start_iso": "2026-06-25T23:20:39.982363Z",
+      "yes_token_id": "9225500616646857630124704690284065786811292595510371759719805962740870955812"
+    },
+    {
+      "condition_id": "0x3029c39e379d8b803324ca969a972810ecc8c6078fe56b52c082f8e535645b9f",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-07-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-07-31T23:59:00Z",
+      "label": "July 31",
+      "market_slug": "iran-charges-hormuz-fees-by-july-31",
+      "name": "july_31",
+      "no_token_id": "53093142836413175376735522410488802115995621837494165857748643214185096264572",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-07-31T23:59:00-04:00",
+      "rule_text_sha256": "2b7218197ca674e41a5151f8101bb253dac891d6a5f48e2a3668868e958002ac",
+      "start_iso": "2026-07-01T15:38:19.080202Z",
+      "yes_token_id": "42894130249541195207287239751047299712517353957818777938153218245255549672763"
+    },
+    {
+      "condition_id": "0xb818eb1084fdbc85161dda72c93e1e2da6eb3cc675aa815becb69f45f30683c9",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-10-31T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-10-31T23:59:00Z",
+      "label": "October 31",
+      "market_slug": "iran-charges-hormuz-fees-by-october-31",
+      "name": "october_31",
+      "no_token_id": "103775278139867652925368420151914170566282318357595808142286343000646623384207",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-10-31T23:59:00-04:00",
+      "rule_text_sha256": "2b7218197ca674e41a5151f8101bb253dac891d6a5f48e2a3668868e958002ac",
+      "start_iso": "2026-07-01T15:40:28.2383Z",
+      "yes_token_id": "28124160639561291369865852757900361591346814138837883756455228145975719395425"
+    },
+    {
+      "condition_id": "0xed7a65f4096c5b4c45a854562ac259d8e42ef5094ef4ee833867d57b2df67238",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-12-31T23:59:00-05:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-12-31T23:59:00Z",
+      "label": "December 31",
+      "market_slug": "iran-charges-hormuz-fees-by-december-31-20260706203029175-553",
+      "name": "december_31",
+      "no_token_id": "23656858922081838696675685140201764168524829599975900398098789158260788656915",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-12-31T23:59:00-05:00",
+      "rule_text_sha256": "2b7218197ca674e41a5151f8101bb253dac891d6a5f48e2a3668868e958002ac",
+      "start_iso": "2026-07-07T01:14:06.340633Z",
+      "yes_token_id": "30084046110340630915815124176402512146373063505864644025251039436415886255442"
+    },
+    {
+      "condition_id": "0x6b6fc067a481ea2426eab480e4041751f2d21b3af575e08be54d20f6dcdfe783",
+      "deadline_authority": "VERBATIM_RULES",
+      "deadline_consistency": "MISMATCH",
+      "deadline_iso": "2026-09-30T23:59:00-04:00",
+      "deadline_timezone": "America/New_York",
+      "gamma_deadline_iso": "2026-09-30T23:59:00Z",
+      "label": "September 30",
+      "market_slug": "iran-charges-hormuz-fees-by-september-30",
+      "name": "september_30",
+      "no_token_id": "22227662999284388929721876092506812981798617938529933916398041130249411166581",
+      "resolution_source": "",
+      "rule_deadline_iso": "2026-09-30T23:59:00-04:00",
+      "rule_text_sha256": "2b7218197ca674e41a5151f8101bb253dac891d6a5f48e2a3668868e958002ac",
+      "start_iso": "2026-08-07T14:30:39.496892Z",
+      "yes_token_id": "44007830652896102192190752247260840647145635365565932624201614697565663183502"
+    }
+  ],
+  "question": "Iran charges Hormuz fees by...?",
+  "rule_clauses": [
+    {
+      "clause_id": "clause_015c8dc4db2d3b923a45",
+      "text": "This market resolves to \u201cYes\u201d if the Iranian government officially announces and begins collecting fees, tolls, charges, tariffs, or similar payments from commercial vessels which are mandatory for passage through or access to the Strait of Hormuz between market creation and the specified date, 11:59 PM ET."
+    },
+    {
+      "clause_id": "clause_1a57f04a06831b3d1950",
+      "text": "Fees charged by Oman, the United Arab Emirates, shipping insurers, private companies, or other non-Iranian entities do not qualify unless charged jointly with Iran, or if Iran directly receives the fee or controls the charging entity."
+    },
+    {
+      "clause_id": "clause_35eb83cfb24a008f4543",
+      "text": "A qualifying fee must be an announced policy which applies generally to all commercial vessels, or a defined subcategory of commercial vessels (e.g., vessels flagged to the US and its allies)."
+    },
+    {
+      "clause_id": "clause_41bfa4b9965edfc736b0",
+      "text": "Otherwise, this market resolves to \u201cNo.\u201d"
+    },
+    {
+      "clause_id": "clause_5655d67bea60e51996fa",
+      "text": "1) An official announcement from the Iranian government that such a fee is being, or will be, implemented."
+    },
+    {
+      "clause_id": "clause_6631d2880c0eb44fb7d6",
+      "text": "A fee is mandatory if, in practice, affected commercial vessels cannot transit or access the Strait of Hormuz without paying it, regardless of whether Iran characterizes the payment as voluntary or a fee for services."
+    },
+    {
+      "clause_id": "clause_751a8d250f6f8f869614",
+      "text": "The resolution sources will be official announcements from the government of Iran and consensus of credible reporting."
+    },
+    {
+      "clause_id": "clause_75aa9148042407560087",
+      "text": "Fees described as tolls, maritime fees, service charges, environmental fees, security fees, insurance charges, etc. will qualify provided they are recognized as mandatory for passage through or access to the Strait of Hormuz by a consensus of credible reporting (e.g., a mandatory insurance fee charged by the Iranian Persian Gulf Strait Authority would qualify)."
+    },
+    {
+      "clause_id": "clause_8bd87ab8d7960e3b1707",
+      "text": "Isolated demanded charges will not qualify."
+    },
+    {
+      "clause_id": "clause_d5ceb1eef836c942ec8f",
+      "text": "2) A consensus of credible reporting that collection of the fee has begun."
+    },
+    {
+      "clause_id": "clause_e4afb5d78b2ac4a54cf7",
+      "text": "Normal port fees, customs duties, sanctions-related costs, or shipping surcharges do not alone qualify."
+    },
+    {
+      "clause_id": "clause_e562c354536d3ab5b1a0",
+      "text": "Both of the following are required to occur prior to the specified date, 11:59 PM ET to satisfy this market\u2019s resolution criteria:"
+    }
+  ],
+  "rule_text_sha256": "2b7218197ca674e41a5151f8101bb253dac891d6a5f48e2a3668868e958002ac",
+  "rule_version": 1,
+  "schema_version": 4,
+  "semantics": {
+    "exclusion_clause_ids": [
+      "clause_1a57f04a06831b3d1950",
+      "clause_8bd87ab8d7960e3b1707",
+      "clause_e4afb5d78b2ac4a54cf7"
+    ],
+    "exclusions": [
+      "Fees charged by Oman, the United Arab Emirates, shipping insurers, private companies, or other non-Iranian entities do not qualify unless charged jointly with Iran, or if Iran directly receives the fee or controls the charging entity.",
+      "Isolated demanded charges will not qualify.",
+      "Normal port fees, customs duties, sanctions-related costs, or shipping surcharges do not alone qualify."
+    ],
+    "predicate": {
+      "action": "officially announces and begins collecting",
+      "comparator": "OCCURRED",
+      "object": "fees, tolls, charges, tariffs, or similar payments from commercial vessels which are mandatory for passage through or access to the Strait of Hormuz",
+      "subjects": [
+        "iranian government"
+      ],
+      "unit": "",
+      "value": ""
+    },
+    "qualifying_clause_ids": [
+      "clause_015c8dc4db2d3b923a45",
+      "clause_35eb83cfb24a008f4543",
+      "clause_5655d67bea60e51996fa",
+      "clause_6631d2880c0eb44fb7d6",
+      "clause_75aa9148042407560087",
+      "clause_d5ceb1eef836c942ec8f"
+    ],
+    "qualifying_conditions": [
+      "This market resolves to \u201cYes\u201d if the Iranian government officially announces and begins collecting fees, tolls, charges, tariffs, or similar payments from commercial vessels which are mandatory for passage through or access to the Strait of Hormuz between market creation and the specified date, 11:59 PM ET.",
+      "A qualifying fee must be an announced policy which applies generally to all commercial vessels, or a defined subcategory of commercial vessels (e.g., vessels flagged to the US and its allies).",
+      "1) An official announcement from the Iranian government that such a fee is being, or will be, implemented.",
+      "A fee is mandatory if, in practice, affected commercial vessels cannot transit or access the Strait of Hormuz without paying it, regardless of whether Iran characterizes the payment as voluntary or a fee for services.",
+      "Fees described as tolls, maritime fees, service charges, environmental fees, security fees, insurance charges, etc. will qualify provided they are recognized as mandatory for passage through or access to the Strait of Hormuz by a consensus of credible reporting (e.g., a mandatory insurance fee charged by the Iranian Persian Gulf Strait Authority would qualify).",
+      "2) A consensus of credible reporting that collection of the fee has begun."
+    ],
+    "resolution_policy": {
+      "cancellation_behavior": "not specified by verbatim rules",
+      "cancellation_clause_ids": [],
+      "independent_confirmation_sources": 2,
+      "postponement_behavior": "not specified by verbatim rules",
+      "postponement_clause_ids": [],
+      "terminal_no": [
+        "Otherwise, this market resolves to \u201cNo.\u201d"
+      ],
+      "terminal_no_clause_ids": [
+        "clause_41bfa4b9965edfc736b0"
+      ],
+      "terminal_no_monotonic": false,
+      "terminal_yes": [
+        "This market resolves to \u201cYes\u201d if the Iranian government officially announces and begins collecting fees, tolls, charges, tariffs, or similar payments from commercial vessels which are mandatory for passage through or access to the Strait of Hormuz between market creation and the specified date, 11:59 PM ET.",
+        "1) An official announcement from the Iranian government that such a fee is being, or will be, implemented.",
+        "2) A consensus of credible reporting that collection of the fee has begun."
+      ],
+      "terminal_yes_clause_ids": [
+        "clause_015c8dc4db2d3b923a45",
+        "clause_5655d67bea60e51996fa",
+        "clause_d5ceb1eef836c942ec8f"
+      ],
+      "terminal_yes_monotonic": true
+    },
+    "rule_family": "OCCURRENCE_BEFORE_DEADLINE",
+    "source_policy": {
+      "fallback_condition": "",
+      "fallback_requirement_ids": [],
+      "policy_type": "ALL_OF",
+      "primary_requirement_ids": [],
+      "quorum": 2,
+      "requirement_ids": [
+        "source_9ed1a8639cf39e098dce",
+        "source_dbfc603e9e2e1632d7bd"
+      ]
+    },
+    "source_requirements": [
+      {
+        "clause_ids": [
+          "clause_751a8d250f6f8f869614",
+          "clause_75aa9148042407560087",
+          "clause_d5ceb1eef836c942ec8f"
+        ],
+        "rationale": "consensus of credible reporting is required to establish that collection of the fee has begun and that described fees are mandatory for passage through or access to the strait of hormuz.",
+        "required": true,
+        "requirement_id": "source_dbfc603e9e2e1632d7bd",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "consensus of credible reporting"
+      },
+      {
+        "clause_ids": [
+          "clause_5655d67bea60e51996fa",
+          "clause_751a8d250f6f8f869614"
+        ],
+        "rationale": "an official announcement from the iranian government is one of the two required resolution criteria and is named as a resolution source.",
+        "required": true,
+        "requirement_id": "source_9ed1a8639cf39e098dce",
+        "roles": [
+          "SETTLEMENT"
+        ],
+        "source_ref": "government of iran"
+      }
+    ],
+    "subjective_clause_ids": [],
+    "subjective_terms": [],
+    "window": {
+      "end_iso": "2027-01-01T04:59:00Z",
+      "start_iso": "",
+      "timezone": "America/New_York"
+    }
+  }
+}

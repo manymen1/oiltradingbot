@@ -417,3 +417,27 @@ allowlist. A successful paper soak does not automatically promote anything.
   unrelated raw rows cannot be claimed by semantics.
 - The full unified suite passes and the host restarts into the maintained,
   paper-only configuration with a clean tracked worktree.
+
+## Implementation Checkpoint — 2026-08-11
+
+The priority cohort now has current semantic artifacts for all 13 requested
+markets: 13 RuleSpecs and 13 SourcePlans. Twelve markets are paper-eligible;
+the expired Iran-against-a-Gulf-state daily market is retained as `CLOSED` so
+its history remains visible without consuming active execution capacity.
+
+The evaluator now supports the required status-at-deadline, independent daily,
+duration, and numeric-threshold behavior. The IMF PortWatch adapter preserves
+revision-aware snapshots, evaluates exact local calendar-day windows, freezes
+listed-date observations, applies the 14-calendar-day publication grace period,
+and fails closed when the historical snapshot needed for an expired outcome was
+not captured. A clean Bab el-Mandeb canary produced three tracking claims for
+the open deadlines and no terminal or paper execution decisions; its seven
+expired legs correctly remained ambiguous because historical snapshots were
+unavailable.
+
+Shared-book recording and storage maintenance are implemented separately from
+semantic eligibility. The maintained configuration records at most 200
+contexts, gives monitored contexts priority, remains `dry_run`, and keeps the
+live-confirmation family allowlist empty. Deployment verification must still
+confirm prompt WebSocket capture, increasing book-event rows, recorder health,
+and a sane shard count after the supervised service restart.

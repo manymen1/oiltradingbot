@@ -869,6 +869,20 @@ class RuleSpec:
             DEADLINE_AUTHORITY_POLICIES,
             "deadline_authority_policy",
         )
+        topology = str(
+            getattr(context, "outcome_topology", "") or ""
+        ).strip().upper()
+        context_outcomes = list(context.outcomes)
+        if topology in {"EXCLUSIVE_ONE_OF_N", "TOP_K"}:
+            # Gamma grouped events can retain large numbers of inactive or
+            # already-resolved placeholder child markets. They are useful to
+            # raw capture, but they are not candidates in the current
+            # exclusive semantic instrument.
+            context_outcomes = [
+                item
+                for item in context_outcomes
+                if item.active and not item.closed
+            ]
         outcomes = [
             OutcomeBinding(
                 name=item.name,
@@ -909,11 +923,8 @@ class RuleSpec:
                     item.start_iso or context.discovered_at
                 ),
             )
-            for item in context.outcomes
+            for item in context_outcomes
         ]
-        topology = str(
-            getattr(context, "outcome_topology", "") or ""
-        ).strip().upper()
         if topology == "UNCLASSIFIED":
             if context.kind == "binary":
                 topology = "SINGLE_BINARY"

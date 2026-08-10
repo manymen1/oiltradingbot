@@ -126,6 +126,52 @@ def chokepoint_reading(portname: str, *, fetcher: Fetcher | None = None, limit: 
     )
 
 
+def chokepoint_series(
+    portname: str,
+    *,
+    fetcher: Fetcher | None = None,
+    limit: int = 500,
+) -> list[tuple[str, int]]:
+    """Fetch the published daily series, most-recent first.
+
+    Rule evidence needs substantially more history than the estimator's
+    current-reading helper.  Keeping this fetch path here also ensures both
+    consumers parse the official ArcGIS dataset identically.
+    """
+
+    fetcher = fetcher or _http_fetch
+    return parse_features(fetcher(build_query_url(portname, limit=limit)))
+
+
+def moving_average_series(
+    rows: list[tuple[str, int]],
+    *,
+    window_days: int = 7,
+) -> list[tuple[str, float]]:
+    """Return exact trailing calendar-day averages, oldest first.
+
+    A missing calendar date does not silently turn a seven-day moving average
+    into an average over a longer interval.  PortWatch normally publishes one
+    observation per day; gaps therefore remain unavailable evidence.
+    """
+
+    from datetime import date as _date, timedelta
+
+    values = {stamp: int(value) for stamp, value in rows}
+    output: list[tuple[str, float]] = []
+    for stamp in sorted(values):
+        end = _date.fromisoformat(stamp)
+        dates = [
+            (end - timedelta(days=offset)).isoformat()
+            for offset in range(window_days - 1, -1, -1)
+        ]
+        if not all(item in values for item in dates):
+            continue
+        average = sum(values[item] for item in dates) / window_days
+        output.append((stamp, round(average, 6)))
+    return output
+
+
 def match_chokepoint(text: str) -> str | None:
     """Map a market question/rule text to a PortWatch portname, or None."""
     lowered = text.lower()
