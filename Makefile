@@ -6,6 +6,8 @@
 CONFIG ?= configs/geopolitics/discovery.yaml
 GEO := bin/geo
 PY := .venv/bin/python
+TSX := ./node_modules/.bin/tsx
+TSC := ./node_modules/.bin/tsc
 
 .DEFAULT_GOAL := help
 
@@ -23,8 +25,16 @@ setup: ## create venv, install deps, seed .env
 	@command -v claude >/dev/null 2>&1 || echo ">>> claude CLI not found -- classification uses your Claude subscription via it: npm install -g @anthropic-ai/claude-code && claude login"
 	@echo "setup complete. next: edit .env, then 'make paper'"
 
-test: ## run the full test suite
-	$(PY) -m pytest -q tests/
+test: test-python test-typescript typecheck ## run all Python/TypeScript tests and typecheck
+
+test-python: ## run Python tests with WSL-safe temporary files
+	TMPDIR=/tmp TEMP=/tmp $(PY) -m pytest -q -s tests/
+
+test-typescript: ## run every TypeScript test directly under WSL
+	TMPDIR=/tmp TEMP=/tmp $(TSX) --test test/*.test.ts
+
+typecheck: ## typecheck the TypeScript project without emitting files
+	TMPDIR=/tmp TEMP=/tmp $(TSC) --noEmit
 
 # ---- running (paper is the default posture) ----
 
@@ -165,4 +175,4 @@ eval: ## adversarial regression cases; nonzero exit = the change regressed
 backup: ## snapshot data/ (ledger, journals, calibration, acks)
 	deploy/backup.sh
 
-.PHONY: help setup test paper paper-once live halt watch-only arm status funnel priority economics profit-funnel calibration semantic-coverage compile-rules plan-sources grade-markets inspect-rule validate-rule prepare-rule-review import-reviewed-rule rule-market-once inspect-rule-market forward-completeness build-forward-timeline reconcile latency trades replay replay-rule-market promotion-report eval backup
+.PHONY: help setup test test-python test-typescript typecheck paper paper-once live halt watch-only arm status funnel priority economics profit-funnel calibration semantic-coverage compile-rules plan-sources grade-markets inspect-rule validate-rule prepare-rule-review import-reviewed-rule rule-market-once inspect-rule-market forward-completeness build-forward-timeline reconcile latency trades replay replay-rule-market promotion-report eval backup

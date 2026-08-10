@@ -496,13 +496,31 @@ class ForwardRecorderStore:
                 """,
                 (BOOK_CAPTURE_BINDING,),
             ).fetchone()
+        database_size_bytes = self.database_size_bytes()
         return {
             "capture_bindings": int(bindings["n"] or 0),
             "active_capture_sessions": int(sessions["n"] or 0),
             "book_events": int(books["n"] or 0),
             "trade_prints": int(trades["n"] or 0),
             "latest_book_received_at": str(books["latest"] or ""),
+            "database_size_bytes": database_size_bytes,
+            "database_size_gib": round(
+                database_size_bytes / (1024**3),
+                3,
+            ),
         }
+
+    def database_size_bytes(self) -> int:
+        """Return main database plus live WAL/SHM bytes without opening it."""
+        return sum(
+            candidate.stat().st_size
+            for candidate in (
+                self.path,
+                Path(f"{self.path}-wal"),
+                Path(f"{self.path}-shm"),
+            )
+            if candidate.exists()
+        )
 
     def close_active_capture_sessions(
         self,
@@ -1906,6 +1924,11 @@ class ForwardBookService:
         self._seed_in_progress = False
         self._seed_max_pending = 0
         self._storage_errors = 0
+        self._storage_dropped_events = 0
+        self._storage_warning = False
+        self._storage_paused = False
+        self._storage_size_bytes = 0
+        self._last_storage_check_monotonic = 0.0
         self._status_path = (
             config.data_dir / "forward_books_status.json"
         )
@@ -2038,6 +2061,10 @@ class ForwardBookService:
 
     def status(self) -> dict[str, Any]:
         capture = self.store.capture_status()
+        self._refresh_storage_pressure(
+            database_size_bytes=int(capture["database_size_bytes"]),
+            force=True,
+        )
         now_monotonic = time.monotonic()
         with self._lock:
             connections = [
@@ -2069,6 +2096,15 @@ class ForwardBookService:
                 "rest_seed_errors": self._seed_errors,
                 "rest_seed_max_pending": self._seed_max_pending,
                 "storage_errors": self._storage_errors,
+                "storage_dropped_events": self._storage_dropped_events,
+                "storage_warning": self._storage_warning,
+                "storage_paused": self._storage_paused,
+                "storage_warning_gib": (
+                    self.recorder_config.storage_warning_gib
+                ),
+                "storage_hard_limit_gib": (
+                    self.recorder_config.storage_hard_limit_gib
+                ),
                 "streaming": self._streaming,
                 "last_sync_at": self._last_sync_at,
             }
@@ -2123,6 +2159,16 @@ class ForwardBookService:
             if int(status["storage_errors"]) > 0:
                 health_blockers.append(
                     f"storage_errors:{status['storage_errors']}"
+                )
+            if bool(status["storage_paused"]):
+                health_blockers.append(
+                    "storage_hard_limit_reached:"
+                    f"{capture['database_size_gib']}GiB"
+                )
+            elif bool(status["storage_warning"]):
+                health_blockers.append(
+                    "storage_warning:"
+                    f"{capture['database_size_gib']}GiB"
                 )
         soak = {
             "healthy": not health_blockers,
@@ -2422,6 +2468,10 @@ class ForwardBookService:
         *,
         generation: int,
     ) -> None:
+        if not self._storage_write_allowed():
+            with self._lock:
+                self._storage_dropped_events += 1
+            return
         event_type = str(record.get("event_type") or "")
         token_id = str(record.get("token_id") or "")
         with self._lock:
@@ -2549,6 +2599,10 @@ class ForwardBookService:
         payload: dict[str, Any],
         generation: int,
     ) -> None:
+        if not self._storage_write_allowed():
+            with self._lock:
+                self._storage_dropped_events += 1
+            return
         with self._lock:
             if generation != self._generation:
                 return
@@ -2569,6 +2623,50 @@ class ForwardBookService:
                 event_type=event_type,
                 token_id=token_id,
                 error=exc,
+            )
+
+    def _storage_write_allowed(self) -> bool:
+        self._refresh_storage_pressure()
+        with self._lock:
+            return not self._storage_paused
+
+    def _refresh_storage_pressure(
+        self,
+        *,
+        database_size_bytes: int | None = None,
+        force: bool = False,
+    ) -> None:
+        now_monotonic = time.monotonic()
+        with self._lock:
+            if (
+                not force
+                and now_monotonic - self._last_storage_check_monotonic
+                < self.recorder_config.storage_check_seconds
+            ):
+                return
+        if database_size_bytes is None:
+            database_size_bytes = self.store.database_size_bytes()
+        gib = database_size_bytes / (1024**3)
+        warning_limit = self.recorder_config.storage_warning_gib
+        hard_limit = self.recorder_config.storage_hard_limit_gib
+        warning = warning_limit > 0 and gib >= warning_limit
+        paused = hard_limit > 0 and gib >= hard_limit
+        with self._lock:
+            previous_paused = self._storage_paused
+            self._storage_size_bytes = database_size_bytes
+            self._storage_warning = warning
+            self._storage_paused = paused
+            self._last_storage_check_monotonic = now_monotonic
+        if paused != previous_paused:
+            log_event(
+                (
+                    "forward_book_storage_paused"
+                    if paused
+                    else "forward_book_storage_resumed"
+                ),
+                database_size_bytes=database_size_bytes,
+                database_size_gib=round(gib, 3),
+                storage_hard_limit_gib=hard_limit,
             )
 
     def _note_storage_error(

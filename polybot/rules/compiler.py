@@ -167,7 +167,6 @@ _SEMANTIC_SCHEMA: dict[str, Any] = {
                     "roles": {
                         "type": "array",
                         "minItems": 1,
-                        "uniqueItems": True,
                         "items": {
                             "type": "string",
                             "enum": sorted(SOURCE_ROLES),
@@ -1029,7 +1028,18 @@ def compilation_prompt(
         "Select qualifying, exclusion, subjective, cancellation, postponement, "
         "and terminal clause IDs only from the supplied catalog. The system "
         "replaces all corresponding prose fields with exact catalog text; do "
-        "not invent clause IDs. Give each source requirement a unique temporary "
+        "not invent clause IDs. A structural list heading ending in a colon is "
+        "not itself a condition or exclusion; select the substantive child "
+        "clauses instead. An exclusion is an action or circumstance the rules "
+        "explicitly say does not qualify. A subjective clause must leave a "
+        "material term to oracle judgment; source-conflict mechanics, a named "
+        "consensus standard, or a geographic boundary definition are not by "
+        "themselves subjective. Set a terminal monotonic flag true only if, "
+        "once that terminal condition becomes logically satisfied during the "
+        "rule window, later permitted events cannot undo it. In particular, a "
+        "NO condition for an occurrence-before-deadline or duration rule is "
+        "not monotonic before its window irreversibly closes. Give each source "
+        "requirement a unique temporary "
         "ID and reference those IDs from one closed source_policy. Source "
         "rationales are explanatory; source_ref, roles, required, policy type, "
         "branches, fallback condition, and quorum are decision-critical.\n"
@@ -1320,6 +1330,19 @@ def _bind_semantic_payload(
             )
         if len(ids) != len(set(ids)):
             raise ValueError(f"{field} resolves to duplicate rule clauses")
+        structural = [
+            item
+            for item in ids
+            if _is_structural_rule_clause(catalog[item])
+        ]
+        if structural:
+            ids = [item for item in ids if item not in structural]
+            log_event(
+                "rule_compiler_structural_clause_removed",
+                market_id=context.market_id,
+                field=field,
+                clause_ids=structural,
+            )
         return ids, [catalog[item] for item in ids]
 
     qualifying_ids, qualifying = bind_ids(
@@ -1438,6 +1461,13 @@ def _bind_semantic_payload(
             "source_policy must reference every source requirement exactly"
         )
     return payload
+
+
+def _is_structural_rule_clause(text: str) -> bool:
+    """Return true for catalog entries that only introduce a following list."""
+
+    normalized = " ".join(text.split())
+    return bool(normalized) and normalized.endswith(":")
 
 
 def _critical_consensus_payload(

@@ -309,10 +309,16 @@ forward_recorder:
   # is permanently missing from the research record -- including the
   # MONITOR_ONLY and ungraded markets whose gradings the data is meant to
   # test. Recording confers no execution permission and never shrinks the
-  # monitored set. The 200-context cap keeps the current universe near 48
-  # connections (200 tokens each) while never displacing monitored markets.
+  # monitored set. The 200-context cap currently uses about 27 connections
+  # while never displacing monitored markets.
   record_all_contexts: true
   max_recorded_markets: 200
+  # Fail loudly before this append-only evidence store can consume the host.
+  # At the hard limit sockets stay connected but database writes pause until
+  # an operator rotates or archives the store; status records every drop.
+  storage_warning_gib: 70.0
+  storage_hard_limit_gib: 80.0
+  storage_check_seconds: 5.0
   quote_survival_horizons_ms:
     - 100
     - 250

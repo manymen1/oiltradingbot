@@ -1787,6 +1787,7 @@ test("ladder direction rejects ambiguous down-arrow reaches-or-exceeds legs", ()
 
 test("valuation discovery stores rule text, executable quotes, and crawl coverage", async () => {
   const previousFetch = globalThis.fetch;
+  let crawlUrl = "";
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("/events/slug/test-event")) {
@@ -1806,13 +1807,17 @@ test("valuation discovery stores rule text, executable quotes, and crawl coverag
         markets: [marketFixture("Will Epic Games have the highest private market valuation on July 31?", "epic-ranking")],
       });
     }
-    if (url.includes("gamma-api.polymarket.com/events?")) {
-      return jsonResponse(Array.from({ length: 20 }, (_, index) => ({
-        slug: `non-valuation-${index}`,
-        title: `Non valuation event ${index}`,
-        description: "Unrelated market",
-        markets: [],
-      })));
+    if (url.includes("gamma-api.polymarket.com/events/keyset?")) {
+      crawlUrl = url;
+      return jsonResponse({
+        events: Array.from({ length: 20 }, (_, index) => ({
+          slug: `non-valuation-${index}`,
+          title: `Non valuation event ${index}`,
+          description: "Unrelated market",
+          markets: [],
+        })),
+        next_cursor: "page-2",
+      });
     }
     if (url.includes("token_id=yes-token")) {
       return jsonResponse({
@@ -1855,6 +1860,9 @@ test("valuation discovery stores rule text, executable quotes, and crawl coverag
     assert.equal(report.gammaEventsScanned, 20);
     assert.equal(report.gammaCrawlExhausted, false);
     assert.equal(report.maxPagesReached, true);
+    assert.equal(crawlUrl.includes("/events/keyset?"), true);
+    assert.equal(crawlUrl.includes("offset="), false);
+    assert.equal(crawlUrl.includes("after_cursor="), false);
     assert.equal(report.coverage.configuredEventCount, 2);
     assert.equal(report.coverage.configuredThresholdEventCount, 1);
     assert.equal(report.coverage.configuredSeedFetchFailures, 0);

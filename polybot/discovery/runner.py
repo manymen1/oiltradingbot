@@ -1190,6 +1190,39 @@ def fleet_status_command(config_path: Path) -> int:
         except Exception as exc:
             forward_books_status["storage_error"] = str(exc)
 
+    last_sync_raw = fleet_state.get("updated_at")
+    last_sync_age_seconds: float | None = None
+    if isinstance(last_sync_raw, str) and last_sync_raw:
+        try:
+            last_sync_at = datetime.fromisoformat(
+                last_sync_raw.replace("Z", "+00:00")
+            )
+            if last_sync_at.tzinfo is None:
+                last_sync_at = last_sync_at.replace(tzinfo=timezone.utc)
+            last_sync_age_seconds = max(
+                0.0,
+                (datetime.now(timezone.utc) - last_sync_at).total_seconds(),
+            )
+        except ValueError:
+            last_sync_age_seconds = None
+    stale_after_seconds = max(
+        300.0,
+        config.schedule.interval_minutes * 120.0,
+    )
+    fleet_status_stale = (
+        last_sync_age_seconds is None
+        or last_sync_age_seconds > stale_after_seconds
+    )
+    discovery_cycle_status = fleet_state.get("discovery_cycle")
+    if not isinstance(discovery_cycle_status, dict):
+        discovery_cycle_status = {
+            "state": "UNKNOWN",
+            "started_at": None,
+            "completed_at": None,
+            "last_completed_at": None,
+            "error": "status_unavailable",
+        }
+
     status = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "global_mode": global_mode,
@@ -1197,9 +1230,22 @@ def fleet_status_command(config_path: Path) -> int:
         "fleet": {
             "running": fleet_state.get("running", []),
             "desired": fleet_state.get("desired", []),
-            "last_sync": fleet_state.get("updated_at"),
+            "last_sync": last_sync_raw,
+            "last_sync_age_seconds": (
+                round(last_sync_age_seconds, 1)
+                if last_sync_age_seconds is not None
+                else None
+            ),
+            "status_stale": fleet_status_stale,
+            "stale_after_seconds": stale_after_seconds,
+            "snapshot_warning": (
+                "running_and_desired_are_stale_snapshots"
+                if fleet_status_stale
+                else ""
+            ),
             "live": fleet_state.get("live"),
         },
+        "discovery_cycle": discovery_cycle_status,
         "central_feed": central_feed_status,
         "forward_books": forward_books_status,
         "classifier_budget": classifier_budget_status,

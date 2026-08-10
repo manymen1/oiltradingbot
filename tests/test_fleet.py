@@ -211,6 +211,8 @@ def test_fleet_once_spawns_a_bot_per_eligible_market(tmp_path, monkeypatch) -> N
         "reason": "forward_recorder.enabled=false",
         "shared": True,
     }
+    assert state["discovery_cycle"]["state"] == "COMPLETE"
+    assert state["discovery_cycle"]["last_completed_at"]
     assert all(process.terminated for process in spawner.processes)
     assert [m for m, _f in notifier.messages if "bot started" in m]
 
@@ -631,6 +633,11 @@ def test_fleet_status_reports_positions_ledger_and_scan(tmp_path, monkeypatch, c
     )
     assert "semantic_coverage" in status
     assert status["semantic_coverage"]["contexts"] == 1
+    assert status["fleet"]["status_stale"] is True
+    assert status["fleet"]["snapshot_warning"] == (
+        "running_and_desired_are_stale_snapshots"
+    )
+    assert status["discovery_cycle"]["state"] == "UNKNOWN"
     assert status["rule_engine"]["deadline_authority"] == {
         "policy": "STRICT_GAMMA_MATCH_V1",
         "market_ids": [],
@@ -700,6 +707,12 @@ forward_recorder:
     )
 
     def fake_cycle(*_args, **_kwargs):
+        state = json.loads(
+            (tmp_path / "data" / "fleet_state.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert state["discovery_cycle"]["state"] == "RUNNING"
         calls.append("discovery")
 
     monkeypatch.setattr(
@@ -724,6 +737,8 @@ forward_recorder:
         (tmp_path / "data" / "fleet_state.json").read_text(encoding="utf-8")
     )
     assert state["forward_books"]["enabled"] is True
+    assert state["discovery_cycle"]["state"] == "COMPLETE"
+    assert state["discovery_cycle"]["last_completed_at"]
 
 
 def test_fleet_emits_no_side_config_when_no_edge_is_best(tmp_path, monkeypatch) -> None:

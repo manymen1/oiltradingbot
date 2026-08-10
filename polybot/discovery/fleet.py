@@ -166,6 +166,41 @@ def _publish_startup_service_status(
     _atomic_json_write(path, {**current, key: status})
 
 
+def _publish_discovery_cycle_status(
+    config: DiscoveryConfig,
+    *,
+    state: str,
+    started_at: str,
+    completed_at: str | None = None,
+    error: str = "",
+) -> dict[str, Any]:
+    """Publish cycle progress without pretending fleet reconciliation ran."""
+    path = config.data_dir / "fleet_state.json"
+    current: dict[str, Any] = {}
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                current = raw
+        except (OSError, json.JSONDecodeError):
+            current = {}
+    previous = current.get("discovery_cycle")
+    previous = previous if isinstance(previous, dict) else {}
+    status = {
+        "state": state,
+        "started_at": started_at,
+        "completed_at": completed_at,
+        "last_completed_at": (
+            completed_at
+            if state == "COMPLETE" and completed_at
+            else previous.get("last_completed_at")
+        ),
+        "error": error[:500],
+    }
+    _publish_startup_service_status(config, "discovery_cycle", status)
+    return status
+
+
 def _central_feed_disabled_status() -> dict[str, Any]:
     return {
         "enabled": False,
@@ -884,10 +919,30 @@ def run_fleet_command(
         )
 
         while True:
+            cycle_started_at = datetime.now(timezone.utc).isoformat()
+            discovery_cycle_status = _publish_discovery_cycle_status(
+                config,
+                state="RUNNING",
+                started_at=cycle_started_at,
+            )
             try:
                 _run_discovery_cycle(config_path, config, events_fetch=events_fetch, quotes=quotes, analyzer=analyzer, notifier=notifier, markets_fetch=markets_fetch)
             except Exception as exc:
                 log_event("fleet_discovery_cycle_error", error=str(exc))
+                discovery_cycle_status = _publish_discovery_cycle_status(
+                    config,
+                    state="FAILED",
+                    started_at=cycle_started_at,
+                    completed_at=datetime.now(timezone.utc).isoformat(),
+                    error=str(exc),
+                )
+            else:
+                discovery_cycle_status = _publish_discovery_cycle_status(
+                    config,
+                    state="COMPLETE",
+                    started_at=cycle_started_at,
+                    completed_at=datetime.now(timezone.utc).isoformat(),
+                )
             cycle_contexts = store.all_contexts()
             desired_contexts = manager.desired_markets(cycle_contexts)
             if forward_book_service is not None:
@@ -932,6 +987,7 @@ def run_fleet_command(
                         _forward_books_disabled_status(config)
                     )
                 summary["classifier_budget"] = _classifier_budget_status(config)
+                summary["discovery_cycle"] = discovery_cycle_status
                 _atomic_json_write(config.data_dir / "fleet_state.json", {**summary, "live": live, "updated_at": datetime.now(timezone.utc).isoformat()})
                 print(json.dumps(summary, indent=2, sort_keys=True))
                 for market_id in summary["started"]:

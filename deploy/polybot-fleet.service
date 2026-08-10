@@ -17,7 +17,10 @@ WorkingDirectory=/opt/anthropic-exec-bot
 # keys) live in an env file readable only by the service user -- never in
 # the repo or the unit file.
 EnvironmentFile=/etc/polybot/env
-ExecStart=/opt/anthropic-exec-bot/.venv/bin/python -m polybot.geopolitics run-fleet --config configs/geopolitics/discovery.yaml --live
+# Paper-only is the deploy default. Live execution must be an explicit,
+# operator-reviewed override in the installed unit after the configured gates,
+# acknowledgements, and soak checks have passed.
+ExecStart=/opt/anthropic-exec-bot/.venv/bin/python -m polybot.geopolitics run-fleet --config configs/geopolitics/discovery.yaml
 Restart=always
 RestartSec=30
 # The bots' own safety machinery (operator gate, process locks, journals)

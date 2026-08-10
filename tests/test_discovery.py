@@ -227,6 +227,34 @@ def test_exact_rule_deadline_detects_gamma_timezone_shift() -> None:
     assert matching.outcomes[0].deadline_consistency == "MATCH"
 
 
+def test_listed_date_inherits_clock_from_delayed_publication_clause() -> None:
+    event = _grouped_event()
+    event["title"] = "Bab el-Mandeb Strait effectively closed by...?"
+    market = event["markets"][0]
+    market["groupItemTitle"] = "September 30"
+    market["question"] = (
+        "Bab el-Mandeb Strait effectively closed by September 30?"
+    )
+    market["endDate"] = "2026-04-30T00:00:00Z"
+    market["description"] = (
+        "This market resolves Yes if IMF PortWatch publishes a value at or "
+        "below 10 for any date between market creation and the listed date. "
+        "Otherwise it resolves No. If no data has been published for the "
+        "listed date within 14 calendar days (ET) after that date, this market "
+        "will resolve based on the data published up to that point."
+    )
+    event["markets"] = [market]
+
+    context = context_from_event(event)
+
+    assert context is not None
+    outcome = context.outcomes[0]
+    assert outcome.rule_deadline_iso == "2026-09-30T23:59:00-04:00"
+    assert outcome.deadline_timezone == "America/New_York"
+    assert outcome.post_deadline_window == "P14D"
+    assert outcome.deadline_consistency == "MISMATCH"
+
+
 def test_rule_deadline_explicit_year_overrides_leg_label() -> None:
     event = _binary_event(
         description=(

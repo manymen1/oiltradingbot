@@ -34,6 +34,13 @@ def _envelope(payload: dict) -> str:
     )
 
 
+def test_codex_output_schema_uses_supported_strict_json_keywords() -> None:
+    # The Responses structured-output dialect rejects uniqueItems even though
+    # it is valid general JSON Schema. Runtime validation still enforces role
+    # uniqueness after the model returns.
+    assert '"uniqueItems"' not in json.dumps(_SEMANTIC_SCHEMA)
+
+
 def test_two_pass_compiler_binds_instrument_and_caches(tmp_path: Path) -> None:
     context = context_for_case(_golden_rules()[0], strong_analysis=True)
     semantic = fixture_semantics(context).as_dict()
@@ -456,6 +463,9 @@ def test_compilation_prompt_and_schema_state_source_rules() -> None:
     assert "Copy exact rule Select" not in prompt
     assert "one source requirement per distinct organisation" in prompt
     assert "ANY_OF uses quorum 1" in prompt
+    assert "structural list heading ending in a colon" in prompt
+    assert "not monotonic before its window irreversibly closes" in prompt
+    assert "geographic boundary definition are not by themselves subjective" in prompt
 
     sources = _SEMANTIC_SCHEMA["properties"]["source_requirements"]
     item = sources["items"]

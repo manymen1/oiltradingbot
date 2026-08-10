@@ -2,7 +2,7 @@ import { fetchGammaEvent, parseGammaEvent, parseValuationLegs } from "./marketPa
 import { fetchBookQuote } from "./orderbookSource.ts";
 import type { EventConfig, GammaEvent, StrategyConfig, ValuationLeg } from "./signalTypes.ts";
 
-const GAMMA_EVENTS_URL = "https://gamma-api.polymarket.com/events";
+const GAMMA_EVENTS_URL = "https://gamma-api.polymarket.com/events/keyset";
 const VALUATION_EVENT_RE = /\bvaluation\b.*\bhit\b.*\bby\b/i;
 
 export type DiscoveredValuationEvent = {
@@ -94,24 +94,29 @@ export async function discoverValuationUniverse(input: {
   if (input.crawlGamma !== false) {
     const maxPages = Math.max(1, input.maxPages ?? 50);
     const pageSize = Math.max(20, Math.min(100, input.pageSize ?? 100));
+    let cursor: string | undefined;
+    const seenCursors = new Set<string>();
     for (let page = 0; page < maxPages; page += 1) {
       try {
-        const rawEvents = await fetchGammaEventsPage(page * pageSize, pageSize);
+        const result = await fetchGammaEventsPage(cursor, pageSize);
+        const rawEvents = result.events;
         pagesScanned += 1;
         eventsScanned += rawEvents.length;
-        if (!rawEvents.length) {
-          gammaCrawlExhausted = true;
-          break;
-        }
         for (const raw of rawEvents) {
           const event = parseGammaEvent(raw);
           if (!isValuationEvent(event) || events.has(event.slug)) continue;
           events.set(event.slug, { event, source: "gamma_crawl", config: inferEventConfig(event) });
         }
-        if (rawEvents.length < pageSize) {
+        if (!result.nextCursor) {
           gammaCrawlExhausted = true;
           break;
         }
+        if (result.nextCursor === cursor || seenCursors.has(result.nextCursor)) {
+          accessIssues.push(`gamma_crawl_repeated_cursor:page_${page}:${result.nextCursor}`);
+          break;
+        }
+        seenCursors.add(result.nextCursor);
+        cursor = result.nextCursor;
         if (page === maxPages - 1) maxPagesReached = true;
       } catch (error) {
         accessIssues.push(`gamma_crawl_failed:page_${page}:${errorMessage(error)}`);
@@ -156,8 +161,18 @@ export async function discoverValuationUniverse(input: {
   };
 }
 
-async function fetchGammaEventsPage(offset: number, limit: number): Promise<unknown[]> {
-  const url = `${GAMMA_EVENTS_URL}?active=true&closed=false&offset=${offset}&limit=${limit}`;
+async function fetchGammaEventsPage(
+  afterCursor: string | undefined,
+  limit: number,
+): Promise<{ events: unknown[]; nextCursor?: string }> {
+  const params = new URLSearchParams({
+    active: "true",
+    closed: "false",
+    archived: "false",
+    limit: String(limit),
+  });
+  if (afterCursor) params.set("after_cursor", afterCursor);
+  const url = `${GAMMA_EVENTS_URL}?${params.toString()}`;
   const response = await fetch(url, {
     headers: {
       accept: "application/json",
@@ -166,7 +181,20 @@ async function fetchGammaEventsPage(offset: number, limit: number): Promise<unkn
   });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   const raw = await response.json() as unknown;
-  return Array.isArray(raw) ? raw : [];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("malformed keyset response");
+  }
+  const page = raw as { events?: unknown; next_cursor?: unknown };
+  if (!Array.isArray(page.events)) {
+    throw new Error("malformed keyset events");
+  }
+  if (page.next_cursor !== undefined && typeof page.next_cursor !== "string") {
+    throw new Error("malformed keyset next_cursor");
+  }
+  return {
+    events: page.events,
+    nextCursor: page.next_cursor || undefined,
+  };
 }
 
 async function discoveredEventRow(input: {

@@ -518,6 +518,13 @@ class ForwardRecorderConfig:
     health_stale_after_seconds: float = 60.0
     health_growth_window_seconds: float = 60.0
     health_alert_cooldown_seconds: float = 300.0
+    # Storage pressure is reported before writes are paused. Zero disables a
+    # threshold for backwards-compatible test and local configurations. The
+    # hard limit is checked by the shared recorder without stopping its
+    # sockets, so capture can resume after an operator rotates the database.
+    storage_warning_gib: float = 0.0
+    storage_hard_limit_gib: float = 0.0
+    storage_check_seconds: float = 5.0
     # Book recording normally follows the fleet's monitored set, which is
     # filtered to TRADEABLE_STATES. That couples the recorded universe to
     # grading thresholds that are themselves untested hypotheses, so a
@@ -1332,12 +1339,32 @@ def _validate_discovery_config(config: DiscoveryConfig) -> None:
         "health_stale_after_seconds",
         "health_growth_window_seconds",
         "health_alert_cooldown_seconds",
+        "storage_check_seconds",
     ):
         require_number(
             getattr(recorder, field_name),
             f"forward_recorder.{field_name}",
             minimum=0,
             minimum_exclusive=True,
+        )
+    for field_name in (
+        "storage_warning_gib",
+        "storage_hard_limit_gib",
+    ):
+        require_number(
+            getattr(recorder, field_name),
+            f"forward_recorder.{field_name}",
+            minimum=0,
+        )
+    if (
+        recorder.storage_warning_gib > 0
+        and recorder.storage_hard_limit_gib > 0
+        and recorder.storage_warning_gib
+        >= recorder.storage_hard_limit_gib
+    ):
+        raise ValueError(
+            "forward_recorder.storage_warning_gib must be less than "
+            "storage_hard_limit_gib"
         )
     if recorder.enabled and not config.rule_runner.enabled:
         raise ValueError(

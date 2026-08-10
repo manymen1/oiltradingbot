@@ -554,6 +554,17 @@ _DEADLINE_TIMEZONE = re.compile(
     r"eastern\s+time\s*\(et\)|et|utc)(?=\W|$)",
     re.IGNORECASE,
 )
+# Some data-publisher markets define the cutoff only as the named/listed
+# calendar date, then bind that date's clock in the delayed-publication clause
+# (for example, "within 14 calendar days (ET) after that date").  Gamma can
+# carry a completely unrelated timestamp for one ladder leg, so retaining the
+# rule clock here is necessary to fail closed with an auditable mismatch.
+_LISTED_DATE_DELAY_TIMEZONE = re.compile(
+    r"\b(?:specified|listed|end)\s+date"
+    r"[^.\n]{0,180}?calendar\s+days?\s*\("
+    r"(et|irst|ast|utc)\)\s+(?:after|from)\s+(?:that|the)\s+date\b",
+    re.IGNORECASE,
+)
 _POST_DEADLINE_PATTERNS = (
     re.compile(
         r"remain open[^.\n]{0,180}?"
@@ -635,6 +646,10 @@ def _deadline_contract(
         timezone_name = _timezone_from_groups(time_match.groups())
     if not timezone_name and timezone_match is not None:
         timezone_name = _timezone_name(timezone_match.group(1))
+    if not timezone_name:
+        delayed_timezone = _LISTED_DATE_DELAY_TIMEZONE.search(rule_text)
+        if delayed_timezone is not None:
+            timezone_name = _timezone_name(delayed_timezone.group(1))
 
     # A rule that defines a whole named calendar day but omits a clock time
     # ends at 23:59 on that named clock at Gamma's minute precision.

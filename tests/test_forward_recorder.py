@@ -1123,7 +1123,58 @@ def test_live_status_snapshot_contains_connection_and_seed_metrics(
     assert raw["connections"] == 1
     assert raw["connected"] == 1
     assert raw["rest_seed_enabled"] is False
+    assert raw["database_size_bytes"] > 0
+    assert raw["database_size_gib"] >= 0
+    assert raw["storage_paused"] is False
+    assert raw["storage_dropped_events"] == 0
     assert raw["published_at"]
+    service.stop()
+
+
+def test_shared_recorder_pauses_writes_at_storage_hard_limit(
+    tmp_path: Path,
+) -> None:
+    config_path, context, spec, _plan = _setup(tmp_path)
+    config = load_discovery_config(config_path)
+    config = replace(
+        config,
+        forward_recorder=replace(
+            config.forward_recorder,
+            rest_seed=False,
+            storage_warning_gib=0.000000001,
+            storage_hard_limit_gib=0.000000002,
+            storage_check_seconds=0.001,
+        ),
+    )
+    service = ForwardBookService(config)
+    status = service.poll_once([context])
+    assert status["storage_warning"] is True
+    assert status["storage_paused"] is True
+    assert any(
+        str(item).startswith("storage_hard_limit_reached:")
+        for item in status["health_blockers"]
+    )
+
+    outcome = spec.outcomes[0]
+    snapshot = _snapshot(
+        outcome.yes_token_id,
+        "2026-07-25T00:00:01+00:00",
+        bid=0.78,
+        ask=0.80,
+    )
+    service._on_stream_event(
+        {
+            "event_type": "book",
+            "received_at": snapshot["received_at"],
+            "source_at": snapshot["source_at"],
+            "token_id": snapshot["token_id"],
+            "event": {"event_type": "book"},
+            "snapshot": snapshot,
+        },
+        generation=service._generation,
+    )
+    assert service.store.capture_status()["book_events"] == 0
+    assert service.status()["storage_dropped_events"] == 1
     service.stop()
 
 
@@ -1363,8 +1414,29 @@ forward_recorder:
     ):
         load_discovery_config(bad_health)
 
+    bad_storage = tmp_path / "bad-storage.yaml"
+    bad_storage.write_text(
+        """
+rule_compiler:
+  enabled: true
+rule_runner:
+  enabled: true
+forward_recorder:
+  enabled: true
+  storage_warning_gib: 80
+  storage_hard_limit_gib: 70
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValueError,
+        match="storage_warning_gib",
+    ):
+        load_discovery_config(bad_storage)
+
     assert (
         ForwardRecorderConfig().quote_survival_horizons_ms
         == [100, 250, 500, 1000, 2000, 5000, 10000]
     )
     assert ForwardRecorderConfig().health_stale_after_seconds == 60.0
+    assert ForwardRecorderConfig().storage_hard_limit_gib == 0.0

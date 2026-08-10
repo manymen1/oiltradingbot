@@ -72,8 +72,13 @@ def run_codex_cli(
             ) from exc
         if completed.returncode != 0:
             detail = completed.stderr.strip() or completed.stdout.strip()
+            # Codex emits startup warnings before the actionable terminal
+            # error. Keeping the tail prevents plugin warnings from hiding
+            # schema, authentication, or model failures.
+            if len(detail) > 2_000:
+                detail = "..." + detail[-2_000:]
             raise RuntimeError(
-                f"codex CLI exited {completed.returncode}: {detail[:500]}"
+                f"codex CLI exited {completed.returncode}: {detail}"
             )
         if output_path.exists():
             return output_path.read_text(encoding="utf-8")
