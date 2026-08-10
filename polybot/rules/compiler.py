@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 from polybot.core.budget import ClassifierBudgetStore
 from polybot.core.config import ClassifierConfig
@@ -536,7 +537,11 @@ class RuleCompiler:
             )
 
         semantics = RuleSemantics.from_dict(
-            _bind_semantic_payload(context, normalized[0])
+            _bind_semantic_payload(
+                context,
+                normalized[0],
+                deadline_authority_policy=deadline_policy,
+            )
         )
         model = (
             "fixture"
@@ -572,20 +577,25 @@ class RuleCompiler:
                 semantics = fixture_semantics(context)
                 raw_output = json.dumps(semantics.as_dict())
             else:
+                deadline_policy = effective_deadline_authority_policy(
+                    context,
+                    self.deadline_authority_policy,
+                    self.deadline_authority_market_ids,
+                )
                 prompt = compilation_prompt(
                     context,
                     pass_index=pass_index,
-                    deadline_authority_policy=effective_deadline_authority_policy(
-                        context,
-                        self.deadline_authority_policy,
-                        self.deadline_authority_market_ids,
-                    ),
+                    deadline_authority_policy=deadline_policy,
                 )
                 raw_output = self._invoke(prompt)
                 payload, repairs = _repair_semantic_payload(
                     _json_object(raw_output)
                 )
-                payload = _bind_semantic_payload(context, payload)
+                payload = _bind_semantic_payload(
+                    context,
+                    payload,
+                    deadline_authority_policy=deadline_policy,
+                )
                 if repairs:
                     log_event(
                         "rule_compiler_payload_repaired",
@@ -1280,6 +1290,8 @@ def _repair_semantic_payload(
 def _bind_semantic_payload(
     context: MarketContext,
     raw: dict[str, Any],
+    *,
+    deadline_authority_policy: str = STRICT_DEADLINE_AUTHORITY,
 ) -> dict[str, Any]:
     """Replace model prose with deterministic clause/source identities."""
 
@@ -1290,6 +1302,19 @@ def _bind_semantic_payload(
     }
     if not catalog:
         raise ValueError("rule compiler has no verbatim clause catalog")
+
+    if context.outcome_topology == "MONOTONE_DEADLINE_LADDER":
+        window = payload.get("window")
+        if not isinstance(window, dict):
+            raise ValueError("window must be an object")
+        latest_deadline, latest_timezone = _latest_ladder_deadline(
+            context,
+            deadline_authority_policy,
+        )
+        if latest_deadline:
+            window["end_iso"] = latest_deadline
+        if latest_timezone:
+            window["timezone"] = latest_timezone
 
     def bind_ids(value: Any, field: str) -> tuple[list[str], list[str]]:
         if not isinstance(value, list):
@@ -1468,6 +1493,42 @@ def _is_structural_rule_clause(text: str) -> bool:
 
     normalized = " ".join(text.split())
     return bool(normalized) and normalized.endswith(":")
+
+
+def _latest_ladder_deadline(
+    context: MarketContext,
+    deadline_authority_policy: str,
+) -> tuple[str, str]:
+    """Derive the shared ladder window from immutable per-leg bindings."""
+
+    candidates: list[tuple[datetime, str, str]] = []
+    for outcome in context.outcomes:
+        value = (
+            outcome.rule_deadline_iso
+            if (
+                deadline_authority_policy
+                == VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY
+                and outcome.rule_deadline_iso
+            )
+            else outcome.deadline_iso or context.deadline_iso
+        )
+        if not value:
+            continue
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(
+                tzinfo=ZoneInfo(outcome.deadline_timezone or "UTC")
+            )
+        candidates.append(
+            (parsed.astimezone(timezone.utc), value, outcome.deadline_timezone)
+        )
+    if not candidates:
+        return "", ""
+    instant, _value, timezone_name = max(candidates, key=lambda item: item[0])
+    return (
+        instant.isoformat(timespec="seconds").replace("+00:00", "Z"),
+        timezone_name,
+    )
 
 
 def _critical_consensus_payload(

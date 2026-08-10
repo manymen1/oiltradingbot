@@ -144,6 +144,16 @@ def test_untrusted_literal_source_is_not_an_outbound_poll_target() -> None:
                 "centcom.mil",
             },
         ),
+        (
+            "government of the United States",
+            {
+                "state.gov",
+                "whitehouse.gov",
+                "defense.gov",
+                "war.gov",
+                "centcom.mil",
+            },
+        ),
     ],
 )
 def test_named_us_official_source_alternatives_resolve_without_fake_independence(
@@ -161,6 +171,19 @@ def test_named_us_official_source_alternatives_resolve_without_fake_independence
         "government:united_states"
     }
     assert all(item.required for item in sources)
+
+
+def test_named_iran_government_source_resolves_to_one_official_group() -> None:
+    sources = resolve_source_reference(
+        "government of Iran",
+        roles=["SETTLEMENT", "CONFIRMATION"],
+        required=False,
+    )
+
+    assert {item.domain for item in sources} == {"mfa.gov.ir"}
+    assert {item.independence_group for item in sources} == {
+        "government:iran"
+    }
 
 
 def test_unpromoted_family_is_paper_only_then_can_be_promoted() -> None:

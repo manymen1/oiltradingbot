@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from polybot.rules.compiler import (
     fixture_semantics,
 )
 from polybot.rules.contracts import (
+    VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY,
     RuleSemantics,
     build_rule_clause_catalog,
     source_requirement_id,
@@ -760,6 +762,59 @@ def test_equivalent_iso_instants_reach_consensus(tmp_path: Path) -> None:
     assert result.status == "COMPILED"
     assert result.spec is not None
     assert result.spec.semantics.window.end_iso == "2026-10-01T03:59:00Z"
+
+
+def test_ladder_window_is_derived_from_latest_semantic_leg(tmp_path: Path) -> None:
+    context = context_for_case(_golden_rules()[0], strong_analysis=True)
+    rule_hash = context.rule_text_sha256
+    first = replace(
+        context.outcomes[0],
+        name="august_31",
+        label="August 31",
+        market_slug="august-31",
+        condition_id="august-31-condition",
+        yes_token_id="august-31-yes",
+        no_token_id="august-31-no",
+        deadline_iso="2026-08-31T23:59:00Z",
+        rule_deadline_iso="2026-08-31T23:59:00-04:00",
+        deadline_timezone="America/New_York",
+        deadline_consistency="MISMATCH",
+        start_iso="2026-07-01T00:00:00Z",
+        rule_text_sha256=rule_hash,
+    )
+    second = replace(
+        first,
+        name="september_30",
+        label="September 30",
+        market_slug="september-30",
+        condition_id="september-30-condition",
+        yes_token_id="september-30-yes",
+        no_token_id="september-30-no",
+        deadline_iso="2026-09-30T23:59:00Z",
+        rule_deadline_iso="2026-09-30T23:59:00-04:00",
+    )
+    context = replace(
+        context,
+        kind="grouped",
+        outcomes=[first, second],
+        outcome_topology="MONOTONE_DEADLINE_LADDER",
+        deadline_iso="2026-07-31T23:59:00Z",
+    )
+    semantic = fixture_semantics(context).as_dict()
+    semantic["window"]["end_iso"] = context.deadline_iso
+
+    result = RuleCompiler(
+        ClassifierConfig(provider="claude_cli"),
+        RuleStore(tmp_path / "rules.sqlite3"),
+        cli_runner=lambda _prompt: _envelope(semantic),
+        deadline_authority_policy=VERBATIM_RULES_PAPER_DEADLINE_AUTHORITY,
+        deadline_authority_market_ids={context.market_id},
+    ).compile(context)
+
+    assert result.status == "COMPILED"
+    assert result.spec is not None
+    assert result.spec.semantics.window.end_iso == "2026-10-01T03:59:00Z"
+    assert result.spec.semantics.window.timezone == "America/New_York"
 
 
 def test_different_iso_instants_remain_blocking(tmp_path: Path) -> None:

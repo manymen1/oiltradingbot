@@ -16,6 +16,7 @@ from polybot.discovery.types import MarketContext
 from polybot.log import log_event
 
 from .compiler import (
+    _bind_semantic_payload,
     _critical_consensus_payload,
     effective_deadline_authority_policy,
     rule_compilation_blocker,
@@ -61,7 +62,12 @@ def prepare_rule_review_command(
         raise SystemExit(
             "deterministic rule preflight blocks review preparation: " + blocker
         )
-    semantics = RuleSemantics.from_dict(stored_pass["normalized_output"])
+    rebound = _bind_semantic_payload(
+        context,
+        stored_pass["normalized_output"],
+        deadline_authority_policy=policy,
+    )
+    semantics = RuleSemantics.from_dict(rebound)
     spec = RuleSpec.from_context(
         context,
         semantics,
@@ -104,6 +110,8 @@ def prepare_rule_review_command(
         "alternate_passes": _alternate_passes(
             rule_store.compilation_passes(market_id, context.rule_text_sha256),
             selected_output_sha256=stored_pass["output_sha256"],
+            context=context,
+            deadline_authority_policy=policy,
         ),
     }
     if destination is None:
@@ -326,6 +334,8 @@ def _alternate_passes(
     stored_passes: list[dict[str, Any]],
     *,
     selected_output_sha256: str,
+    context: MarketContext,
+    deadline_authority_policy: str,
 ) -> list[dict[str, Any]]:
     """Describe every other usable pass and how it differs from the export."""
 
@@ -337,6 +347,15 @@ def _alternate_passes(
             and item.get("normalized_output") is not None
         ),
         None,
+    )
+    selected_payload = (
+        _bind_semantic_payload(
+            context,
+            selected["normalized_output"],
+            deadline_authority_policy=deadline_authority_policy,
+        )
+        if selected is not None
+        else None
     )
     alternates: list[dict[str, Any]] = []
     for item in stored_passes:
@@ -351,10 +370,15 @@ def _alternate_passes(
         }
         if item.get("error"):
             entry["error"] = item["error"]
-        if selected is not None and item.get("normalized_output") is not None:
+        if selected_payload is not None and item.get("normalized_output") is not None:
+            alternate_payload = _bind_semantic_payload(
+                context,
+                item["normalized_output"],
+                deadline_authority_policy=deadline_authority_policy,
+            )
             entry["differing_fields"] = _differing_fields(
-                _critical_consensus_payload(selected["normalized_output"]),
-                _critical_consensus_payload(item["normalized_output"]),
+                _critical_consensus_payload(selected_payload),
+                _critical_consensus_payload(alternate_payload),
             )
         alternates.append(entry)
     return alternates

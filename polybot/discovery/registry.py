@@ -105,6 +105,22 @@ _NAMED_OFFICIAL_ACTOR_REFERENCES: dict[
         "united_states",
         {"state.gov", "whitehouse.gov", "defense.gov", "war.gov", "centcom.mil"},
     ),
+    "government of the united states": (
+        "united_states",
+        {"state.gov", "whitehouse.gov", "defense.gov", "war.gov", "centcom.mil"},
+    ),
+    "governments of the united states": (
+        "united_states",
+        {"state.gov", "whitehouse.gov", "defense.gov", "war.gov", "centcom.mil"},
+    ),
+    "government of iran": (
+        "iran",
+        {"mfa.gov.ir"},
+    ),
+    "governments of iran": (
+        "iran",
+        {"mfa.gov.ir"},
+    ),
     "president of the united states": (
         "united_states",
         {"whitehouse.gov"},

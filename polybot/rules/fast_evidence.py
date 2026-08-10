@@ -118,7 +118,12 @@ def extract_fast_evidence(
     )
     # Import at call time to avoid a module cycle: evidence.py invokes this
     # adapter, while these shared validators remain the canonical ones.
-    from .evidence import _domain, _source_roles, normalize_fact
+    from .evidence import (
+        _domain,
+        _source_requirement_ids,
+        _source_roles,
+        normalize_fact,
+    )
 
     roles = _source_roles(
         source_plan,
@@ -169,6 +174,12 @@ def extract_fast_evidence(
             origin_organization_id=organization,
             independence_group=independence_group,
             source_roles=roles,
+            source_requirement_ids=_source_requirement_ids(
+                source_plan,
+                article.domain,
+                organization,
+                independence_group,
+            ),
             published_at=_iso(article.published_at),
             extracted_at=_iso(extracted_at),
             target_outcome=str(fact["target_outcome"]),

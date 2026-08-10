@@ -321,6 +321,12 @@ class EvidenceExtractor:
                 organization,
                 independence_group,
             ),
+            source_requirement_ids=_source_requirement_ids(
+                source_plan,
+                article.domain,
+                organization,
+                independence_group,
+            ),
             published_at=_timestamp(article.published_at),
             extracted_at=extraction_time,
             target_outcome=str(fact["target_outcome"]),
@@ -792,6 +798,31 @@ def _source_roles(
         if domain_match or identity_match:
             roles.update(item.roles)
     return sorted(roles)
+
+
+def _source_requirement_ids(
+    plan: SourcePlan,
+    domain: str,
+    organization: str,
+    independence_group: str,
+) -> list[str]:
+    normalized_domain = _domain(domain)
+    requirement_ids: set[str] = set()
+    for item in plan.source_records:
+        domain_match = normalized_domain == _domain(item.domain) or (
+            bool(item.domain)
+            and normalized_domain.endswith(f".{_domain(item.domain)}")
+        )
+        identity_match = (
+            bool(organization)
+            and organization == item.organization_id
+        ) or (
+            bool(independence_group)
+            and independence_group == item.independence_group
+        )
+        if domain_match or identity_match:
+            requirement_ids.update(item.requirement_ids)
+    return sorted(requirement_ids)
 
 
 def _match_outcome(spec: RuleSpec, folded_text: str) -> str:

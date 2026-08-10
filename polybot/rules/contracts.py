@@ -1106,6 +1106,10 @@ class EvidenceClaim:
     clauses_violated: list[str]
     model: str
     extraction_passes: int
+    # Deterministically mapped from SourcePlan records after extraction. The
+    # model never chooses these ids. Legacy claims deserialize with an empty
+    # list and therefore cannot satisfy a current terminal source policy.
+    source_requirement_ids: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -1220,6 +1224,10 @@ class EvidenceClaim:
                 minimum=1,
                 maximum=5,
             ),
+            source_requirement_ids=_source_ids(
+                data.get("source_requirement_ids", []),
+                "source_requirement_ids",
+            ),
         )
 
     def validate_spec_binding(self, spec: RuleSpec) -> None:
@@ -1236,6 +1244,13 @@ class EvidenceClaim:
             mismatches.append("clauses_satisfied")
         if not set(self.clauses_violated).issubset(allowed_clause_ids):
             mismatches.append("clauses_violated")
+        allowed_requirement_ids = {
+            item.requirement_id for item in spec.semantics.source_requirements
+        }
+        if not set(self.source_requirement_ids).issubset(
+            allowed_requirement_ids
+        ):
+            mismatches.append("source_requirement_ids")
         if (
             spec.kind == "grouped"
             and not self.target_outcome

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Callable
@@ -88,6 +89,11 @@ def evaluate_rule(
     )
     evaluator = FAMILY_EVALUATORS[family]
     evaluations = evaluator(spec, ordered, as_of=as_of)
+    evaluations = _enforce_terminal_source_policy(
+        spec,
+        evaluations,
+        ordered,
+    )
     if (
         spec.outcome_topology == "EXCLUSIVE_ONE_OF_N"
         and family != "CATEGORICAL_EXCLUSIVE"
@@ -99,6 +105,74 @@ def evaluate_rule(
             as_of=as_of,
         )
     return evaluations
+
+
+def _enforce_terminal_source_policy(
+    spec: RuleSpec,
+    evaluations: list[RuleEvaluation],
+    claims: list[EvidenceClaim],
+) -> list[RuleEvaluation]:
+    """Fail closed unless terminal claims satisfy the exact source policy."""
+
+    by_hash = {claim.claim_sha256: claim for claim in claims}
+    guarded: list[RuleEvaluation] = []
+    for evaluation in evaluations:
+        if not evaluation.terminal:
+            guarded.append(evaluation)
+            continue
+        decisive = [
+            by_hash[item]
+            for item in evaluation.claim_sha256s
+            if item in by_hash
+        ]
+        blocker = _source_policy_blocker(spec, decisive)
+        if not blocker:
+            guarded.append(evaluation)
+            continue
+        guarded.append(
+            replace(
+                evaluation,
+                evidence_state="AMBIGUOUS",
+                terminal=False,
+                blockers=sorted({*evaluation.blockers, blocker}),
+            )
+        )
+    return guarded
+
+
+def _source_policy_blocker(
+    spec: RuleSpec,
+    claims: list[EvidenceClaim],
+) -> str:
+    policy = spec.semantics.source_policy
+    matched = {
+        requirement_id
+        for claim in claims
+        for requirement_id in claim.source_requirement_ids
+    }
+    allowed = set(policy.requirement_ids)
+    matched &= allowed
+    if policy.policy_type == "ANY_OF":
+        satisfied = bool(matched)
+        needed = 1
+    elif policy.policy_type == "ALL_OF":
+        satisfied = matched == allowed
+        needed = len(allowed)
+    elif policy.policy_type == "QUORUM":
+        satisfied = len(matched) >= policy.quorum
+        needed = policy.quorum
+    else:
+        primary = set(policy.primary_requirement_ids)
+        satisfied = len(matched & primary) >= policy.quorum
+        needed = policy.quorum
+        if not satisfied:
+            return (
+                "source_policy_fallback_condition_unproven:"
+                f"{policy.fallback_condition}"
+            )
+    if satisfied:
+        return ""
+    return f"source_policy_unsatisfied:{len(matched)}/{needed}"
 
 
 def _occurrence(

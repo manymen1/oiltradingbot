@@ -23,6 +23,9 @@ from polybot.rules.contracts import (
     EVIDENCE_CLAIM_SCHEMA_VERSION,
     EvidenceClaim,
     RuleSpec,
+    SourcePolicy,
+    SourceRequirement,
+    source_requirement_id,
 )
 from polybot.rules.decision import (
     ConfirmationDecisionEngine,
@@ -159,6 +162,7 @@ def _claim(
     value_upper: str = "",
     unit: str = "",
     event_at: str = "",
+    requirement_ids: list[str] | None = None,
 ) -> EvidenceClaim:
     return EvidenceClaim.from_dict(
         EvidenceClaim(
@@ -171,6 +175,11 @@ def _claim(
             origin_organization_id=group,
             independence_group=group,
             source_roles=roles or ["CONFIRMATION"],
+            source_requirement_ids=(
+                list(spec.semantics.source_policy.requirement_ids)
+                if requirement_ids is None
+                else requirement_ids
+            ),
             published_at="2026-07-25T00:00:00+00:00",
             extracted_at="2026-07-25T00:01:00+00:00",
             target_outcome=(
@@ -262,6 +271,7 @@ def test_extractor_binds_source_and_instrument_and_caches(
     assert result.claim.source_organization_id == "reuters"
     assert result.claim.independence_group == "reuters"
     assert "CONFIRMATION" in result.claim.source_roles
+    assert result.claim.source_requirement_ids
     assert len(store.extraction_passes(spec.spec_sha256, article.hash)) == 2
 
     cached = extractor.extract(
@@ -487,6 +497,83 @@ def test_occurrence_requires_independent_authorized_confirmations() -> None:
     assert evaluation.evidence_state == "TERMINAL_YES"
     assert evaluation.terminal is True
     assert evaluation.independent_confirmations == 2
+
+
+def test_terminal_evidence_must_match_exact_source_requirement_ids() -> None:
+    _context, spec = _spec("OCCURRENCE_BEFORE_DEADLINE")
+    claims = [
+        _claim(
+            spec,
+            article_id=f"unmapped-{index}",
+            assertion="PREDICATE_SATISFIED",
+            group=f"wire-{index}",
+            requirement_ids=[],
+        )
+        for index in (1, 2)
+    ]
+
+    evaluation = evaluate_rule(spec, claims)[0]
+
+    assert evaluation.evidence_state == "AMBIGUOUS"
+    assert evaluation.terminal is False
+    assert "source_policy_unsatisfied:0/1" in evaluation.blockers
+
+
+def test_all_of_source_policy_requires_every_mapped_requirement() -> None:
+    _context, base = _spec("OCCURRENCE_BEFORE_DEADLINE")
+    requirements = [
+        SourceRequirement(
+            requirement_id=source_requirement_id(
+                source,
+                ["CONFIRMATION"],
+                True,
+            ),
+            source_ref=source,
+            roles=["CONFIRMATION"],
+            required=True,
+            rationale="test source policy",
+            clause_ids=list(base.semantics.qualifying_clause_ids[:1]),
+        )
+        for source in ("official alpha", "official beta")
+    ]
+    semantics = replace(
+        base.semantics,
+        source_requirements=requirements,
+        source_policy=SourcePolicy(
+            policy_type="ALL_OF",
+            requirement_ids=[item.requirement_id for item in requirements],
+            quorum=2,
+        ),
+    )
+    spec = RuleSpec.from_dict(replace(base, semantics=semantics).as_dict())
+    first = _claim(
+        spec,
+        article_id="alpha",
+        assertion="PREDICATE_SATISFIED",
+        group="alpha",
+        requirement_ids=[requirements[0].requirement_id],
+    )
+    second = _claim(
+        spec,
+        article_id="beta",
+        assertion="PREDICATE_SATISFIED",
+        group="beta",
+        requirement_ids=[requirements[1].requirement_id],
+    )
+    first_mirror = _claim(
+        spec,
+        article_id="alpha-mirror",
+        assertion="PREDICATE_SATISFIED",
+        group="alpha-mirror",
+        requirement_ids=[requirements[0].requirement_id],
+    )
+
+    partial = evaluate_rule(spec, [first, first_mirror])[0]
+    complete = evaluate_rule(spec, [first, second])[0]
+
+    assert "source_policy_unsatisfied:1/2" in partial.blockers
+    assert complete.evidence_state == "TERMINAL_YES"
+    assert complete.terminal is True
 
 
 def test_terminal_evidence_requires_timestamp_and_foreclosure_source() -> None:
