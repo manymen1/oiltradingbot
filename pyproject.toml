@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oiltradingbot"
+version = "0.1.0"
+description = "Standalone oil observation, extraction, and research application"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "requests==2.34.2",
+    "PyYAML==6.0.3",
+    "beautifulsoup4==4.15.0",
+    "pypdf==6.19.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+]
+
+[project.scripts]
+oilbot = "oilbot.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

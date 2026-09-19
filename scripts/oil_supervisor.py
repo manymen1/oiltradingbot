@@ -14,8 +14,8 @@ import time
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from polybot.oil.config import load_config
-from polybot.oil.store import component_lock
+from oilbot.config import load_config
+from oilbot.store import component_lock
 
 
 def main():
@@ -49,7 +49,7 @@ def main():
                     if time.monotonic() < next_start[component]:
                         continue
                     processes[component] = subprocess.Popen(
-                        [sys.executable, "-m", "polybot.oil", "record", "--component", component,
+                        [sys.executable, "-m", "oilbot", "record", "--component", component,
                          "--config", str(config.path)], cwd=REPO, stdout=logs[component], stderr=subprocess.STDOUT,
                         start_new_session=True)
                     print(f"started {component} pid={processes[component].pid}", flush=True)

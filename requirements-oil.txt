@@ -1,2 +1,1 @@
--r requirements.txt
-pypdf==6.19.0
+-e .[dev]

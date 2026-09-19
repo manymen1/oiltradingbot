@@ -11,12 +11,12 @@ unavailable** until a live provider is implemented and qualified.
 From the repository root (no `.env` needed):
 
 ```bash
-.venv/bin/python -m pip install -r requirements-oil.txt
-.venv/bin/python -m polybot.oil preflight
-.venv/bin/python -m polybot.oil record --component news --once
-.venv/bin/python -m polybot.oil record --component market --once --fixture tests/fixtures/oil/market.json
-.venv/bin/python -m polybot.oil record --component analysis --once
-.venv/bin/python -m polybot.oil status
+.venv/bin/python -m pip install -e ".[dev]"
+.venv/bin/python -m oilbot preflight
+.venv/bin/python -m oilbot record --component news --once
+.venv/bin/python -m oilbot record --component market --once --fixture tests/fixtures/oil/market.json
+.venv/bin/python -m oilbot record --component analysis --once
+.venv/bin/python -m oilbot status
 ```
 
 Use `--config` with any of these commands to isolate another pilot. Storage paths
@@ -27,8 +27,8 @@ inference settings are rejected.
 For a fully offline, synthetic disruption/restoration demonstration:
 
 ```bash
-.venv/bin/python -m polybot.oil demo --out data/oil-demo
-.venv/bin/python -m polybot.oil replay --manifest data/oil-demo/snapshot/manifest.json
+.venv/bin/python -m oilbot demo --out data/oil-demo
+.venv/bin/python -m oilbot replay --manifest data/oil-demo/snapshot/manifest.json
 ```
 
 The demo writes a source/market manifest and JSON/HTML report and invokes no model
@@ -43,7 +43,7 @@ For independently supervised continuous collection on WSL:
 Ctrl-C shuts down all three children. For a bounded runtime test add `--duration
 45`. Logs are under the configured data directory. No service is installed or
 enabled automatically. The optional systemd user template in
-`deploy/polybot-oil@.service` can supervise `news`, `market`, and `analysis` on a
+`deploy/oilbot@.service` can supervise `news`, `market`, and `analysis` on a
 qualified always-on Linux host. Do not run both supervisors simultaneously.
 Component locks reject duplicate writers. WSL sleep and restarts create visible
 runtime gaps; this is not an always-on availability guarantee.
@@ -110,9 +110,9 @@ item: disappearance from a rotating RSS window is never inferred to be withdrawa
 ## Snapshots and reporting
 
 ```bash
-.venv/bin/python -m polybot.oil snapshot --out data/oil-review-001
-.venv/bin/python -m polybot.oil replay --manifest data/oil-review-001/manifest.json
-.venv/bin/python -m polybot.oil report --manifest data/oil-review-001/manifest.json --out data/oil-review-001/report.json
+.venv/bin/python -m oilbot snapshot --out data/oil-review-001
+.venv/bin/python -m oilbot replay --manifest data/oil-review-001/manifest.json
+.venv/bin/python -m oilbot report --manifest data/oil-review-001/manifest.json --out data/oil-review-001/report.json
 ```
 
 Snapshots use SQLite's consistent backup interface, hash every file, and reject

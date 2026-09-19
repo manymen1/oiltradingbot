@@ -1,8 +1,0 @@
-[Unit]
-Description=Polybot data snapshot
-
-[Service]
-Type=oneshot
-User=polybot
-WorkingDirectory=/opt/anthropic-exec-bot
-ExecStart=/opt/anthropic-exec-bot/deploy/backup.sh

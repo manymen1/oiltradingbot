@@ -13,19 +13,19 @@ from pathlib import Path
 import pytest
 import yaml
 
-from polybot.oil.cli import main
-from polybot.oil.clock import instant, stamp, utc_now
-from polybot.oil.config import load_config
-from polybot.oil.extract import AnalysisWorker, CodexExtractor, restricted_environment, validate_output
-from polybot.oil.incidents import IncidentReducer
-from polybot.oil.market import FixtureAdapter, QuoteArchive, qualify, read_archive, record_adapter
-from polybot.oil.replay import ReplayReader, export_manifest, load_manifest
-from polybot.oil.report import build_report, write_report
-from polybot.oil.research import (ExecutionAssumptions, POLICIES, baseline_sides, chronological_split,
-                                  episode_summary, freeze_protocol, research_candidate, simulate)
-from polybot.oil.schema import Fact, InstrumentDefinition, MarketEvent, NewsItem, canonical, digest, to_dict
-from polybot.oil.sources import ListingAdapter, NewsCollector, ParseFailure, RSSAdapter, allowed, retry_delay
-from polybot.oil.store import Journal, component_lock
+from oilbot.cli import main
+from oilbot.clock import instant, stamp, utc_now
+from oilbot.config import load_config
+from oilbot.extract import AnalysisWorker, CodexExtractor, restricted_environment, validate_output
+from oilbot.incidents import IncidentReducer
+from oilbot.market import FixtureAdapter, QuoteArchive, qualify, read_archive, record_adapter
+from oilbot.replay import ReplayReader, export_manifest, load_manifest
+from oilbot.report import build_report, write_report
+from oilbot.research import (ExecutionAssumptions, POLICIES, baseline_sides, chronological_split,
+                            episode_summary, freeze_protocol, research_candidate, simulate)
+from oilbot.schema import Fact, InstrumentDefinition, MarketEvent, NewsItem, canonical, digest, to_dict
+from oilbot.sources import ListingAdapter, NewsCollector, ParseFailure, RSSAdapter, allowed, retry_delay
+from oilbot.store import Journal, component_lock
 
 
 @pytest.fixture
@@ -487,14 +487,14 @@ def test_pdf_subprocess_extracts_text_and_rejects_scans():
                           NameObject("/BaseFont"): NameObject("/Helvetica")})})})
     output = io.BytesIO()
     writer.write(output)
-    run = subprocess.run([sys.executable, "-m", "polybot.oil.pdftext"], input=output.getvalue(), capture_output=True, timeout=10)
+    run = subprocess.run([sys.executable, "-m", "oilbot.pdftext"], input=output.getvalue(), capture_output=True, timeout=10)
     assert run.returncode == 0
     assert "loading suspended" in json.loads(run.stdout)["text"]
     blank = pypdf.PdfWriter()
     blank.add_blank_page(width=612, height=792)
     output = io.BytesIO()
     blank.write(output)
-    run = subprocess.run([sys.executable, "-m", "polybot.oil.pdftext"], input=output.getvalue(), capture_output=True, timeout=10)
+    run = subprocess.run([sys.executable, "-m", "oilbot.pdftext"], input=output.getvalue(), capture_output=True, timeout=10)
     assert run.returncode == 1
 
 
