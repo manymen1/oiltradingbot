@@ -1,0 +1,16 @@
+{
+  "contracts": 1,
+  "max_contracts": 1,
+  "max_trades_per_day": 5,
+  "daily_loss_usd": "100",
+  "fee_per_side": "1",
+  "slippage_ticks": 1,
+  "max_spread_ticks": 5,
+  "stop_ticks": 20,
+  "take_profit_ticks": 40,
+  "max_hold_seconds": 1800,
+  "order_delay_seconds": 1,
+  "order_ttl_seconds": 10,
+  "max_quote_age_seconds": 2,
+  "expiry_buffer_seconds": 3600
+}

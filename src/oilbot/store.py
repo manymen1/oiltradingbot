@@ -155,7 +155,10 @@ class Journal:
         at = utc_now()
         output = []
         with self.transaction() as db:
-            initial_snapshot = db.execute("SELECT 1 FROM cursors WHERE key=?", ("source:" + source["id"],)).fetchone() is None
+            initial_snapshot = observation["payload"].get("initial_snapshot")
+            if initial_snapshot is None:
+                initial_snapshot = db.execute("SELECT 1 FROM records WHERE kind='parse_receipt' AND json_extract(payload, '$.source_id')=?",
+                                              (source["id"],)).fetchone() is None
             for item in items:
                 story = digest([source["id"], item.native_id])
                 content = digest(to_dict(item))
@@ -178,7 +181,7 @@ class Journal:
                 self.append("story_revision", payload, available_at=at, record_id=rid, db=db)
                 self.set_cursor(db, "story:" + story, {"content_hash": content, "revision_id": rid, "revision": payload["revision"]})
                 output.append(rid)
-            self.append("parse_receipt", {"input_revision_ids": [observation_id], "revision_ids": output,
+            self.append("parse_receipt", {"input_revision_ids": [observation_id], "revision_ids": output, "source_id": source["id"],
                                           "transform": "source-v1"}, db=db)
             self.set_cursor(db, "source:" + source["id"], cursor)
         return output

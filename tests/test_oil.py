@@ -537,3 +537,65 @@ def test_literal_quantity_units_and_obvious_denial_guard():
     denied = "Ras Tanura loading is not suspended"
     with pytest.raises(ValueError, match="denial"):
         Fact("operational_status", "suspended", 0, len(denied), denied, "asserted").validate(denied)
+
+
+def test_first_adnoc_details_remain_backfill_across_poll_queue(config, journals):
+    news, _ = journals
+    src = source(config, 1)
+    urls = [f"https://www.adnoc.ae/en/news-and-media/press-releases/2026/item-{n}" for n in range(3)]
+    listing = ''.join(f'<a href="{url}">Ras Tanura update</a>' for url in urls).encode()
+    detail = b'<article><h1>Ras Tanura loading suspended</h1><p>This historical operator report was published before the collector began running.</p></article>'
+    def fetch(src, url, cursor):
+        return response(detail if url in urls else listing, content_type="text/html", url=url)
+    collector = NewsCollector(news, [src], fetch)
+    collector.fetch_source(src)
+    collector.fetch_source(src)
+    assert len(news.records("story_revision")) == 3
+    assert all(row["payload"]["initial_snapshot"] for row in news.records("story_revision"))
+
+
+def test_failed_first_poll_does_not_clear_backfill(config, journals):
+    news, _ = journals
+    src = source(config)
+    collector = NewsCollector(news, [src], lambda *_: response(status=403))
+    collector.fetch_source(src)
+    collector.fetcher = lambda *_: response(b'<rss><channel><item><guid>one</guid><title>Ras Tanura loading suspended</title></item></channel></rss>')
+    collector.fetch_source(src)
+    assert news.records("story_revision")[0]["payload"]["initial_snapshot"]
+
+
+def test_adnoc_raw_recovery_preserves_detail_discovery(config, journals):
+    news, _ = journals
+    src = source(config, 1)
+    url = "https://www.adnoc.ae/en/news-and-media/press-releases/2026/historical"
+    raw = response(f'<a href="{url}">Ras Tanura update</a>'.encode(), content_type="text/html", url=src["url"])
+    raw["initial_snapshot"] = True
+    news.capture(src, raw)
+    collector = NewsCollector(news, [src], lambda *_: pytest.fail("recovery must be offline"))
+    collector.recover_unparsed()
+    queue = news.cursor("details:" + src["id"])
+    assert queue["links"] == [url] and queue["backfill"][url]
+
+
+@pytest.mark.parametrize("operation", ["link", "merge", "split"])
+def test_adjudication_semantics_and_replay_provenance(config, journals, operation):
+    news, analysis = journals
+    a = story(news, source(config), native="a")
+    b = story(news, source(config), native="b")
+    run_analysis(config, journals)
+    run_analysis(config, journals)
+    rows = {r["payload"]["story_id"]: r for r in analysis.records("incident_revision")}
+    a_id = rows[a["payload"]["story_id"]]["payload"]["incident_id"]
+    b_id = rows[b["payload"]["story_id"]]["payload"]["incident_id"]
+    target = "new-split-incident" if operation == "split" else a_id
+    rid = IncidentReducer(news, analysis, config.raw["assets"]).adjudicate(
+        story_ids=[b["payload"]["story_id"]], target_incident=target, operation=operation, reason="reviewed evidence")
+    story(news, source(config), "Ras Tanura loading restored", native="b")
+    run_analysis(config, journals, extractor(config, lambda text: facts(text, status="restored")))
+    latest = analysis.records("incident_revision")[-1]
+    assert latest["payload"]["incident_id"] == (b_id if operation == "link" else target)
+    assert rid in latest["payload"]["input_revision_ids"]
+    research_candidate(analysis, latest)
+    ReplayReader(news.records() + analysis.records()).decision_inputs()
+    with pytest.raises(ValueError, match="missing replay input"):
+        ReplayReader([r for r in news.records() + analysis.records() if r["id"] != rid])

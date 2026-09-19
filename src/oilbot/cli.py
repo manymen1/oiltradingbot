@@ -95,7 +95,10 @@ def record(config, component: str, *, once: bool, fixture: Path | None, stop=Non
                     runtime.set_cursor(db, "runtime:" + component, last)
                 if once:
                     return result
-                stop.wait(5 if component == "analysis" and result.get("pending") else 30)
+                # Poll well within the receipt-to-analysis deadline, including
+                # when the previous iteration found no pending stories.
+                stop.wait(min(1, config.extraction["deadline_seconds"] / 4)
+                          if component == "analysis" else 30)
         finally:
             runtime.append("runtime_stop", {"component": component, "clock": stamp()})
     return {"stopped": component}
@@ -127,9 +130,18 @@ def main(argv=None):
         child.add_argument("--manifest", type=Path, required=True)
         if command == "report":
             child.add_argument("--out", type=Path, required=True)
+    child = sub.add_parser("paper-replay", help="local paper orders from a verified snapshot; no broker connection")
+    child.add_argument("--manifest", type=Path, required=True)
+    child.add_argument("--instrument", required=True, help="explicit archived contract ID")
+    child.add_argument("--limits", type=Path, required=True, help="JSON paper execution and risk assumptions")
+    child.add_argument("--out", type=Path, required=True, help="new output directory")
     args = parser.parse_args(argv)
     try:
-        if args.command in {"replay", "report"}:
+        if args.command == "paper-replay":
+            from .paper import PaperLimits, paper_replay
+            result = paper_replay(args.manifest, args.out, args.instrument,
+                                  PaperLimits(**json.loads(args.limits.read_text())))
+        elif args.command in {"replay", "report"}:
             manifest, reader, market = load_manifest(args.manifest)
             if args.command == "replay":
                 result = {"verified": True, "records": len(reader.records), "decisions": len(reader.decision_inputs()),
@@ -161,6 +173,6 @@ def main(argv=None):
                 result = record(config, args.component, once=args.once, fixture=args.fixture, stop=stop)
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
-    except (ValueError, RuntimeError, OSError, KeyError) as exc:
+    except (ValueError, TypeError, RuntimeError, OSError, KeyError) as exc:
         print(json.dumps({"error": str(exc), "mode": "observe"}))
         return 2

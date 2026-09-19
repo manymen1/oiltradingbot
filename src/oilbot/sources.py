@@ -244,6 +244,8 @@ class NewsCollector:
                     items = [self.pdf_item(body, payload["url"])]
                 else:
                     items = adapter(source).parse(body, payload["url"], payload["content_type"])
+                    if source["adapter"] in {"adnoc", "fujairah"} and any(item.links for item in items):
+                        self.queue_details(source, items, initial_snapshot=payload.get("initial_snapshot", True))
                     if source["adapter"] == "adnoc" and not re.search(r"/press-releases/\d{4}/", payload["url"]):
                         items = []
                 self.store.accept_items(source, row["id"], items, self.store.cursor("source:" + source["id"], {}))
@@ -269,6 +271,9 @@ class NewsCollector:
         health = "NETWORK_FAILURE"
         try:
             response = self.fetcher(source, source["url"], cursor)
+            response["initial_snapshot"] = not any(
+                row["payload"].get("source_id") == source["id"]
+                for row in self.store.records("parse_receipt"))
             observation_id = self.store.capture(source, response)
             result["responses"] += 1
             status = response["status"]
@@ -293,7 +298,7 @@ class NewsCollector:
             # Detail fetches happen after the listing commit. Their own failures
             # cannot discard or delay the already captured listing.
             if source["adapter"] in {"adnoc", "fujairah"}:
-                self.fetch_details(source, items, result)
+                self.fetch_details(source, items, result, initial_snapshot=response["initial_snapshot"])
         except (requests.RequestException, ValueError) as exc:
             result["errors"] = 1
             health = str(exc) if isinstance(exc, ParseFailure) else type(exc).__name__
@@ -310,12 +315,22 @@ class NewsCollector:
                                            "input_revision_ids": [observation_id] if observation_id else []})
         return result
 
-    def fetch_details(self, source: dict, items: list[NewsItem], result: dict):
+    def queue_details(self, source: dict, items: list[NewsItem], *, initial_snapshot=False):
         links = list(dict.fromkeys(link for item in items for link in item.links if allowed(link, source)))
         queue_key = "details:" + source["id"]
         previous = self.store.cursor(queue_key, {"links": [], "offset": 0})
         links = links or previous["links"]  # A 304 must not strand previously queued detail pages.
+        backfill = previous.get("backfill", {})
+        for link in links:
+            backfill.setdefault(link, initial_snapshot)
         offset = previous["offset"] % max(1, len(links))
+        # Save discovery provenance before any detail request, including crash recovery.
+        with self.store.transaction() as db:
+            self.store.set_cursor(db, queue_key, {"links": links, "offset": offset, "backfill": backfill})
+        return queue_key, links, offset, backfill
+
+    def fetch_details(self, source: dict, items: list[NewsItem], result: dict, *, initial_snapshot=False):
+        queue_key, links, offset, backfill = self.queue_details(source, items, initial_snapshot=initial_snapshot)
         for index in range(min(2, len(links))):
             url = links[(offset + index) % len(links)]
             detail_key = "detail:" + url
@@ -323,6 +338,9 @@ class NewsCollector:
             oid = None
             try:
                 response = self.fetcher(source, url, detail_cursor)
+                # Only the first accepted version is backfill. Later document
+                # changes remain eligible operational updates.
+                response["initial_snapshot"] = backfill.get(url, False)
                 oid = self.store.capture(source, response)
                 result["responses"] += 1
                 if response["status"] == 304:
@@ -344,10 +362,11 @@ class NewsCollector:
                     # Preserve main source scheduling while committing detail revisions.
                     result["revisions"] += len(self.store.accept_items(source, oid, detail_items,
                                                 self.store.cursor("source:" + source["id"], {})))
+                backfill[url] = False
             except (requests.RequestException, ValueError, subprocess.SubprocessError) as exc:
                 result["errors"] += 1
                 self.store.append("source_health", {"source_id": source["id"], "status": "DETAIL_FAILED",
                                                     "reason": str(exc) if isinstance(exc, ParseFailure) else type(exc).__name__, "url": url,
                                                     "input_revision_ids": [oid] if oid else []})
         with self.store.transaction() as db:
-            self.store.set_cursor(db, queue_key, {"links": links, "offset": offset + min(2, len(links))})
+            self.store.set_cursor(db, queue_key, {"links": links, "offset": offset + min(2, len(links)), "backfill": backfill})

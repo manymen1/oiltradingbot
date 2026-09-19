@@ -1,3 +1,3 @@
-"""Observation-only oil intelligence. No broker or Polymarket dependencies."""
+"""Compatibility package; the maintained implementation is oilbot."""
 
-VERSION = "oil-v1"
+from oilbot import VERSION

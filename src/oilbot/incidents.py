@@ -33,7 +33,15 @@ class IncidentReducer:
             if any(f["field"] in {"asset", "location"} and any(alias.casefold() in f["value"].casefold()
                     for alias in asset["aliases"]) for f in facts):
                 asset_ids.append(asset["id"])
-        incident_id = self.analysis.cursor("association:" + data["story_id"], digest(["incident", data["story_id"]]))
+        association = self.analysis.cursor("association:" + data["story_id"])
+        # Legacy cursors contained only an incident ID. New associations retain
+        # the manual decision that caused the assignment for causal replay.
+        incident_id = (association["incident_id"] if isinstance(association, dict)
+                       else association or digest(["incident", data["story_id"]]))
+        relations = self.analysis.cursor("links:" + data["story_id"], [])
+        adjudication_ids = [relation["adjudication_id"] for relation in relations]
+        if isinstance(association, dict):
+            adjudication_ids.append(association["adjudication_id"])
         old_id = self.analysis.cursor("incident:" + incident_id)
         old = self.analysis.get(old_id) if old_id else None
         operational = [f["value"] for f in facts if f["field"] == "operational_status" and f["assertion"] == "asserted"]
@@ -59,7 +67,7 @@ class IncidentReducer:
         # Matching assets suggest candidates only; similarity never establishes a merge.
         payload = {"incident_id": incident_id, "episode_id": None, "story_id": data["story_id"],
                    "revision": old["payload"]["revision"] + 1 if old else 1,
-                   "supersedes_id": old_id, "input_revision_ids": [story["id"], extraction["id"], self.registry_id] + ([old_id] if old_id else []),
+                   "supersedes_id": old_id, "input_revision_ids": [story["id"], extraction["id"], self.registry_id] + ([old_id] if old_id else []) + adjudication_ids,
                    "transform": "incident-v1", "asset_ids": sorted(asset_ids),
                    "asset_types": sorted({a["type"] for a in self.assets if a["id"] in asset_ids}),
                    "operational_status": status, "action": [f for f in facts if f["field"] == "action"],
@@ -67,7 +75,8 @@ class IncidentReducer:
                        else "primary_operational_report" if origin == data["source_id"] and operational else "attributed_claim",
                    "origin_groups": [origin] if origin else [], "origin_uncertain": origin is None,
                    "contradictions": contradictions, "facts": facts, "semantic_hash": digest(semantic),
-                   "novel": novelty, "candidate_links": sorted(set(candidates)), "net_lost_supply": None,
+                   "novel": novelty, "candidate_links": sorted(set(candidates)),
+                   "adjudicated_links": relations, "net_lost_supply": None,
                    "economic_effect": "unknown", "late": extraction["payload"]["late"]}
         payload["initial_snapshot"] = data.get("initial_snapshot", True)
         with self.analysis.transaction() as db:
@@ -89,5 +98,10 @@ class IncidentReducer:
                 "target_incident": target_incident, "reason": reason, "transform": "manual-v1",
                 "input_revision_ids": [r["id"] for r in self.news.records("story_revision") if r["payload"]["story_id"] in story_ids]}, db=db)
             for story_id in story_ids:
-                self.analysis.set_cursor(db, "association:" + story_id, target_incident)
+                relation = {"incident_id": target_incident, "adjudication_id": rid}
+                if operation == "link":
+                    links = self.analysis.cursor("links:" + story_id, [])
+                    self.analysis.set_cursor(db, "links:" + story_id, links + [relation])
+                else:
+                    self.analysis.set_cursor(db, "association:" + story_id, relation)
         return rid

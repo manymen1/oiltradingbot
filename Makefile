@@ -170,10 +170,10 @@ backup: ## snapshot data/ (ledger, journals, calibration, acks)
 OIL_CONFIG ?= configs/oil/observe.yaml
 
 oil-preflight: ## validate the observation-only oil pilot
-	$(PY) -m polybot.oil preflight --config $(OIL_CONFIG)
+	$(PY) -m oilbot preflight --config $(OIL_CONFIG)
 
 oil-status: ## oil source, inference and market qualification status
-	$(PY) -m polybot.oil status --config $(OIL_CONFIG)
+	$(PY) -m oilbot status --config $(OIL_CONFIG)
 
 oil-record: ## supervise oil news, market and analysis collectors (no trading)
 	$(PY) scripts/oil_supervisor.py --config $(OIL_CONFIG)
