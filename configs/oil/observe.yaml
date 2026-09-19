@@ -1,0 +1,89 @@
+mode: observe
+broker_execution: disabled
+registry_version: oil-sources-v1
+asset_registry_version: gulf-assets-v1
+storage:
+  root: ../../data/oil
+  quote_flush_seconds: 1
+  retention: manual_review_no_automatic_deletion
+market:
+  provider: fixture
+  required_live_mode: realtime
+  qualified: false
+extraction:
+  provider: codex_cli
+  model: gpt-5.5
+  binary: codex
+  fallback: null
+  workers: 2
+  daily_attempts: 100
+  timeout_seconds: 180
+  deadline_seconds: 10
+sources:
+  - id: aramco
+    owner: Saudi Aramco
+    role: operator
+    url: https://www.aramco.com/api/v1/com/rss/news?sc_lang=en
+    adapter: rss
+    enabled: true
+    allowed_hosts: [www.aramco.com, aramco.com]
+    poll_seconds: 60
+    timestamp_precision: publisher_reported
+    revision_policy: native_id_and_content_hash
+    qualification: HTTP_200_RSS_observed_2026-09-19
+    rights: {capture: public_pilot, model_processing: pending, retention: review_before_redistribution}
+  - id: adnoc
+    owner: ADNOC
+    role: operator
+    url: https://www.adnoc.ae/en/news-and-media/press-releases/
+    adapter: adnoc
+    enabled: true
+    allowed_hosts: [www.adnoc.ae, adnoc.ae]
+    poll_seconds: 60
+    timestamp_precision: publisher_reported
+    revision_policy: canonical_url_and_content_hash
+    qualification: HTTP_200_HTML_observed_2026-09-19
+    rights: {capture: public_pilot, model_processing: pending, retention: review_before_redistribution}
+  - id: fujairah
+    owner: Fujairah Ports Authority
+    role: port_authority
+    url: https://fujairahport.ae/marine-centre/notice-to-mariner-new/
+    adapter: fujairah
+    enabled: true
+    allowed_hosts: [fujairahport.ae, www.fujairahport.ae]
+    poll_seconds: 60
+    timestamp_precision: document_reported
+    revision_policy: notice_url_and_payload_hash
+    qualification: HTTP_200_HTML_observed_2026-09-19
+    rights: {capture: public_pilot, model_processing: pending, retention: review_before_redistribution}
+  - id: gcaptain
+    owner: gCaptain
+    role: journalism
+    url: https://gcaptain.com/feed/
+    adapter: rss
+    enabled: true
+    allowed_hosts: [gcaptain.com, www.gcaptain.com]
+    poll_seconds: 60
+    timestamp_precision: publisher_reported
+    revision_policy: native_id_and_content_hash
+    qualification: HTTP_200_RSS_observed_2026-09-19
+    rights: {capture: public_pilot_feed_only, model_processing: pending, retention: review_before_redistribution}
+  - id: ukmto
+    owner: UKMTO
+    role: maritime_authority
+    url: https://www.ukmto.org/recent-incidents
+    adapter: ukmto
+    enabled: false
+    allowed_hosts: [www.ukmto.org, ukmto.org]
+    poll_seconds: 60
+    timestamp_precision: report_and_issue_time
+    revision_policy: advisory_id_and_content_hash
+    qualification: blocked_HTTP_403_2026-09-19
+    rights: {capture: pending, model_processing: pending, retention: pending}
+assets:
+  - {id: hormuz, aliases: [Strait of Hormuz, Hormuz], type: maritime_route, geography: Gulf, owner: null}
+  - {id: bab_el_mandeb, aliases: [Bab el-Mandeb, Bab al-Mandab], type: maritime_route, geography: Red Sea, owner: null}
+  - {id: fujairah, aliases: [Fujairah], type: export_port, geography: UAE, owner: Fujairah Ports Authority}
+  - {id: ras_tanura, aliases: [Ras Tanura], type: crude_export_terminal, geography: Saudi Arabia, owner: Saudi Aramco}
+  - {id: abqaiq, aliases: [Abqaiq], type: oil_processing, geography: Saudi Arabia, owner: Saudi Aramco}
+  - {id: ruwais, aliases: [Ruwais], type: refinery, geography: UAE, owner: ADNOC}

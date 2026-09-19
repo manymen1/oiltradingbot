@@ -340,3 +340,12 @@ Every log event is intended to explain why the bot acted or skipped.
 
 No weather markets, no market making, no automatic position-size increases, no
 generic sports/crypto/social-media adapters, and no UI.
+
+## Oil observation pilot
+
+The separate `polybot.oil` application captures oil news revisions, bounded Codex
+extraction, incident history, fixture CL/MCL data and immutable replay reports.
+It cannot submit orders. Start with `make oil-preflight` and the
+[oil pilot guide](docs/oil-observation.md). Live market data, source processing
+qualification and economic evidence remain explicit gates; no subscription or
+legacy bot configuration is changed by the pilot.

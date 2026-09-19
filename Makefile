@@ -165,4 +165,22 @@ eval: ## adversarial regression cases; nonzero exit = the change regressed
 backup: ## snapshot data/ (ledger, journals, calibration, acks)
 	deploy/backup.sh
 
+# ---- isolated oil observation pilot; does not source .env ----
+
+OIL_CONFIG ?= configs/oil/observe.yaml
+
+oil-preflight: ## validate the observation-only oil pilot
+	$(PY) -m polybot.oil preflight --config $(OIL_CONFIG)
+
+oil-status: ## oil source, inference and market qualification status
+	$(PY) -m polybot.oil status --config $(OIL_CONFIG)
+
+oil-record: ## supervise oil news, market and analysis collectors (no trading)
+	$(PY) scripts/oil_supervisor.py --config $(OIL_CONFIG)
+
+oil-test: ## run oil capture/replay/accounting fault tests
+	TMPDIR=/tmp TEMP=/tmp $(PY) -m pytest -q -s tests/test_oil.py
+
+.PHONY: oil-preflight oil-status oil-record oil-test
+
 .PHONY: help setup test paper paper-once live halt watch-only arm status funnel priority economics profit-funnel calibration semantic-coverage compile-rules plan-sources grade-markets inspect-rule validate-rule prepare-rule-review import-reviewed-rule rule-market-once inspect-rule-market forward-completeness build-forward-timeline reconcile latency trades replay replay-rule-market promotion-report eval backup
